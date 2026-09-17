@@ -1,0 +1,56 @@
+{
+  "name": "@cedarling-tutorials/p8-cedarfile",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.14.0"
+  },
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && vite build && tsc -p tsconfig.build.json",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "dev": "vite build && node --watch --env-file=.env src/server/main.ts",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "reset": "node scripts/reset.ts",
+    "test:e2e": "node scripts/verify-docker.ts",
+    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "start": "node --env-file=.env dist/src/server/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "cookie": "2.0.1",
+    "express": "5.2.1",
+    "file-type": "22.0.2",
+    "helmet": "8.3.0",
+    "openid-client": "6.8.7",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.5.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.11",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "jsdom": "30.0.1",
+    "typescript": "6.0.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "better-sqlite3"
+    ],
+    "overrides": {
+      "qs@<6.16.0": "6.16.0"
+    }
+  }
+}

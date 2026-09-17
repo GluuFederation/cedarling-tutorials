@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "acc_version": "1.0.0",
+  "protocol": "2026-07-28",
+  "bindings": [
+    {
+      "capability_id": "catalog.reconcile",
+      "kind": "tool",
+      "name": "reconcile_capability_catalog",
+      "schema_digest": "sha256:5d41a13232d77ca09db8eddd1b2c5044fc722f0a7af35a4353ef48946e0d2525",
+      "cedar_action": "GovOps::ReconcileCatalog"
+    },
+    {
+      "capability_id": "capability.list",
+      "kind": "tool",
+      "name": "list_capabilities",
+      "schema_digest": "sha256:99334726611ccf58a148b0814696bfa6fe08c1b2d027e946beccf5a74331c9aa",
+      "cedar_action": "GovOps::ListCapability"
+    },
+    {
+      "capability_id": "incident.search",
+      "kind": "tool",
+      "name": "search_incidents",
+      "schema_digest": "sha256:6d5305a512c983ec8927e99989f6cff906bf9e4c9688208f02c2043125a49fa8",
+      "cedar_action": "Incident::Search"
+    },
+    {
+      "capability_id": "incident.update",
+      "kind": "tool",
+      "name": "update_incident_status",
+      "schema_digest": "sha256:e42d6ba94143ffe014b252ed126a7e05f12413aed067cbf86cf0b39766c998b1",
+      "cedar_action": "Incident::UpdateStatus"
+    },
+    {
+      "capability_id": "runbook.read",
+      "kind": "resource",
+      "name": "incident_response_runbook",
+      "schema_digest": "sha256:0e6f5991763d85aebfa4c1879f848cfc1a0d92c3bfe383f87975191669490227",
+      "cedar_action": "Runbook::Read"
+    },
+    {
+      "capability_id": "incident.triage",
+      "kind": "prompt",
+      "name": "triage_incident",
+      "schema_digest": "sha256:a46f6b4a17517d28d0d0da3f9cd0001527de415e8391688630b1076538b13ba8",
+      "cedar_action": "Incident::Triage"
+    }
+  ]
+}

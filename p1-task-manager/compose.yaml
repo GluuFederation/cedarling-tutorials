@@ -1,0 +1,84 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P1"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node", "--env-file=/run/config/.env", "dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:4000:4000"
+    networks:
+      tutorial:
+        aliases: [idp.localhost]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  task-manager:
+    command: ["node", "--env-file=/run/config/app.env", "dist/server/main.js"]
+    build:
+      context: ..
+      dockerfile: p1-task-manager/Dockerfile
+    environment:
+      P1_HOST: 0.0.0.0
+      P1_DATA_DIR: /app/.data
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      tutorial:
+        aliases: [p1.localhost]
+    volumes:
+      - app-config:/run/config:ro
+      - p1-data:/app/.data
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+networks:
+  tutorial:
+
+volumes:
+  identity-config:
+  app-config:
+  p1-data:

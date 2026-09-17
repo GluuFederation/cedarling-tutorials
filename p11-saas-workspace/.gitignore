@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.local/
+coverage/
+.react-router/
+*.tsbuildinfo
+!.dockerignore
+!.vscode/
+!.vscode/settings.json

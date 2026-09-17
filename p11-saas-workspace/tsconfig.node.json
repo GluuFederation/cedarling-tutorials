@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "server.js",
+    "scripts/**/*.ts",
+    "src/server/**/*",
+    "src/shared/**/*",
+    "vite.config.ts",
+    "react-router.config.ts",
+    "playwright.config.ts"
+  ],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": true,
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2023",
+    "types": ["node"]
+  }
+}

@@ -1,0 +1,218 @@
+#!/usr/bin/env node
+
+import { lookup } from "node:dns/promises";
+import {
+  constants,
+  copyFileSync,
+  lstatSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { resolve, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const tutorialHosts = [
+  "idp.localhost",
+  ...Array.from({ length: 15 }, (_, index) => `p${index + 1}.localhost`),
+];
+
+const beginMarker = "# BEGIN cedarling-tutorials";
+const endMarker = "# END cedarling-tutorials";
+const loopback = "127.0.0.1";
+
+function lines(text) {
+  return text.split(/\r?\n/u);
+}
+
+function markerRange(sourceLines) {
+  const starts = [];
+  const ends = [];
+  sourceLines.forEach((line, index) => {
+    const value = line.trim();
+    if (value === beginMarker) starts.push(index);
+    if (value === endMarker) ends.push(index);
+  });
+  if (starts.length === 0 && ends.length === 0) return undefined;
+  if (
+    starts.length !== 1 ||
+    ends.length !== 1 ||
+    starts[0] === undefined ||
+    ends[0] === undefined ||
+    starts[0] >= ends[0]
+  ) {
+    throw new Error("The cedarling-tutorials hosts block is incomplete");
+  }
+  return { start: starts[0], end: ends[0] };
+}
+
+function assertNoConflicts(sourceLines, ignoredRange) {
+  const expected = new Set(tutorialHosts);
+  for (const [index, line] of sourceLines.entries()) {
+    if (
+      ignoredRange &&
+      index >= ignoredRange.start &&
+      index <= ignoredRange.end
+    ) {
+      continue;
+    }
+    const fields = line.split("#", 1)[0]?.trim().split(/\s+/u) ?? [];
+    const address = fields.shift();
+    const conflicting = fields.find((host) => expected.has(host.toLowerCase()));
+    if (conflicting && address !== loopback) {
+      throw new Error(
+        `${conflicting} already maps to ${address}; reconcile that entry manually`,
+      );
+    }
+  }
+}
+
+function managedLines() {
+  return [
+    beginMarker,
+    ...tutorialHosts.map((host) => `${loopback} ${host}`),
+    endMarker,
+  ];
+}
+
+export function installEntries(text) {
+  const ending = text.includes("\r\n") ? "\r\n" : "\n";
+  const sourceLines = lines(text);
+  const range = markerRange(sourceLines);
+  assertNoConflicts(sourceLines, range);
+  if (range) {
+    sourceLines.splice(
+      range.start,
+      range.end - range.start + 1,
+      ...managedLines(),
+    );
+    return sourceLines.join(ending);
+  }
+  while (sourceLines.at(-1) === "") sourceLines.pop();
+  if (sourceLines.length > 0) sourceLines.push("");
+  sourceLines.push(...managedLines(), "");
+  return sourceLines.join(ending);
+}
+
+export function removeEntries(text) {
+  const ending = text.includes("\r\n") ? "\r\n" : "\n";
+  const sourceLines = lines(text);
+  const range = markerRange(sourceLines);
+  if (!range) return text;
+  sourceLines.splice(range.start, range.end - range.start + 1);
+  if (
+    range.start > 0 &&
+    sourceLines[range.start - 1] === "" &&
+    sourceLines[range.start] === ""
+  ) {
+    sourceLines.splice(range.start, 1);
+  }
+  return sourceLines.join(ending);
+}
+
+export function windowsHostsPath(environment = process.env) {
+  const systemRoot = environment.SystemRoot ?? environment.WINDIR;
+  if (!systemRoot) throw new Error("Windows SystemRoot is unavailable");
+  return win32.join(systemRoot, "System32", "drivers", "etc", "hosts");
+}
+
+export async function checkWindowsHosts(lookupHost = lookup) {
+  const invalid = [];
+  for (const host of tutorialHosts) {
+    try {
+      const addresses = await lookupHost(host, { family: 4, all: true });
+      if (
+        addresses.length === 0 ||
+        addresses.some(({ address }) => address !== loopback)
+      ) {
+        invalid.push(host);
+      }
+    } catch {
+      invalid.push(host);
+    }
+  }
+  if (invalid.length > 0) {
+    throw new Error(`Unresolved tutorial hostnames: ${invalid.join(", ")}`);
+  }
+}
+
+function assertRegularFile(target) {
+  const status = lstatSync(target);
+  if (!status.isFile() || status.isSymbolicLink()) {
+    throw new Error(`${target} must be a regular file`);
+  }
+}
+
+function updateWindowsHosts(transform, environment) {
+  const target = windowsHostsPath(environment);
+  assertRegularFile(target);
+  const current = readFileSync(target, "utf8");
+  const next = transform(current);
+  if (next === current) return false;
+  try {
+    copyFileSync(
+      target,
+      `${target}.cedarling-tutorials.bak`,
+      constants.COPYFILE_EXCL,
+    );
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+  }
+  writeFileSync(target, next, "utf8");
+  return true;
+}
+
+function elevatedCommand(command) {
+  return `Open a terminal as Administrator, then run:\n  "${process.execPath}" "${fileURLToPath(import.meta.url)}" ${command}`;
+}
+
+export async function run(
+  command,
+  {
+    platform = process.platform,
+    environment = process.env,
+    log = console.info,
+  } = {},
+) {
+  if (!["check", "install", "remove"].includes(command)) {
+    throw new Error("Usage: node shared/host <check|install|remove>");
+  }
+  if (platform !== "win32") {
+    log("Tutorial hostname compatibility setup is not required.");
+    return;
+  }
+  if (command === "check") {
+    try {
+      await checkWindowsHosts();
+      log("Tutorial hostnames resolve to Windows loopback.");
+    } catch (error) {
+      throw new Error(`${error.message}\n${elevatedCommand("install")}`);
+    }
+    return;
+  }
+  try {
+    const changed = updateWindowsHosts(
+      command === "install" ? installEntries : removeEntries,
+      environment,
+    );
+    log(
+      changed
+        ? `Tutorial hostname mappings ${command === "install" ? "installed" : "removed"}.`
+        : `Tutorial hostname mappings already ${command === "install" ? "installed" : "absent"}.`,
+    );
+  } catch (error) {
+    if (error?.code === "EACCES" || error?.code === "EPERM") {
+      throw new Error(elevatedCommand(command));
+    }
+    throw error;
+  }
+}
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  run(process.argv[2]).catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

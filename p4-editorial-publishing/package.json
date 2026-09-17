@@ -1,0 +1,49 @@
+{
+  "name": "@cedarling-tutorials/p4-editorial-publishing",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "admin": "node --env-file=.env scripts/admin.ts",
+    "build": "next build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e",
+    "dev": "node scripts/dev.mjs",
+    "format": "biome check --write .",
+    "format:check": "biome format .",
+    "lint": "biome check --formatter-enabled=false --error-on-warnings .",
+    "preflight": "node scripts/preflight.mjs",
+    "reset": "node --env-file=.env scripts/reset.ts",
+    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "start": "node scripts/start.mjs",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "next": "16.3.5",
+    "openid-client": "6.8.7",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@playwright/test": "1.63.0",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}

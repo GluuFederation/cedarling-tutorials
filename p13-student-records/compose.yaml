@@ -1,0 +1,97 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P13"]
+    environment:
+      BOOTSTRAP_ISSUER: ${P13_ISSUER:-http://idp.localhost:4000}
+      BOOTSTRAP_BASE_URL: ${P13_BASE_URL:-http://p13.localhost:3013}
+      BOOTSTRAP_CLIENT_SECRET: ${P13_CLIENT_SECRET:-}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  import-data:
+    profiles: [migration]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    entrypoint: ["node", "/bootstrap/scripts/import-data.mjs"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - p13-data:/app-config
+      - ./.local/p13-data:/import:ro
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node","--env-file=/run/config/.env","dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+      IDP_PORT: "${P13_IDP_PORT:-4000}"
+      IDP_ISSUER: "${P13_ISSUER:-http://idp.localhost:4000}"
+      P13_REDIRECT_URI: "${P13_BASE_URL:-http://p13.localhost:3013}/auth/callback"
+      P13_POST_LOGOUT_REDIRECT_URI: "${P13_BASE_URL:-http://p13.localhost:3013}"
+    ports:
+      - "127.0.0.1:${P13_IDP_PORT:-4000}:${P13_IDP_PORT:-4000}"
+    networks:
+      default:
+        aliases: [idp.localhost]
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch(process.env.IDP_ISSUER+'/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  cedarschool:
+    command: ["node","--env-file=/run/config/app.env","dist/server/main.js"]
+    build: .
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider: { condition: service_healthy }
+    environment:
+      P13_HOST: 0.0.0.0
+      P13_PORT: "${P13_PORT:-3013}"
+      P13_BASE_URL: "${P13_BASE_URL:-http://p13.localhost:3013}"
+      P13_DATA_DIR: /app/.local/p13-data
+    volumes:
+      - app-config:/run/config:ro
+      - ${P13_HOST_DATA_DIR:-p13-data}:/app/.local/p13-data
+    ports:
+      - "127.0.0.1:${P13_PORT:-3013}:${P13_PORT:-3013}"
+    networks:
+      default:
+        aliases: [p13.localhost]
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch(process.env.P13_BASE_URL+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+volumes:
+  identity-config:
+  app-config:
+  p13-data:

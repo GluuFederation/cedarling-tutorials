@@ -1,0 +1,171 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P10"]
+    environment:
+      BOOTSTRAP_ISSUER: ${P10_ISSUER:-http://idp.localhost:4000}
+      BOOTSTRAP_BASE_URL: ${P10_BASE_URL:-http://p10.localhost:3010}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - console-config:/p10-console-config
+      - api-config:/p10-api-config
+      - planner-config:/p10-planner-config
+      - north-config:/p10-north-config
+      - south-config:/p10-south-config
+      - auditor-config:/p10-auditor-config
+
+  identity-provider:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    command: ["node", "--env-file=/run/config/.env", "dist/main.js"]
+    environment:
+      IDP_HOST: 0.0.0.0
+    ports: ["127.0.0.1:4000:4000"]
+    networks:
+      tutorial:
+        aliases: [idp.localhost]
+    volumes: [identity-config:/run/config:ro]
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  warehouse-api:
+    build:
+      context: ..
+      dockerfile: p10-warehouse-workloads/Dockerfile
+    image: p10-warehouse-workloads:local
+    command: ["node", "--env-file=/run/config/api.env", "dist/server/api-main.js"]
+    environment:
+      P10_API_HOST: 0.0.0.0
+      P10_API_PORT: 3110
+      P10_DATA_DIR: /app/.local/p10-data
+    networks: [tutorial]
+    volumes:
+      - api-config:/run/config:ro
+      - p10-data:/app/.local/p10-data
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3110/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  transfer-planner:
+    image: p10-warehouse-workloads:local
+    command: ["node", "--env-file=/run/config/agent.env", "dist/server/agent-main.js", "transfer-planner"]
+    environment: &agent-environment
+      P10_AGENT_HOST: 0.0.0.0
+      P10_AGENT_PORT: 3020
+    networks: [tutorial]
+    volumes: [planner-config:/run/config:ro]
+    depends_on: &agent-dependencies
+      configure: { condition: service_completed_successfully }
+      identity-provider: { condition: service_healthy }
+      warehouse-api: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck: &agent-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3020/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  warehouse-north:
+    image: p10-warehouse-workloads:local
+    command: ["node", "--env-file=/run/config/agent.env", "dist/server/agent-main.js", "warehouse-north"]
+    environment: *agent-environment
+    networks: [tutorial]
+    volumes: [north-config:/run/config:ro]
+    depends_on: *agent-dependencies
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck: *agent-healthcheck
+
+  warehouse-south:
+    image: p10-warehouse-workloads:local
+    command: ["node", "--env-file=/run/config/agent.env", "dist/server/agent-main.js", "warehouse-south"]
+    environment: *agent-environment
+    networks: [tutorial]
+    volumes: [south-config:/run/config:ro]
+    depends_on: *agent-dependencies
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck: *agent-healthcheck
+
+  inventory-auditor:
+    image: p10-warehouse-workloads:local
+    command: ["node", "--env-file=/run/config/agent.env", "dist/server/agent-main.js", "inventory-auditor"]
+    environment: *agent-environment
+    networks: [tutorial]
+    volumes: [auditor-config:/run/config:ro]
+    depends_on: *agent-dependencies
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck: *agent-healthcheck
+
+  console:
+    image: p10-warehouse-workloads:local
+    command: ["node", "--env-file=/run/config/console.env", "dist/server/console-main.js"]
+    environment:
+      P10_HOST: 0.0.0.0
+      P10_PORT: 3010
+    ports: ["127.0.0.1:3010:3010"]
+    networks:
+      tutorial:
+        aliases: [p10.localhost]
+    volumes: [console-config:/run/config:ro]
+    depends_on:
+      transfer-planner: { condition: service_healthy }
+      warehouse-north: { condition: service_healthy }
+      warehouse-south: { condition: service_healthy }
+      inventory-auditor: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3010/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+networks:
+  tutorial:
+
+volumes:
+  identity-config:
+  console-config:
+  api-config:
+  planner-config:
+  north-config:
+  south-config:
+  auditor-config:
+  p10-data:

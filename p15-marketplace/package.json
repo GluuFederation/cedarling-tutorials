@@ -1,0 +1,51 @@
+{
+  "name": "@cedarling-tutorials/p15-marketplace",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "dev": "vite build && node --watch --env-file=.env src/server/main.ts",
+    "start": "node --env-file=.env dist/server/main.js",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.server.json && tsc -p tsconfig.web.json",
+    "format": "biome check --write .",
+    "format:check": "biome format .",
+    "lint": "biome check --formatter-enabled=false --error-on-warnings .",
+    "test": "vitest run",
+    "test:e2e": "node scripts/test-e2e.ts",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "cookie": "2.0.1",
+    "express": "5.2.1",
+    "openid-client": "6.8.7",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.11",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "jsdom": "29.0.1",
+    "typescript": "6.0.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "better-sqlite3"
+    ],
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

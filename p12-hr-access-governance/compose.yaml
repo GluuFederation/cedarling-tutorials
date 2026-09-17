@@ -1,0 +1,94 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P12"]
+    environment:
+      BOOTSTRAP_ISSUER: ${P12_ISSUER:-http://idp.localhost:4000}
+      BOOTSTRAP_BASE_URL: ${P12_BASE_URL:-http://p12.localhost:3012}
+      BOOTSTRAP_CLIENT_SECRET: ${P12_CLIENT_SECRET:-}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  import-data:
+    profiles: [migration]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    entrypoint: ["node", "/bootstrap/scripts/import-data.mjs"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - p12-data:/app-config
+      - ./.local/p12-data:/import:ro
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node","--env-file=/run/config/.env","dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+      IDP_PORT: ${P12_IDP_PORT:-4000}
+      IDP_ISSUER: ${P12_ISSUER:-http://idp.localhost:4000}
+      P12_REDIRECT_URI: ${P12_BASE_URL:-http://p12.localhost:3012}/auth/callback
+      P12_POST_LOGOUT_REDIRECT_URI: ${P12_BASE_URL:-http://p12.localhost:3012}
+    ports:
+      - "127.0.0.1:${P12_IDP_PORT:-4000}:${P12_IDP_PORT:-4000}"
+    networks:
+      default:
+        aliases: [idp.localhost]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, node, -e, "fetch(process.env.IDP_ISSUER+'/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  cedarhr:
+    command: ["node","--env-file=/run/config/app.env","dist/server/main.js"]
+    build: .
+    environment:
+      P12_HOST: 0.0.0.0
+      P12_PORT: ${P12_PORT:-3012}
+      P12_BASE_URL: ${P12_BASE_URL:-http://p12.localhost:3012}
+      P12_DATA_DIR: /app/.local/p12-data
+    ports:
+      - "127.0.0.1:${P12_PORT:-3012}:${P12_PORT:-3012}"
+    networks:
+      default:
+        aliases: [p12.localhost]
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - app-config:/run/config:ro
+      - ${P12_DATA_HOST_DIR:-p12-data}:/app/.local/p12-data
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:'+process.env.P12_PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  identity-config:
+  app-config:
+  p12-data:

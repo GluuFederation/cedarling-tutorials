@@ -1,0 +1,88 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P2"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node", "--env-file=/run/config/.env", "dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:4000:4000"
+    networks:
+      tutorial:
+        aliases: [idp.localhost]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  tenantrag:
+    command:
+      ["node", "--env-file=/run/config/app.env", "dist/scripts/docker-start.js"]
+    build:
+      context: ..
+      dockerfile: p2-tenantrag/Dockerfile
+    environment:
+      P2_HOST: 0.0.0.0
+      P2_PROJECT_ROOT: /app
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      tutorial:
+        aliases: [p2.localhost]
+    volumes:
+      - app-config:/run/config:ro
+      - p2-data:/app/data
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/openapi.json').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+networks:
+  tutorial:
+
+volumes:
+  identity-config:
+  app-config:
+  p2-data:

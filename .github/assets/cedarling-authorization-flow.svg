@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title description">
+  <title id="title">How Cedarling authorizes a protected outcome</title>
+  <desc id="description">A caller sends a request to the application policy enforcement point. The application selects a fixed action, loads current facts, and sends Principal, Action, Resource, and Context to Cedarling. Cedarling evaluates the request against a policy store and returns allow or deny. The application performs the protected outcome only after allow.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0a384e"/>
+    </marker>
+    <style>
+      .title { font: 700 30px Arial, sans-serif; fill: #0a384e; }
+      .heading { font: 700 22px Arial, sans-serif; fill: #0a384e; }
+      .body { font: 16px Arial, sans-serif; fill: #244451; }
+      .small { font: 14px Arial, sans-serif; fill: #49616b; }
+      .label { font: 700 14px Arial, sans-serif; fill: #0a384e; }
+      .footer { font: 700 20px Arial, sans-serif; fill: #0a384e; }
+      .box { fill: #ffffff; stroke: #9bb0b7; stroke-width: 2; }
+      .accent { fill: #eaf8f2; stroke: #03a96d; stroke-width: 3; }
+      .arrow { fill: none; stroke: #0a384e; stroke-width: 3; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="640" rx="24" fill="#f6f9f8"/>
+  <text class="title" x="600" y="52" text-anchor="middle">How Cedarling authorizes a protected outcome</text>
+
+  <rect class="box" x="36" y="154" width="184" height="176" rx="16"/>
+  <text class="heading" x="128" y="198" text-anchor="middle">Caller</text>
+  <text class="body" x="128" y="236" text-anchor="middle">Request</text>
+  <text class="body" x="128" y="264" text-anchor="middle">and credentials</text>
+  <text class="small" x="128" y="300" text-anchor="middle">human or workload</text>
+
+  <rect class="accent" x="272" y="112" width="300" height="260" rx="18"/>
+  <text class="heading" x="422" y="158" text-anchor="middle">Application</text>
+  <text class="label" x="422" y="184" text-anchor="middle">POLICY ENFORCEMENT POINT</text>
+  <text class="body" x="300" y="230">1. Select a fixed action</text>
+  <text class="body" x="300" y="264">2. Load current resource</text>
+  <text class="body" x="319" y="290">and relationship facts</text>
+  <text class="body" x="300" y="324">3. Build trusted PARC input</text>
+  <text class="small" x="422" y="350" text-anchor="middle">token evidence or asserted principal</text>
+
+  <rect class="accent" x="650" y="112" width="250" height="260" rx="18"/>
+  <text class="heading" x="775" y="158" text-anchor="middle">Cedarling</text>
+  <text class="label" x="775" y="184" text-anchor="middle">POLICY DECISION POINT</text>
+  <text class="body" x="775" y="232" text-anchor="middle">Embedded SDK</text>
+  <text class="body" x="775" y="260" text-anchor="middle">or private sidecar</text>
+  <text class="body" x="775" y="306" text-anchor="middle">Evaluate PARC</text>
+  <text class="body" x="775" y="334" text-anchor="middle">against Cedar policies</text>
+  <text class="small" x="775" y="358" text-anchor="middle">return decision + request ID</text>
+
+  <rect class="box" x="952" y="112" width="212" height="260" rx="18"/>
+  <text class="heading" x="1058" y="158" text-anchor="middle">Application</text>
+  <text class="label" x="1058" y="184" text-anchor="middle">ENFORCEMENT</text>
+  <rect x="978" y="216" width="160" height="54" rx="10" fill="#eaf8f2" stroke="#03a96d" stroke-width="2"/>
+  <text class="body" x="1058" y="250" text-anchor="middle">ALLOW → outcome</text>
+  <rect x="978" y="290" width="160" height="54" rx="10" fill="#fff3f2" stroke="#d95c52" stroke-width="2"/>
+  <text class="body" x="1058" y="324" text-anchor="middle">DENY → no effect</text>
+
+  <rect class="box" x="650" y="430" width="250" height="130" rx="16"/>
+  <text class="heading" x="775" y="468" text-anchor="middle">Policy store</text>
+  <text class="small" x="775" y="500" text-anchor="middle">schema · policies</text>
+  <text class="small" x="775" y="526" text-anchor="middle">trusted issuers · default entities</text>
+
+  <path class="arrow" d="M 220 242 L 264 242"/>
+
+  <path class="arrow" d="M 572 242 L 642 242"/>
+  <text class="label" x="607" y="208" text-anchor="middle">P · A · R · C</text>
+
+  <path class="arrow" d="M 900 242 L 944 242"/>
+
+  <path class="arrow" d="M 775 430 L 775 382"/>
+
+  <text class="footer" x="600" y="612" text-anchor="middle">Cedarling decides. The application enforces.</text>
+</svg>

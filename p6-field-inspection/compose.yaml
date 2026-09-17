@@ -1,0 +1,80 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P6"]
+    environment:
+      BOOTSTRAP_ISSUER: ${P6_ISSUER:-http://idp.localhost:4000}
+      BOOTSTRAP_BASE_URL: ${P6_BASE_URL:-http://p6.localhost:3006}
+      BOOTSTRAP_CLIENT_SECRET: ${P6_CLIENT_SECRET:-}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  identity-provider:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    command: ["node", "--env-file=/run/config/.env", "dist/main.js"]
+    environment:
+      IDP_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:4000:4000"
+    networks:
+      tutorial:
+        aliases: [idp.localhost]
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  cedarinspect:
+    build:
+      context: ..
+      dockerfile: p6-field-inspection/Dockerfile
+    command: ["node", "--env-file=/run/config/app.env", "dist/server/main.js"]
+    environment:
+      P6_HOST: 0.0.0.0
+      P6_PORT: 3006
+      P6_DATA_DIR: /app/.local/p6-data
+    ports:
+      - "127.0.0.1:3006:3006"
+    networks:
+      tutorial:
+        aliases: [p6.localhost]
+    volumes:
+      - app-config:/run/config:ro
+      - p6-data:/app/.local/p6-data
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3006/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+networks:
+  tutorial:
+
+volumes:
+  identity-config:
+  app-config:
+  p6-data:

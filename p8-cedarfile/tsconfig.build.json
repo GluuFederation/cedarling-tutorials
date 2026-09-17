@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "sourceMap": true
+  },
+  "include": ["src/server/**/*.ts", "scripts/e2e-proof.ts"]
+}

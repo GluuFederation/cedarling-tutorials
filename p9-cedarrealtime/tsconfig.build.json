@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rewriteRelativeImportExtensions": true,
+    "sourceMap": true
+  },
+  "include": [
+    "src/server/**/*.ts",
+    "src/shared/**/*.ts",
+    "scripts/e2e-proof.ts"
+  ],
+  "exclude": ["test/**/*"]
+}

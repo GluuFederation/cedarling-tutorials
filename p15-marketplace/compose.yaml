@@ -1,0 +1,78 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P15"]
+    environment:
+      BOOTSTRAP_ISSUER: ${P15_ISSUER:-http://idp.localhost:4000}
+      BOOTSTRAP_BASE_URL: ${P15_BASE_URL:-http://p15.localhost:3015}
+      BOOTSTRAP_CLIENT_SECRET: ${P15_CLIENT_SECRET:-}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node", "--env-file=/run/config/.env", "dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+      IDP_PORT: ${P15_IDP_PORT:-4000}
+      IDP_ISSUER: ${P15_ISSUER:-http://idp.localhost:4000}
+      P15_REDIRECT_URI: ${P15_BASE_URL:-http://p15.localhost:3015}/auth/callback
+      P15_POST_LOGOUT_REDIRECT_URI: ${P15_BASE_URL:-http://p15.localhost:3015}
+    ports:
+      - "127.0.0.1:${P15_IDP_PORT:-4000}:${P15_IDP_PORT:-4000}"
+    networks:
+      default:
+        aliases: [idp.localhost]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch(process.env.IDP_ISSUER+'/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  cedarmarket:
+    command: ["node", "--env-file=/run/config/app.env", "dist/server/main.js"]
+    build: .
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider: { condition: service_healthy }
+    environment:
+      P15_DATA_DIR: /data
+      P15_HOST: 0.0.0.0
+      P15_PORT: ${P15_PORT:-3015}
+      P15_BASE_URL: ${P15_BASE_URL:-http://p15.localhost:3015}
+    ports:
+      - "127.0.0.1:${P15_PORT:-3015}:${P15_PORT:-3015}"
+    networks:
+      default:
+        aliases: [p15.localhost]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - app-config:/run/config:ro
+      - ${P15_DATA_HOST_DIR:-p15-data}:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch(process.env.P15_BASE_URL+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  identity-config:
+  app-config:
+  p15-data:
