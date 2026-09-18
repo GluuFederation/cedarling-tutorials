@@ -1,0 +1,94 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P11"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  postgres:
+    image: postgres:18.6-bookworm
+    environment:
+      POSTGRES_USER: p11
+      POSTGRES_PASSWORD: p11
+      POSTGRES_DB: p11
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - p11-postgres:/var/lib/postgresql
+      - ./migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
+      - ./fixtures/seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U p11 -d p11"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+    security_opt: ["no-new-privileges:true"]
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node","--env-file=/run/config/.env","dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+      IDP_ISSUER: http://idp.localhost:4000
+      IDP_PORT: 4000
+    ports:
+      - "127.0.0.1:4000:4000"
+    networks:
+      default:
+        aliases: [idp.localhost]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  cedarworkspace:
+    volumes:
+      - app-config:/run/config:ro
+    command: ["node","--env-file=/run/config/app.env","server.js"]
+    build: .
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      identity-provider: { condition: service_healthy }
+    environment:
+      P11_HOST: 0.0.0.0
+      P11_PORT: 3011
+      P11_BASE_URL: http://p11.localhost:3011
+      P11_DATABASE_URL: postgresql://p11:p11@postgres:5432/p11
+    ports:
+      - "127.0.0.1:3011:3011"
+    networks:
+      default:
+        aliases: [p11.localhost]
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3011/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  identity-config:
+  app-config:
+  p11-postgres:

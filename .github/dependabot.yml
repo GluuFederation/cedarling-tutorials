@@ -1,0 +1,42 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /p1-task-manager
+      - /p2-tenantrag
+      - /p3-mcp-capability-governance
+      - /p4-editorial-publishing
+      - /p5-dataguard
+      - /p6-field-inspection
+      - /p7-collaborative-docs
+      - /p8-cedarfile
+      - /p9-cedarrealtime
+      - /p10-warehouse-workloads
+      - /p11-saas-workspace
+      - /p12-hr-access-governance
+      - /p13-student-records
+      - /p14-ai-scheduling-assistant
+      - /p15-marketplace
+      - /shared/identity-provider
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Etc/UTC
+    groups:
+      shared-dependencies:
+        group-by: dependency-name
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Etc/UTC
+    groups:
+      github-actions:
+        patterns:
+          - "*"

@@ -1,0 +1,93 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P9"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  import-data:
+    profiles: [migration]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    entrypoint: ["node", "/bootstrap/scripts/import-data.mjs"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - p9-data:/app-config
+      - ./.local/p9-data:/import:ro
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node","--env-file=/run/config/.env","dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+      IDP_ISSUER: http://idp.localhost:4000
+      IDP_PORT: 4000
+    ports:
+      - "127.0.0.1:4000:4000"
+    networks:
+      default:
+        aliases: [idp.localhost]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  cedarrealtime:
+    command: ["node","--env-file=/run/config/app.env","dist/src/server/main.js"]
+    build:
+      context: .
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider:
+        condition: service_healthy
+    environment:
+      P9_HOST: 0.0.0.0
+      P9_PORT: 3009
+      P9_BASE_URL: http://p9.localhost:3009
+      P9_DATA_ROOT: /data
+    ports:
+      - "127.0.0.1:3009:3009"
+    networks:
+      default:
+        aliases: [p9.localhost]
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - app-config:/run/config:ro
+      - p9-data:/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3009/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  identity-config:
+  app-config:
+  p9-data:

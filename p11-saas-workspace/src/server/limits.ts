@@ -1,0 +1,15 @@
+export const limits = {
+  sessionMs: 30 * 60 * 1_000,
+  oidcTransactionMs: 5 * 60 * 1_000,
+  invitationMs: 15 * 60 * 1_000,
+  supportSessionMs: 10 * 60 * 1_000,
+  membershipsPerPrincipal: 20,
+  membersPerOrganization: 100,
+  pendingInvitationsPerOrganization: 20,
+  projectPageSize: 50,
+  projectNameCharacters: 120,
+  projectBodyBytes: 16_384,
+  diagnostics: 100,
+  diagnosticTtlMs: 15 * 60 * 1_000,
+  diagnosticBytes: 16_384,
+} as const;

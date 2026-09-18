@@ -1,0 +1,69 @@
+version: 1.0.0
+system: govops-incident-assistant
+capabilities:
+  - id: catalog.reconcile
+    title: Reconcile the MCP capability catalog
+    description: Compare the bounded runtime surface with its reviewed governance records.
+    group: governance
+    action: GovOps::ReconcileCatalog
+    resource: GovOps::CapabilityCatalog
+    owner: Platform Governance
+    risk_tier: high
+    business_impact: Detects unreviewed or stale operational capabilities.
+    data_sensitivity: internal
+    organizational_scope: Platform Engineering
+  - id: capability.list
+    title: List reviewed capabilities
+    description: Return the reviewed MCP descriptors exposed by the incident assistant.
+    group: governance
+    action: GovOps::ListCapability
+    resource: GovOps::CapabilityCatalog
+    owner: Platform Governance
+    risk_tier: medium
+    business_impact: Reveals the approved operational surface.
+    data_sensitivity: internal
+    organizational_scope: Platform Engineering
+  - id: incident.search
+    title: Search incidents
+    description: Search current synthetic incidents by a bounded text query.
+    group: incident-operations
+    action: Incident::Search
+    resource: Incident::Collection
+    owner: Incident Operations
+    risk_tier: high
+    business_impact: Exposes operational incident summaries.
+    data_sensitivity: restricted
+    organizational_scope: Incident Response
+  - id: incident.update
+    title: Update incident status
+    description: Advance one incident through one validated lifecycle transition.
+    group: incident-operations
+    action: Incident::UpdateStatus
+    resource: Incident::Record
+    owner: Incident Operations
+    risk_tier: critical
+    business_impact: Changes the authoritative incident lifecycle.
+    data_sensitivity: restricted
+    organizational_scope: Incident Response
+  - id: runbook.read
+    title: Read the response runbook
+    description: Read the stable synthetic response runbook resource.
+    group: incident-operations
+    action: Runbook::Read
+    resource: Runbook::IncidentResponse
+    owner: Incident Operations
+    risk_tier: medium
+    business_impact: Reveals internal response procedures.
+    data_sensitivity: internal
+    organizational_scope: Incident Response
+  - id: incident.triage
+    title: Build an incident triage prompt
+    description: Build a bounded triage conversation for a current incident.
+    group: incident-operations
+    action: Incident::Triage
+    resource: Incident::Record
+    owner: Incident Operations
+    risk_tier: high
+    business_impact: Sends validated incident context into the model workflow.
+    data_sensitivity: restricted
+    organizational_scope: Incident Response

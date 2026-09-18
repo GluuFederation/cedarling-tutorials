@@ -1,0 +1,9 @@
+.env
+!.dockerignore
+.local/
+dist/
+node_modules/
+*.log
+*.tsbuildinfo
+!.vscode/
+!.vscode/settings.json

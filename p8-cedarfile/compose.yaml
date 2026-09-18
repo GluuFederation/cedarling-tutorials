@@ -1,0 +1,105 @@
+services:
+  configure:
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    command: ["P8"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - identity-config:/identity-config
+      - app-config:/app-config
+
+  import-data:
+    profiles: [migration]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+      target: bootstrap
+    entrypoint: ["node", "/bootstrap/scripts/import-data.mjs"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - p8-data:/app-config
+      - ./.local/p8-data:/import:ro
+
+  identity-provider:
+    volumes:
+      - identity-config:/run/config:ro
+    depends_on:
+      configure: { condition: service_completed_successfully }
+    command: ["node","--env-file=/run/config/.env","dist/main.js"]
+    build:
+      context: ..
+      dockerfile: shared/identity-provider/Dockerfile
+    environment:
+      IDP_HOST: 0.0.0.0
+      IDP_ISSUER: http://idp.localhost:4000
+      IDP_PORT: 4000
+    ports:
+      - "127.0.0.1:4000:4000"
+    networks:
+      default:
+        aliases: [idp.localhost]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  cedarfile:
+    command: ["node","--env-file=/run/config/app.env","dist/src/server/main.js"]
+    build:
+      context: .
+    depends_on:
+      configure: { condition: service_completed_successfully }
+      identity-provider:
+        condition: service_healthy
+    environment:
+      P8_HOST: 0.0.0.0
+      P8_PORT: 3008
+      P8_BASE_URL: http://p8.localhost:3008
+      P8_DATA_ROOT: /data
+    ports:
+      - "127.0.0.1:3008:3008"
+    networks:
+      default:
+        aliases: [p8.localhost]
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - app-config:/run/config:ro
+      - p8-data:/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3008/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  identity-config:
+  app-config:
+  p8-data:

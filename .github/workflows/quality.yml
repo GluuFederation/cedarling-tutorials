@@ -1,0 +1,115 @@
+name: Quality
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Select projects
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.select.outputs.projects }}
+      compose: ${{ steps.select.outputs.compose }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Test repository scripts
+        run: >-
+          node --test
+          .github/scripts/changed-projects.test.mjs
+          .github/scripts/host.test.mjs
+      - id: select
+        name: Detect affected projects
+        run: node .github/scripts/changed-projects.mjs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  project:
+    name: ${{ matrix.project }} (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.projects != '[]'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        project: ${{ fromJSON(needs.changes.outputs.projects) }}
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 10.17.1
+          run_install: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+          cache-dependency-path: ${{ matrix.project }}/pnpm-lock.yaml
+      - name: Configure Windows tutorial hostnames
+        if: runner.os == 'Windows'
+        run: |
+          node shared/host install
+          node shared/host check
+      - name: Install
+        working-directory: ${{ matrix.project }}
+        run: pnpm install --frozen-lockfile
+      - name: Prepare shared identity provider
+        if: matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p12-hr-access-governance' || matrix.project == 'p13-student-records' || matrix.project == 'p14-ai-scheduling-assistant' || matrix.project == 'p15-marketplace'
+        working-directory: shared/identity-provider
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run setup
+          pnpm build
+      - name: Install browser and Linux dependencies
+        if: (matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os == 'Linux'
+        working-directory: ${{ matrix.project }}
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install browser
+        if: (matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os != 'Linux'
+        working-directory: ${{ matrix.project }}
+        run: pnpm exec playwright install chromium
+      - name: Check
+        working-directory: ${{ matrix.project }}
+        run: pnpm check
+      - name: Run Linux integration scenario
+        if: runner.os == 'Linux' && (matrix.project == 'p3-mcp-capability-governance' || matrix.project == 'p8-cedarfile' || matrix.project == 'p9-cedarrealtime' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p12-hr-access-governance' || matrix.project == 'p13-student-records' || matrix.project == 'p15-marketplace')
+        working-directory: ${{ matrix.project }}
+        run: pnpm test:e2e
+      - name: Audit dependencies
+        working-directory: ${{ matrix.project }}
+        run: pnpm audit --audit-level low
+
+  compose-config:
+    name: Compose config (${{ matrix.project }})
+    needs: changes
+    if: needs.changes.outputs.compose != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.changes.outputs.compose) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate Compose
+        working-directory: ${{ matrix.project }}
+        run: docker compose config --quiet

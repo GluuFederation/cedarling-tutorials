@@ -1,0 +1,42 @@
+{
+  "name": "@cedarling-tutorials/p2-tenantrag",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "auth": "tsx scripts/auth.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "corpus:reset": "tsx scripts/corpus-reset.ts",
+    "dev": "tsx watch src/main.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test:e2e": "tsx scripts/test-e2e.ts",
+    "setup": "node ../shared/host check && tsx scripts/setup.ts",
+    "start": "node dist/src/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@orama/orama": "3.1.18",
+    "fastify": "5.12.1",
+    "jose": "6.2.10",
+    "pdfjs-dist": "6.2.108",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.3.0",
+    "eslint": "10.9.1",
+    "prettier": "3.9.6",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
+  }
+}
