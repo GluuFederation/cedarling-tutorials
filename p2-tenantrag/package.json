@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@orama/orama": "3.1.18",
-    "fastify": "5.12.1",
+    "fastify": "5.12.4",
     "jose": "6.2.10",
     "pdfjs-dist": "6.2.108",
     "zod": "4.4.3"
