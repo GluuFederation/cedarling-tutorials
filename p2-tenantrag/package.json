@@ -24,10 +24,10 @@
   },
   "dependencies": {
     "@orama/orama": "3.1.18",
-    "fastify": "5.12.1",
+    "fastify": "5.12.5",
     "jose": "6.2.10",
     "pdfjs-dist": "6.2.108",
-    "zod": "4.4.3"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
