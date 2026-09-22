@@ -23,6 +23,13 @@ updates:
       time: "06:00"
       timezone: Etc/UTC
     groups:
+      react-runtime:
+        applies-to: version-updates
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
       shared-dependencies:
         group-by: dependency-name
       security-updates:
