@@ -41,7 +41,7 @@ function apiSchema(capability: Capability, body?: object): object {
 }
 
 function noCache(reply: FastifyReply): void {
-  reply.header("cache-control", "no-store");
+  reply.header("cache-control", "private, no-store");
 }
 
 function getSession(
@@ -85,6 +85,10 @@ function sendMutationResult(reply: FastifyReply, result: unknown): void {
   }
   if (result === "conflict") {
     void reply.code(409).send({ error: "stale_task_version" });
+    return;
+  }
+  if (result === "invalid-transition") {
+    void reply.code(409).send({ error: "invalid_task_transition" });
     return;
   }
   void reply.send(result === "deleted" ? { deleted: true } : { task: result });
@@ -136,6 +140,7 @@ export async function buildApp(
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<Session | undefined> {
+    noCache(reply);
     const rawId = request.cookies[sessionCookie];
     if (!rawId) {
       void reply.code(401).send({ error: "authentication_required" });
@@ -175,14 +180,13 @@ export async function buildApp(
     },
   });
 
-  app.get("/health", async () => ({ status: "ok" }));
-  app.get("/openapi.json", async (_request, reply) =>
-    reply.send(app.swagger()),
-  );
+  app.get("/health", () => ({ status: "ok" }));
+  app.get("/openapi.json", (_request, reply) => reply.send(app.swagger()));
 
   app.get<{ Querystring: { login_hint?: string } }>(
     "/auth/login",
     async (request, reply) => {
+      noCache(reply);
       const loginHint = loginHintSchema.safeParse(request.query.login_hint);
       if (!loginHint.success) {
         return reply.code(400).send({ error: "invalid_tutorial_login_hint" });
@@ -228,7 +232,9 @@ export async function buildApp(
       );
       const user = database.findUser(identity.issuer, identity.subject);
       if (!user)
-        return reply.code(403).send({ error: "unmapped_tutorial_identity" });
+        return await reply
+          .code(403)
+          .send({ error: "unmapped_tutorial_identity" });
       const session = database.createSession(user.id, identity.tokens, config);
       reply.setCookie(sessionCookie, session.rawId, {
         httpOnly: true,
@@ -237,13 +243,14 @@ export async function buildApp(
         path: "/",
         maxAge: 1_200,
       });
-      return reply.redirect("/");
+      return await reply.redirect("/");
     } catch {
       return reply.code(400).send({ error: "login_callback_rejected" });
     }
   });
 
   app.post("/auth/logout", async (request, reply) => {
+    noCache(reply);
     const session = getSession(request, database, config);
     if (!session || !requireMutation(request, reply, session, config)) return;
     const rawId = request.cookies[sessionCookie];
@@ -253,7 +260,6 @@ export async function buildApp(
   });
 
   app.get("/api/session", async (request, reply) => {
-    noCache(reply);
     const session = await requireSession(request, reply);
     if (!session) return;
     return {
@@ -401,6 +407,8 @@ export async function buildApp(
 
   const webRoot = options.webRoot ?? path.resolve(process.cwd(), "dist/web");
   await app.register(fastifyStatic, { root: webRoot, wildcard: false });
-  app.addHook("onClose", async () => database.close());
+  app.addHook("onClose", () => {
+    database.close();
+  });
   return app;
 }

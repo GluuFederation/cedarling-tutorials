@@ -13,12 +13,10 @@
   font-synthesis: none;
   --navy: #0a384e;
   --deep-navy: #061d33;
-  --green: #03a96d;
   --green-dark: #007a4d;
   --signal-blue: #00aeef;
   --blue-strong: #2563eb;
   --amber: #ffb94a;
-  --coral: #ff8153;
   --coral-dark: #c2412d;
   --charcoal: #262a29;
   --slate: #59605d;
@@ -28,7 +26,6 @@
   --surface-soft: #f4f7f6;
   --surface-green: #edf5f2;
   --surface-blue: #eef7fb;
-  --surface-amber: #fff7e8;
   --surface-coral: #fff1ed;
 }
 
@@ -328,9 +325,6 @@ p {
 
 .task-row.active {
   background: var(--surface-blue);
-}
-
-.task-row.active {
   border-left-color: var(--blue-strong);
 }
 

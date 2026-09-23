@@ -8,6 +8,7 @@ describe("P1 failure messages", () => {
     [new ApiError(400, "invalid_task"), "Check the task fields"],
     [new ApiError(404, "task_not_found"), "Task unavailable"],
     [new ApiError(409, "stale_task_version"), "Task changed"],
+    [new ApiError(409, "invalid_task_transition"), "already completed"],
     [new Error("ECONNREFUSED"), "Task service unavailable"],
   ])(
     "differentiates %# without exposing internal errors",

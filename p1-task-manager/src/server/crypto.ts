@@ -32,7 +32,7 @@ export function encryptJson(value: unknown, key: Buffer): string {
     .join(".");
 }
 
-export function decryptJson<T>(value: string, key: Buffer): T {
+export function decryptJson(value: string, key: Buffer): unknown {
   const parts = value.split(".").map((part) => Buffer.from(part, "base64url"));
   const [iv, tag, encrypted] = parts;
   if (!iv || !tag || !encrypted)
@@ -43,5 +43,5 @@ export function decryptJson<T>(value: string, key: Buffer): T {
     Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(
       "utf8",
     ),
-  ) as T;
+  ) as unknown;
 }

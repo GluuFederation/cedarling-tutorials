@@ -82,6 +82,15 @@ async function fixture(
   };
 }
 
+function mutationHeaders(cookie: string, csrfToken: string) {
+  return {
+    cookie,
+    origin: "http://p1.localhost:3000",
+    "sec-fetch-site": "same-origin",
+    "x-csrf-token": csrfToken,
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   for (const root of roots.splice(0))
@@ -123,31 +132,182 @@ describe("P1 HTTP boundary", () => {
     await app.close();
   });
 
-  it("requires session CSRF and same-origin evidence for mutations", async () => {
+  it("requires valid CSRF, Origin, and Fetch Metadata for mutations", async () => {
     const { app, cookie, session } = await fixture("user-alex");
-    const missing = await app.inject({
-      method: "POST",
-      url: "/api/tasks/task-a-brief/complete",
-      headers: { cookie },
-      payload: { version: 1 },
-    });
-    expect(missing.statusCode).toBe(403);
+    const valid = mutationHeaders(cookie, session.csrfToken);
+    const rejectedHeaders = [
+      {
+        cookie,
+        origin: valid.origin,
+        "sec-fetch-site": valid["sec-fetch-site"],
+      },
+      { ...valid, "x-csrf-token": "wrong-token" },
+      { ...valid, origin: "http://attacker.invalid" },
+      { ...valid, "sec-fetch-site": "cross-site" },
+    ];
+
+    for (const headers of rejectedHeaders) {
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/tasks/task-a-brief/complete",
+        headers,
+        payload: { version: 1 },
+      });
+      expect(rejected.statusCode).toBe(403);
+      expect(rejected.json()).toEqual({
+        error: "request_verification_failed",
+      });
+    }
 
     const accepted = await app.inject({
       method: "POST",
       url: "/api/tasks/task-a-brief/complete",
-      headers: {
-        cookie,
-        origin: "http://p1.localhost:3000",
-        "sec-fetch-site": "same-origin",
-        "x-csrf-token": session.csrfToken,
-      },
+      headers: valid,
       payload: { version: 1 },
     });
     expect(accepted.statusCode).toBe(200);
     expect(accepted.json()).toMatchObject({
       task: { id: "task-a-brief", status: "completed" },
     });
+    await app.close();
+  });
+
+  it("rejects a repeated completion without changing task state", async () => {
+    const { app, cookie, session } = await fixture("user-alex");
+    const headers = mutationHeaders(cookie, session.csrfToken);
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/tasks/task-a-brief/complete",
+      headers,
+      payload: { version: 1 },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().task).toMatchObject({
+      status: "completed",
+      version: 2,
+    });
+
+    const repeated = await app.inject({
+      method: "POST",
+      url: "/api/tasks/task-a-brief/complete",
+      headers,
+      payload: { version: 2 },
+    });
+    expect(repeated.statusCode).toBe(409);
+    expect(repeated.json()).toEqual({ error: "invalid_task_transition" });
+
+    const current = await app.inject({
+      method: "GET",
+      url: "/api/tasks/task-a-brief",
+      headers: { cookie },
+    });
+    expect(current.json().task).toMatchObject({
+      status: "completed",
+      version: 2,
+    });
+    await app.close();
+  });
+
+  it("persists create, edit, assign, and delete effects through the HTTP boundary", async () => {
+    const { app, cookie, session } = await fixture("user-mina");
+    const headers = mutationHeaders(cookie, session.csrfToken);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      headers,
+      payload: {
+        title: "Publish P1",
+        description: "Verify every task effect.",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().task).toMatchObject({
+      tenantId: "tenant-a",
+      ownerId: "user-mina",
+      title: "Publish P1",
+      version: 1,
+    });
+    const taskId = String(created.json().task.id);
+
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${taskId}`,
+      headers,
+      payload: {
+        title: "Publish verified P1",
+        description: "Verify every task effect.",
+        version: 1,
+      },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().task).toMatchObject({
+      title: "Publish verified P1",
+      version: 2,
+    });
+
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${taskId}/assign`,
+      headers,
+      payload: { assigneeId: "user-alex", version: 2 },
+    });
+    expect(assigned.statusCode).toBe(200);
+    expect(assigned.json().task).toMatchObject({
+      assigneeId: "user-alex",
+      version: 3,
+    });
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/tasks/${taskId}`,
+      headers,
+      payload: { version: 3 },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({ deleted: true });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/tasks/${taskId}`,
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(404);
+    await app.close();
+  });
+
+  it("prevents authenticated responses from being cached", async () => {
+    const { app, cookie, session } = await fixture("user-alex");
+    const headers = mutationHeaders(cookie, session.csrfToken);
+    const responses = [
+      await app.inject({
+        method: "GET",
+        url: "/api/session",
+        headers: { cookie },
+      }),
+      await app.inject({
+        method: "GET",
+        url: "/api/tasks",
+        headers: { cookie },
+      }),
+      await app.inject({
+        method: "GET",
+        url: "/api/tasks/task-a-brief",
+        headers: { cookie },
+      }),
+      await app.inject({
+        method: "PATCH",
+        url: "/api/tasks/task-a-brief",
+        headers,
+        payload: { title: "Stale", description: "", version: 99 },
+      }),
+      await app.inject({ method: "POST", url: "/auth/logout", headers }),
+    ];
+
+    for (const response of responses) {
+      expect(response.headers["cache-control"]).toBe("private, no-store");
+    }
     await app.close();
   });
 

@@ -72,7 +72,7 @@ task read and mutation from the actor, tenant, role, resource, and context.
 | Command          | Purpose                                            |
 | ---------------- | -------------------------------------------------- |
 | `pnpm run setup` | Create validated native configuration and fixtures |
-| `pnpm dev`       | Build the browser and watch the server             |
+| `pnpm dev`       | Build and watch the browser and server             |
 | `pnpm start`     | Run the built server                               |
 | `pnpm reset`     | Restore synthetic local data                       |
 | `pnpm check`     | Run formatting, lint, types, tests, and build      |
