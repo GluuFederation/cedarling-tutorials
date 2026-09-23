@@ -53,14 +53,17 @@ test("does not run project jobs for root documentation alone", () => {
 });
 
 test("reports when project detection falls back to the full matrix", () => {
+  const environment = {
+    ...process.env,
+    EVENT_NAME: "pull_request",
+    BASE_SHA: "missing-base",
+    HEAD_SHA: "missing-head",
+  };
+  delete environment.GITHUB_OUTPUT;
+
   const result = spawnSync(process.execPath, [selectorScript], {
     encoding: "utf8",
-    env: {
-      ...process.env,
-      EVENT_NAME: "pull_request",
-      BASE_SHA: "missing-base",
-      HEAD_SHA: "missing-head",
-    },
+    env: environment,
   });
 
   assert.equal(result.status, 0, result.stderr);
