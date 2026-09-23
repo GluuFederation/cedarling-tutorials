@@ -1,6 +1,9 @@
 import type { SVGProps } from "react";
 
-type IconProps = SVGProps<SVGSVGElement> & { size?: number; weight?: string };
+type IconProps = SVGProps<SVGSVGElement> & {
+  size?: number;
+  weight?: "bold";
+};
 
 function Glyph({ children, size = 20, weight, ...props }: IconProps) {
   return (
@@ -32,14 +35,6 @@ export const ArrowLeft = (props: IconProps) => (
 export const ArrowRight = (props: IconProps) => (
   <Glyph {...props}>
     <path d="m9 18 6-6-6-6" />
-  </Glyph>
-);
-export const ArrowsClockwise = (props: IconProps) => (
-  <Glyph {...props}>
-    <path d="M20 7h-5V2" />
-    <path d="M20 7a8 8 0 0 0-14-2" />
-    <path d="M4 17h5v5" />
-    <path d="M4 17a8 8 0 0 0 14 2" />
   </Glyph>
 );
 export const CheckCircle = (props: IconProps) => (

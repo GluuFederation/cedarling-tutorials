@@ -4,14 +4,12 @@ WORKDIR /workspace/p1-task-manager
 COPY p1-task-manager/package.json p1-task-manager/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY p1-task-manager/ ./
-RUN pnpm build
+RUN pnpm build && pnpm prune --prod
 
 FROM node:24.21.0-bookworm-slim AS runtime
 ENV NODE_ENV=production P1_PROJECT_ROOT=/app
-RUN corepack enable
 WORKDIR /app
 COPY --from=build /workspace/p1-task-manager/package.json ./
-COPY --from=build /workspace/p1-task-manager/pnpm-lock.yaml ./
 COPY --from=build /workspace/p1-task-manager/node_modules ./node_modules
 COPY --from=build /workspace/p1-task-manager/dist ./dist
 RUN mkdir -p /app/.data && chown -R node:node /app/.data

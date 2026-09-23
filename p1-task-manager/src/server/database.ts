@@ -34,6 +34,23 @@ export type Task = Readonly<{
   updatedAt: string;
 }>;
 
+function isOidcTokens(value: unknown): value is OidcTokens {
+  if (!value || typeof value !== "object") return false;
+  const tokens = value as Record<string, unknown>;
+  return (
+    typeof tokens.issuer === "string" &&
+    typeof tokens.subject === "string" &&
+    typeof tokens.accessToken === "string" &&
+    typeof tokens.accessTokenExpiresAt === "number" &&
+    typeof tokens.refreshToken === "string" &&
+    typeof tokens.refreshTokenExpiresAt === "number" &&
+    typeof tokens.idToken === "string" &&
+    typeof tokens.idTokenExpiresAt === "number" &&
+    typeof tokens.tokenType === "string" &&
+    typeof tokens.scope === "string"
+  );
+}
+
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, issuer TEXT NOT NULL, subject TEXT NOT NULL, name TEXT NOT NULL,
@@ -254,20 +271,11 @@ export class AppDatabase {
     const user = this.mapUser(row);
     if (!user) return undefined;
     try {
-      const tokens = decryptJson<OidcTokens>(
+      const tokens = decryptJson(
         String(row.encrypted_tokens),
         config.sessionEncryptionKey,
       );
-      if (
-        typeof tokens.accessToken !== "string" ||
-        typeof tokens.accessTokenExpiresAt !== "number" ||
-        typeof tokens.refreshToken !== "string" ||
-        typeof tokens.refreshTokenExpiresAt !== "number" ||
-        typeof tokens.idToken !== "string" ||
-        typeof tokens.idTokenExpiresAt !== "number"
-      ) {
-        throw new Error("Invalid stored OIDC tokens");
-      }
+      if (!isOidcTokens(tokens)) throw new Error("Invalid stored OIDC tokens");
       return {
         user,
         tokens,
@@ -297,13 +305,12 @@ export class AppDatabase {
   }
 
   listTasks(tenantId: string): Task[] {
-    return (
-      this.raw
-        .prepare(
-          "SELECT * FROM tasks WHERE tenant_id = ? ORDER BY updated_at DESC, id",
-        )
-        .all(tenantId) as unknown[]
-    ).map((row) => this.mapTask(row));
+    return this.raw
+      .prepare(
+        "SELECT * FROM tasks WHERE tenant_id = ? ORDER BY updated_at DESC, id",
+      )
+      .all(tenantId)
+      .map((row) => this.mapTask(row));
   }
 
   getTask(id: string): Task | undefined {
@@ -321,7 +328,9 @@ export class AppDatabase {
       VALUES (?, ?, ?, ?, ?, ?, 'todo', 1, ?, ?)`,
       )
       .run(id, user.tenantId, user.id, user.id, title, description, now, now);
-    return this.getTask(id)!;
+    const task = this.getTask(id);
+    if (!task) throw new Error("Created task could not be loaded");
+    return task;
   }
 
   editTask(
@@ -355,12 +364,18 @@ export class AppDatabase {
     return result.changes === 0 ? "conflict" : this.getTask(id);
   }
 
-  completeTask(id: string, version: number): Task | "conflict" | undefined {
-    if (!this.getTask(id)) return undefined;
+  completeTask(
+    id: string,
+    version: number,
+  ): Task | "conflict" | "invalid-transition" | undefined {
+    const current = this.getTask(id);
+    if (!current) return undefined;
+    if (current.version !== version) return "conflict";
+    if (current.status === "completed") return "invalid-transition";
     const result = this.raw
       .prepare(
         `UPDATE tasks SET status = 'completed', version = version + 1, updated_at = ?
-      WHERE id = ? AND version = ?`,
+      WHERE id = ? AND version = ? AND status != 'completed'`,
       )
       .run(new Date().toISOString(), id, version);
     return result.changes === 0 ? "conflict" : this.getTask(id);
@@ -376,11 +391,13 @@ export class AppDatabase {
 
   private mapTask(value: unknown): Task {
     const row = value as Record<string, unknown>;
+    if (row.assignee_id !== null && typeof row.assignee_id !== "string")
+      throw new Error("Stored task has an invalid assignee");
     return {
       id: String(row.id),
       tenantId: String(row.tenant_id),
       ownerId: String(row.owner_id),
-      assigneeId: row.assignee_id ? String(row.assignee_id) : null,
+      assigneeId: row.assignee_id,
       title: String(row.title),
       description: String(row.description),
       status: String(row.status) as Task["status"],

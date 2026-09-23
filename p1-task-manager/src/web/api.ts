@@ -81,5 +81,5 @@ export const api = {
       csrf,
     ),
   logout: (csrf: string) =>
-    request<void>("/auth/logout", { method: "POST" }, csrf),
+    request<undefined>("/auth/logout", { method: "POST" }, csrf),
 };

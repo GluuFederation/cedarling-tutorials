@@ -10,7 +10,7 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.server.json",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "dev": "vite build && tsx watch src/server/main.ts",
+    "dev": "vite build && node scripts/dev.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",

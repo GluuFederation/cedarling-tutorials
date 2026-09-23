@@ -5,16 +5,10 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
-    ignores: [
-      "dist/",
-      "coverage/",
-      "eslint.config.js",
-      "vite.config.ts",
-      "scripts/",
-    ],
+    ignores: ["dist/", "coverage/", "eslint.config.js", "vite.config.ts"],
   },
   {
-    files: ["src/server/**/*.ts", "test/**/*.ts", "test/**/*.tsx"],
+    files: ["src/server/**/*.ts"],
     languageOptions: {
       parserOptions: {
         project: "./tsconfig.lint.json",
@@ -22,9 +16,6 @@ export default tseslint.config(
       },
     },
     rules: {
-      "@typescript-eslint/no-unsafe-member-access": "off",
-      "@typescript-eslint/no-unnecessary-type-assertion": "off",
-      "@typescript-eslint/no-confusing-void-expression": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },
@@ -41,17 +32,38 @@ export default tseslint.config(
     },
   },
   {
+    files: ["test/**/*.ts", "test/**/*.tsx"],
+    languageOptions: {
+      parserOptions: {
+        project: "./tsconfig.lint.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
-      "@typescript-eslint/no-deprecated": "off",
-      "@typescript-eslint/no-base-to-string": "off",
       "@typescript-eslint/no-confusing-void-expression": "off",
-      "@typescript-eslint/no-invalid-void-type": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/require-await": "off",
-      "@typescript-eslint/return-await": "off",
       "@typescript-eslint/no-unsafe-call": "off",
       "@typescript-eslint/no-unsafe-assignment": "off",
-      "@typescript-eslint/no-unnecessary-type-parameters": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_" },
+      ],
+    },
+  },
+  {
+    files: ["scripts/**/*.mjs"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+        URL: "readonly",
+      },
     },
   },
 );

@@ -11,7 +11,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
+  type SyntheticEvent,
 } from "react";
 import cedarlingMark from "./assets/cedarling-mark.png";
 import cedarlingWordmark from "./assets/cedarling-wordmark-dark.webp";
@@ -323,7 +323,9 @@ function Workspace({
     }
   }
 
-  async function createTask(event: FormEvent<HTMLFormElement>) {
+  async function createTask(
+    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) {
     event.preventDefault();
     setBusy(true);
     setCreateError("");
@@ -389,7 +391,9 @@ function Workspace({
   const activeTrigger =
     overlay === "create" ? createTriggerRef : deleteTriggerRef;
 
-  const closeOverlay = useCallback(() => setOverlay(null), []);
+  const closeOverlay = useCallback(() => {
+    setOverlay(null);
+  }, []);
 
   return (
     <div className="app-shell">
@@ -479,7 +483,9 @@ function Workspace({
                 <p>{detailError}</p>
                 <button
                   className="secondary"
-                  onClick={() => setDetailAttempt((current) => current + 1)}
+                  onClick={() => {
+                    setDetailAttempt((current) => current + 1);
+                  }}
                   type="button"
                 >
                   Retry
@@ -490,7 +496,9 @@ function Workspace({
                 <div className="task-titlebar">
                   <button
                     className="back-button"
-                    onClick={() => setSelectedId(undefined)}
+                    onClick={() => {
+                      setSelectedId(undefined);
+                    }}
                     type="button"
                   >
                     <ArrowLeft aria-hidden="true" size={18} />
@@ -545,12 +553,12 @@ function Workspace({
                         value={editForm.title}
                         maxLength={120}
                         required
-                        onChange={(event) =>
+                        onChange={(event) => {
                           setEditForm({
                             ...editForm,
                             title: event.target.value,
-                          })
-                        }
+                          });
+                        }}
                         disabled={busy}
                       />
                     </label>
@@ -560,12 +568,12 @@ function Workspace({
                         value={editForm.description}
                         maxLength={2000}
                         rows={4}
-                        onChange={(event) =>
+                        onChange={(event) => {
                           setEditForm({
                             ...editForm,
                             description: event.target.value,
-                          })
-                        }
+                          });
+                        }}
                         disabled={busy}
                       />
                     </label>
@@ -630,9 +638,9 @@ function Workspace({
                 role={notice.kind === "error" ? "alert" : "status"}
               >
                 {notice.kind === "success" ? (
-                  <CheckCircle aria-hidden="true" size={20} weight="fill" />
+                  <CheckCircle aria-hidden="true" size={20} />
                 ) : (
-                  <WarningCircle aria-hidden="true" size={20} weight="fill" />
+                  <WarningCircle aria-hidden="true" size={20} />
                 )}
                 {notice.text}
               </p>
@@ -667,12 +675,12 @@ function Workspace({
                     value={createForm.title}
                     maxLength={120}
                     required
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setCreateForm({
                         ...createForm,
                         title: event.target.value,
-                      })
-                    }
+                      });
+                    }}
                     disabled={busy}
                   />
                 </label>
@@ -682,12 +690,12 @@ function Workspace({
                     value={createForm.description}
                     maxLength={2000}
                     rows={5}
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setCreateForm({
                         ...createForm,
                         description: event.target.value,
-                      })
-                    }
+                      });
+                    }}
                     disabled={busy}
                   />
                 </label>
@@ -811,9 +819,9 @@ export default function App() {
   return sessionState.kind === "authenticated" ? (
     <Workspace
       session={sessionState.session}
-      onSessionExpired={() =>
-        setSessionState({ kind: "unauthenticated", expired: true })
-      }
+      onSessionExpired={() => {
+        setSessionState({ kind: "unauthenticated", expired: true });
+      }}
     />
   ) : (
     <Login expired={sessionState.expired} />

@@ -123,7 +123,13 @@ export async function createOidcRuntime(
     config.clientId,
     config.clientSecret,
     undefined,
-    localHttp ? { execute: [oidc.allowInsecureRequests] } : undefined,
+    localHttp
+      ? {
+          // Local tutorial issuers deliberately use loopback HTTP.
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          execute: [oidc.allowInsecureRequests],
+        }
+      : undefined,
   );
   const redirectUri = `${config.baseUrl}/auth/callback`;
 
