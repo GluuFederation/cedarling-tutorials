@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://cedarling.dev">Cedarling.dev</a> ·
-  <a href="https://cedarling.dev/how-to">Tutorials</a> ·
+  <a href="https://cedarling.dev/learn">Tutorials</a> ·
   <a href="https://cedarling.dev/playground">Playground</a> ·
   <a href="https://docs.jans.io/stable/cedarling/">Documentation</a> ·
   <a href="https://github.com/JanssenProject/jans/tree/main/jans-cedarling">Source</a>

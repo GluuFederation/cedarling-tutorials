@@ -1,8 +1,10 @@
+// Selects the tutorial projects that CI must verify for the current change.
+
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-export const projects = [
+export const tutorialProjects = [
   "p1-task-manager",
   "p2-tenantrag",
   "p3-mcp-capability-governance",
@@ -18,25 +20,15 @@ export const projects = [
   "p13-student-records",
   "p14-ai-scheduling-assistant",
   "p15-marketplace",
-  "shared/identity-provider",
 ];
 
-export const composeProjects = new Set([
-  "p1-task-manager",
-  "p2-tenantrag",
-  "p4-editorial-publishing",
-  "p5-dataguard",
-  "p6-field-inspection",
-  "p7-collaborative-docs",
-  "p8-cedarfile",
-  "p9-cedarrealtime",
-  "p10-warehouse-workloads",
-  "p11-saas-workspace",
-  "p12-hr-access-governance",
-  "p13-student-records",
-  "p14-ai-scheduling-assistant",
-  "p15-marketplace",
-]);
+
+export const projects = [...tutorialProjects, "shared/identity-provider"];
+export const composeProjects = new Set(
+  tutorialProjects.filter(
+    (project) => project !== "p3-mcp-capability-governance",
+  ),
+);
 
 function changedFiles(environment = process.env) {
   const event = environment.EVENT_NAME;
@@ -71,9 +63,7 @@ export function selectProjects(files) {
   const selected = affectsAll
     ? projects
     : projects.filter((project) =>
-        files.some(
-          (file) => file === project || file.startsWith(`${project}/`),
-        ),
+        files.some((file) => file.startsWith(`${project}/`)),
       );
   return {
     projects: selected,
@@ -81,11 +71,14 @@ export function selectProjects(files) {
   };
 }
 
-export function main(environment = process.env) {
+function main(environment = process.env) {
   let files;
   try {
     files = changedFiles(environment);
   } catch {
+    process.stderr.write(
+      "Changed-project detection failed; selecting the full project matrix.\n",
+    );
     files = null;
   }
   const selected = selectProjects(files);

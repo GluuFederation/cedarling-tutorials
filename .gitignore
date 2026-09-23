@@ -12,6 +12,7 @@
 !**/.env.example
 **/.data/
 **/.local/
+.release/
 **/*.tsbuildinfo
 *.log
 .DS_Store

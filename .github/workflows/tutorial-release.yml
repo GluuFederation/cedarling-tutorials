@@ -1,0 +1,93 @@
+name: Tutorial release
+
+on:
+  push:
+    tags:
+      - "p*-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tutorial-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish tutorial source bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 10.17.1
+          run_install: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+          cache-dependency-path: shared/tools/repository-automation/pnpm-lock.yaml
+      - name: Install release tooling
+        working-directory: shared/tools/repository-automation
+        run: pnpm install --frozen-lockfile
+      - name: Test release tooling
+        working-directory: shared/tools/repository-automation
+        run: node --test tutorial-release.test.mjs
+      - id: source
+        name: Verify release source
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git rev-parse --verify "$TAG^{tag}" >/dev/null
+          source_commit=$(git rev-parse "$TAG^{commit}")
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "$source_commit" origin/main
+          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
+      - name: Validate and stage tutorial
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.source_commit }}
+          TAG: ${{ github.ref_name }}
+        run: >-
+          node shared/tools/repository-automation/tutorial-release.mjs prepare
+          --tag "$TAG"
+          --source-commit "$SOURCE_COMMIT"
+      - name: Build deterministic archive
+        shell: bash
+        env:
+          TZ: UTC
+        run: |
+          source .release/release.env
+          find .release/stage -type f -exec chmod 0644 {} +
+          find .release/stage -type f -exec touch -t 198001010000 {} +
+          cd .release/stage
+          find . -type f -printf '%P\n' | LC_ALL=C sort | zip -X -q "../$ARCHIVE" -@
+      - name: Finalize release metadata
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.source_commit }}
+          TAG: ${{ github.ref_name }}
+        run: >-
+          node shared/tools/repository-automation/tutorial-release.mjs finalize
+          --tag "$TAG"
+          --source-commit "$SOURCE_COMMIT"
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          source .release/release.env
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists and will not be replaced." >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            ".release/$ARCHIVE" \
+            ".release/$ARCHIVE.sha256" \
+            --verify-tag \
+            --title "$TAG" \
+            --notes-file .release/release-notes.md
+      - name: Show Cedarling.dev registry entry
+        run: cat .release/registry-entry.json

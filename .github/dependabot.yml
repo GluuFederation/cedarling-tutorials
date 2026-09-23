@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: npm
     directories:
+      - /shared/tools/repository-automation
       - /p1-task-manager
       - /p2-tenantrag
       - /p3-mcp-capability-governance
