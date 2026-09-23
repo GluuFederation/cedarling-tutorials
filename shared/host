@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// Manages Windows loopback hostnames used by the tutorial applications.
+
 import { lookup } from "node:dns/promises";
 import {
   constants,
@@ -36,8 +38,6 @@ function markerRange(sourceLines) {
   if (
     starts.length !== 1 ||
     ends.length !== 1 ||
-    starts[0] === undefined ||
-    ends[0] === undefined ||
     starts[0] >= ends[0]
   ) {
     throw new Error("The cedarling-tutorials hosts block is incomplete");
@@ -55,7 +55,7 @@ function assertNoConflicts(sourceLines, ignoredRange) {
     ) {
       continue;
     }
-    const fields = line.split("#", 1)[0]?.trim().split(/\s+/u) ?? [];
+    const fields = line.split("#", 1)[0].trim().split(/\s+/u);
     const address = fields.shift();
     const conflicting = fields.find((host) => expected.has(host.toLowerCase()));
     if (conflicting && address !== loopback) {
@@ -137,7 +137,7 @@ export async function checkWindowsHosts(lookupHost = lookup) {
 
 function assertRegularFile(target) {
   const status = lstatSync(target);
-  if (!status.isFile() || status.isSymbolicLink()) {
+  if (!status.isFile()) {
     throw new Error(`${target} must be a regular file`);
   }
 }

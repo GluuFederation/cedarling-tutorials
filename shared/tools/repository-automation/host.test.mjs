@@ -1,3 +1,5 @@
+// Verifies the cross-platform tutorial hostname management helper.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -7,7 +9,7 @@ import {
   run,
   tutorialHosts,
   windowsHostsPath,
-} from "../../shared/host";
+} from "../../host";
 
 test("defines the identity provider and all project hostnames", () => {
   assert.deepEqual(tutorialHosts, [

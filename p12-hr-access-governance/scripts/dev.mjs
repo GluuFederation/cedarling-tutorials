@@ -32,7 +32,7 @@ try {
       {
         name: "P12 web build",
         command: pnpm,
-        args: ["run", "build:web"],
+        args: ["exec", "vite", "build"],
         cwd: root,
       },
     ],

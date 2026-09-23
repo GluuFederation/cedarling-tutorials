@@ -1,4 +1,4 @@
-FROM node:24.14.0-bookworm AS build
+FROM node:24.21.0-bookworm AS build
 WORKDIR /app
 RUN corepack enable
 COPY p7-collaborative-docs/package.json p7-collaborative-docs/pnpm-lock.yaml ./
@@ -6,7 +6,7 @@ RUN pnpm install --frozen-lockfile
 COPY p7-collaborative-docs/ ./
 RUN pnpm build && pnpm prune --prod
 
-FROM node:24.14.0-bookworm-slim AS runtime
+FROM node:24.21.0-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/package.json ./

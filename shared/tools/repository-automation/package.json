@@ -1,0 +1,22 @@
+{
+  "name": "@cedarling-tutorials/repository-automation",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=24.21.0 <25",
+    "pnpm": ">=10.17.1 <11"
+  },
+  "scripts": {
+    "check": "node --test changed-projects.test.mjs host.test.mjs tutorial-release.test.mjs && node tutorial-release.mjs validate-all --repository ../../.."
+  },
+  "devDependencies": {
+    "dompurify": "3.4.13",
+    "jsdom": "27.4.0",
+    "mdast-util-from-markdown": "2.0.3",
+    "sharp": "0.35.4",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  }
+}

@@ -1,4 +1,4 @@
-FROM node:24-bookworm AS build
+FROM node:24.21.0-bookworm AS build
 RUN corepack enable
 WORKDIR /workspace/p1-task-manager
 COPY p1-task-manager/package.json p1-task-manager/pnpm-lock.yaml ./
@@ -6,7 +6,7 @@ RUN pnpm install --frozen-lockfile
 COPY p1-task-manager/ ./
 RUN pnpm build
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24.21.0-bookworm-slim AS runtime
 ENV NODE_ENV=production P1_PROJECT_ROOT=/app
 RUN corepack enable
 WORKDIR /app

@@ -1,10 +1,18 @@
+// Verifies CI project selection for project, shared, and repository changes.
+
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   composeProjects,
   projects,
   selectProjects,
 } from "./changed-projects.mjs";
+
+const selectorScript = fileURLToPath(
+  new URL("./changed-projects.mjs", import.meta.url),
+);
 
 test("selects only the changed project", () => {
   assert.deepEqual(selectProjects(["p7-collaborative-docs/src/server/app.ts"]), {
@@ -42,4 +50,26 @@ test("does not run project jobs for root documentation alone", () => {
     projects: [],
     compose: [],
   });
+});
+
+test("reports when project detection falls back to the full matrix", () => {
+  const environment = {
+    ...process.env,
+    EVENT_NAME: "pull_request",
+    BASE_SHA: "missing-base",
+    HEAD_SHA: "missing-head",
+  };
+  delete environment.GITHUB_OUTPUT;
+
+  const result = spawnSync(process.execPath, [selectorScript], {
+    encoding: "utf8",
+    env: environment,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    /Changed-project detection failed; selecting the full project matrix/,
+  );
+  assert.ok(result.stdout.includes(`projects=${JSON.stringify(projects)}`));
 });

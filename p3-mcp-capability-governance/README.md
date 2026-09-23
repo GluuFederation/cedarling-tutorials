@@ -25,7 +25,7 @@ Dana / Amir / Eve ── Device Flow ──→ Tutorial IdP
 
 ## Prerequisites
 
-- Node.js 24 and pnpm 10 on Ubuntu, macOS, or Windows.
+- Node.js 24.21 or newer within 24.x and pnpm 10 on Ubuntu, macOS, or Windows.
 - A running shared tutorial identity provider.
 - An OpenRouter API key for interactive model-driven chat.
 - On Windows, run `node ../shared/host check`; if it fails, run

@@ -25,7 +25,7 @@ Ada / Leo / Mallory ── Device Flow ──→ Tutorial IdP
 
 ## Prerequisites
 
-- Docker Desktop or Docker Engine with Compose, or Node.js 24 and pnpm 10.
+- Docker Desktop or Docker Engine with Compose, or Node.js 24.21 or newer within 24.x and pnpm 10.
 - Voyage AI and OpenRouter API keys.
 - The shared tutorial identity provider when running natively.
 - On Windows, run `node ../shared/host check`; if it fails, run
