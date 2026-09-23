@@ -29,6 +29,8 @@ services:
     networks:
       tutorial:
         aliases: [idp.localhost]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     healthcheck:
       test:
         [
@@ -55,6 +57,10 @@ services:
     networks:
       tutorial:
         aliases: [p1.localhost]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     volumes:
       - app-config:/run/config:ro
       - p1-data:/app/.data
