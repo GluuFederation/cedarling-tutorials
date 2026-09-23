@@ -1,4 +1,4 @@
-FROM node:24.14.0-bookworm AS build
+FROM node:24.21.0-bookworm AS build
 WORKDIR /app
 RUN corepack enable
 COPY p14-ai-scheduling-assistant/package.json p14-ai-scheduling-assistant/pnpm-lock.yaml ./
@@ -6,7 +6,7 @@ RUN pnpm install --frozen-lockfile
 COPY p14-ai-scheduling-assistant/ ./
 RUN pnpm build && pnpm prune --prod
 
-FROM node:24.14.0-bookworm-slim AS runtime
+FROM node:24.21.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/package.json ./package.json

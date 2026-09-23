@@ -32,7 +32,7 @@ Elena / Malik / Rowan ── sign in ──→ Tutorial IdP
 ## Prerequisites
 
 - Docker Desktop or Docker Engine with Compose, or
-- Node.js 24, pnpm 10, and a running shared tutorial identity provider.
+- Node.js 24.21 or newer within 24.x, pnpm 10, and a running shared tutorial identity provider.
 - On Windows, run `node ../shared/host check`; if it fails, run
   `node ../shared/host install` from an elevated terminal.
 

@@ -74,7 +74,7 @@ Every project README uses the same learner-oriented structure:
 ## Run a project
 
 Common prerequisites are Git plus either Docker Desktop or Docker Engine with
-Compose. Native development uses Node.js 24 and pnpm 10. Project-specific
+Compose. Native development uses Node.js 24.21 or newer within 24.x and pnpm 10. Project-specific
 services and provider credentials are listed in each project README.
 
 ### Windows tutorial hostnames

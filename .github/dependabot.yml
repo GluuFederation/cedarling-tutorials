@@ -37,6 +37,10 @@ updates:
         applies-to: security-updates
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "@types/node"
+        versions:
+          - ">=25"
 
   - package-ecosystem: github-actions
     directory: /
