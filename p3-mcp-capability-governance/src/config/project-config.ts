@@ -1,5 +1,3 @@
-import { resolve } from "node:path";
-
 export const MCP_PROTOCOL_VERSION = "2026-07-28" as const;
 
 export type P3Config = Readonly<{
@@ -8,12 +6,9 @@ export type P3Config = Readonly<{
   issuer: string;
   clientId: string;
   mcpResource: string;
-  accPath: string;
-  bindingPath: string;
   openRouterApiKey?: string;
   openRouterModel: "openrouter/free";
   providerTimeoutMs: number;
-  driftMode: boolean;
 }>;
 
 function isLoopbackHostname(hostname: string): boolean {
@@ -52,11 +47,7 @@ function integer(
   return parsed;
 }
 
-export function loadConfig(
-  env: NodeJS.ProcessEnv = process.env,
-  currentDirectory = process.cwd(),
-): P3Config {
-  const projectRoot = resolve(currentDirectory);
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): P3Config {
   return {
     host: env.P3_HOST?.trim() || "127.0.0.1",
     port: integer(env.P3_PORT, 3003, "P3_PORT", 1, 65_535),
@@ -66,8 +57,6 @@ export function loadConfig(
       env.P3_MCP_RESOURCE ?? "http://p3.localhost:3003/mcp",
       "P3_MCP_RESOURCE",
     ),
-    accPath: resolve(projectRoot, "ACC.yaml"),
-    bindingPath: resolve(projectRoot, "mcp-binding.json"),
     ...(env.P3_OPENROUTER_API_KEY?.trim()
       ? { openRouterApiKey: env.P3_OPENROUTER_API_KEY.trim() }
       : {}),
@@ -79,6 +68,5 @@ export function loadConfig(
       1_000,
       60_000,
     ),
-    driftMode: env.P3_DRIFT_MODE === "true",
   };
 }

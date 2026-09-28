@@ -11,7 +11,6 @@ import {
   type OAuthMetadata,
 } from "@modelcontextprotocol/server";
 import type { NextFunction, Request, Response } from "express";
-import type { GovernanceCatalog } from "./catalog/types.js";
 import type { P3Config } from "./config/project-config.js";
 import { IncidentRepository } from "./incidents/repository.js";
 import { createIncidentMcpServer } from "./mcp/server.js";
@@ -20,7 +19,6 @@ import { createPermissiveSeam } from "./mcp/trace.js";
 
 type AppDependencies = Readonly<{
   config: P3Config;
-  catalog: GovernanceCatalog;
   tokenVerifier: OAuthTokenVerifier;
   incidents?: IncidentRepository;
   traceSink?: (trace: FakeTrace) => void;
@@ -50,7 +48,7 @@ export function createApp(dependencies: AppDependencies) {
       oauthMetadata,
       resourceServerUrl: resourceUrl,
       scopesSupported: ["mcp.access"],
-      resourceName: "P3 GovOps Incident Assistant",
+      resourceName: "P3 Incident Assistant",
       dangerouslyAllowInsecureIssuerUrl:
         new URL(config.issuer).protocol === "http:",
     }),
@@ -67,9 +65,7 @@ export function createApp(dependencies: AppDependencies) {
   const handler = createMcpHandler(
     ({ authInfo }) =>
       createIncidentMcpServer(authInfo, {
-        catalog: dependencies.catalog,
         incidents,
-        driftMode: config.driftMode,
         seam,
       }),
     { legacy: "reject" },

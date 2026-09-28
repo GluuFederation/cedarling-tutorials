@@ -1,6 +1,4 @@
-import type { CallToolResult } from "@modelcontextprotocol/client";
 import { randomUUID } from "node:crypto";
-import type { RuntimeDescriptor } from "../catalog/types.js";
 import type { McpClientSession } from "../mcp/client.js";
 import type { ChatMessage, ChatModel, ModelTool } from "./model.js";
 
@@ -43,46 +41,20 @@ function resultText(result: unknown): string {
   return "Capability completed.";
 }
 
-function reconciliationActivity(result: CallToolResult): string {
-  const structured = result.structuredContent as
-    Record<string, unknown> | undefined;
-  if (structured?.status === "aligned") return "MCP catalog aligned.";
-  if (structured?.status !== "drift") return "MCP catalog unavailable.";
-  const details = [
-    structured.runtimeOnly,
-    structured.catalogOnly,
-    structured.schemaMismatch,
-    structured.unboundCatalogCapabilities,
-  ]
-    .filter(Array.isArray)
-    .flatMap((entries) =>
-      entries.filter((entry): entry is string => typeof entry === "string"),
-    )
-    .sort();
-  return `MCP catalog drift: ${details.join(", ") || "review required"}.`;
-}
-
 export class IncidentChatHost {
   readonly #dependencies: HostDependencies;
   #messages: ChatMessage[] = [];
   #tools: readonly ModelTool[] = [];
-  #observed: readonly RuntimeDescriptor[] = [];
 
   constructor(dependencies: HostDependencies) {
     this.#dependencies = dependencies;
   }
 
-  async connect(): Promise<CallToolResult> {
-    const discovery = await this.#dependencies.mcp.discover();
-    this.#tools = discovery.tools;
-    this.#observed = discovery.observed;
+  async connect(): Promise<void> {
+    this.#tools = await this.#dependencies.mcp.discover();
     this.#dependencies.activity?.(
-      `MCP discovered ${this.#tools.length} reviewed capabilities.`,
+      `MCP discovered ${this.#tools.length} capabilities.`,
     );
-    this.#dependencies.activity?.(
-      reconciliationActivity(discovery.reconciliation),
-    );
-    return discovery.reconciliation;
   }
 
   async send(text: string): Promise<string> {
@@ -99,10 +71,6 @@ export class IncidentChatHost {
     const tool = this.#tools.find(({ name }) => name === response.name);
     if (!tool) throw new Error("Model selected an unavailable capability");
     const arguments_: Record<string, unknown> = { ...response.arguments };
-    if (response.name === "reconcile_capability_catalog") {
-      // Reconciliation always uses the host's real MCP list observations.
-      arguments_.observed = this.#observed;
-    }
     if (response.name === "update_incident_status") {
       const incidentId =
         typeof arguments_.incidentId === "string"

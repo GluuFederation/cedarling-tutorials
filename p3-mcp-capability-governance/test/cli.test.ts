@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { authorizePersona } from "../src/auth/cli.js";
 import { loadConfig } from "../src/config/project-config.js";
 
-const config = loadConfig({}, process.cwd());
+const config = loadConfig({});
 
 describe("P3 CLI identity", () => {
   it("returns the token only when its verified subject matches the requested persona", async () => {

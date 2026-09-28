@@ -5,32 +5,13 @@ import {
   type GetPromptResult,
   type ReadResourceResult,
 } from "@modelcontextprotocol/client";
-import { z } from "zod";
-import type { RuntimeDescriptor } from "../catalog/types.js";
 import type { ModelTool } from "../chat/model.js";
 import { MCP_PROTOCOL_VERSION } from "../config/project-config.js";
-import { resourceRequestSchema } from "./schemas.js";
-
-const capabilityListSchema = z.object({
-  capabilities: z.array(
-    z.object({
-      capabilityId: z.string(),
-      kind: z.enum(["tool", "resource", "prompt"]),
-      name: z.string(),
-    }),
-  ),
-});
 
 type ClientSessionOptions = Readonly<{
   endpoint: string;
   accessToken: string;
   fetch?: typeof fetch;
-}>;
-
-type Discovery = Readonly<{
-  observed: readonly RuntimeDescriptor[];
-  tools: readonly ModelTool[];
-  reconciliation: CallToolResult;
 }>;
 
 function promptSchema(
@@ -47,27 +28,14 @@ function promptSchema(
     additionalProperties: false,
   };
 }
-function boundedSchema(
-  schema: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, unknown>> {
-  // The SDK adds this serialization marker; governance binds the structure.
-  return Object.fromEntries(
-    Object.entries(schema).filter(([name]) => name !== "$schema"),
-  );
-}
-
-const hostManagedArguments = new Map<string, ReadonlySet<string>>([
-  ["reconcile_capability_catalog", new Set(["observed"])],
-  ["update_incident_status", new Set(["confirmed", "idempotencyKey"])],
-]);
+const hostManagedArguments = new Set(["confirmed", "idempotencyKey"]);
 
 /** Removes transport and safety values that the trusted host supplies itself. */
 function modelInputSchema(
   name: string,
   schema: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
-  const omitted = hostManagedArguments.get(name);
-  if (!omitted) return schema;
+  if (name !== "update_incident_status") return schema;
   const properties =
     typeof schema.properties === "object" && schema.properties !== null
       ? (schema.properties as Readonly<Record<string, unknown>>)
@@ -75,13 +43,15 @@ function modelInputSchema(
   const required = Array.isArray(schema.required)
     ? schema.required.filter(
         (property): property is string =>
-          typeof property === "string" && !omitted.has(property),
+          typeof property === "string" && !hostManagedArguments.has(property),
       )
     : [];
   return {
     ...schema,
     properties: Object.fromEntries(
-      Object.entries(properties).filter(([property]) => !omitted.has(property)),
+      Object.entries(properties).filter(
+        ([property]) => !hostManagedArguments.has(property),
+      ),
     ),
     required,
   };
@@ -124,35 +94,29 @@ export class McpClientSession {
     return new McpClientSession(client);
   }
 
-  async discover(): Promise<Discovery> {
-    const [listedTools, listedResources, listedPrompts, capabilityResult] =
-      await Promise.all([
-        this.#client.listTools(),
-        this.#client.listResources(),
-        this.#client.listPrompts(),
-        this.#client.callTool({ name: "list_capabilities", arguments: {} }),
-      ]);
-    const capabilityList = capabilityListSchema.parse(
-      capabilityResult.structuredContent,
-    );
-    const reviewed = new Set(
-      capabilityList.capabilities.map(({ kind, name }) => `${kind}:${name}`),
-    );
-
-    // These observations come from actual MCP list responses. They are
-    // reconciliation input, never authority to register a capability.
+  async discover(): Promise<readonly ModelTool[]> {
+    const [listedTools, listedResources, listedPrompts] = await Promise.all([
+      this.#client.listTools(),
+      this.#client.listResources(),
+      this.#client.listPrompts(),
+    ]);
+    // Discovery supplies model descriptors; execution stays on the MCP server.
     const discoveredSurface = [
       ...listedTools.tools.map((tool) => ({
         kind: "tool" as const,
         name: tool.name,
         description: tool.description ?? tool.title ?? tool.name,
-        inputSchema: boundedSchema(tool.inputSchema),
+        inputSchema: tool.inputSchema,
       })),
       ...listedResources.resources.map((resource) => ({
         kind: "resource" as const,
         name: resource.name,
         description: resource.description ?? resource.title ?? resource.name,
-        inputSchema: resourceRequestSchema(resource.uri),
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
         uri: resource.uri,
       })),
       ...listedPrompts.prompts.map((prompt) => ({
@@ -162,17 +126,7 @@ export class McpClientSession {
         inputSchema: promptSchema(prompt.arguments),
       })),
     ];
-    const observed: RuntimeDescriptor[] = discoveredSurface.map(
-      ({ kind, name, inputSchema }) => ({
-        kind,
-        name,
-        schema: inputSchema,
-      }),
-    );
-    const surface = discoveredSurface.filter(({ kind, name }) =>
-      reviewed.has(`${kind}:${name}`),
-    );
-    const modelSurface = surface.map((descriptor) => ({
+    const modelSurface = discoveredSurface.map((descriptor) => ({
       ...descriptor,
       inputSchema: modelInputSchema(descriptor.name, descriptor.inputSchema),
     }));
@@ -180,16 +134,7 @@ export class McpClientSession {
       modelSurface.map((descriptor) => [descriptor.name, descriptor]),
     );
 
-    const reconciliation = await this.reconcile(observed);
-    return { tools: modelSurface, reconciliation, observed };
-  }
-
-  /** Submits bounded discovery observations to the authoritative server check. */
-  reconcile(observed: readonly RuntimeDescriptor[]): Promise<CallToolResult> {
-    return this.#client.callTool({
-      name: "reconcile_capability_catalog",
-      arguments: { observed },
-    });
+    return modelSurface;
   }
 
   async invoke(
@@ -220,7 +165,7 @@ export class McpClientSession {
     });
   }
 
-  /** Used by the deterministic drift proof; it does not bypass MCP. */
+  /** Calls a tool without chat-host mediation, through the same MCP endpoint. */
   callToolDirect(
     name: string,
     arguments_: Readonly<Record<string, unknown>>,

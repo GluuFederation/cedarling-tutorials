@@ -1,9 +1,8 @@
-# P3 - Cataloging and Authorizing MCP Capabilities with Cedarling
+# P3 - Authorizing MCP Incident Operations with Cedarling
 
-P3 is a terminal incident-operations assistant with an authenticated MCP client,
-a reviewed capability catalog, and bounded synthetic tools. It shows how
-Cedarling centralizes the decision about who may use each discovered capability
-on a particular resource.
+P3 is a terminal assistant for searching incidents, reading a runbook, preparing
+triage, and updating incident status through MCP. It shows how Cedarling
+centralizes authorization for tools, resources, and prompts at the MCP server.
 
 The protected MCP capabilities currently use a fake permissive decision; the
 Cedarling tutorial replaces that seam with policy-backed decisions.
@@ -14,20 +13,18 @@ Cedarling tutorial replaces that seam with policy-backed decisions.
 Dana / Amir / Eve ── Device Flow ──→ Tutorial IdP
         │
         └── terminal chat → OpenRouter → MCP client → MCP server (PEP)
-                                                     │ principal + capability + resource
+                                                     │ caller + action + resource
                                                      ▼
                                                 Cedarling PDP
                                                  │        │
-                                               DENY     ALLOW → GovOps tools and resources
-                                                                  ↑
-                                                         ACC capability catalog
+                                               DENY     ALLOW → incidents / runbook / triage
 ```
 
 ## Prerequisites
 
 - Node.js 24.21 or newer within 24.x and pnpm 10 on Ubuntu, macOS, or Windows.
 - A running shared tutorial identity provider.
-- An OpenRouter API key for interactive model-driven chat.
+- An OpenRouter API key in `P3_OPENROUTER_API_KEY` for interactive chat.
 - On Windows, run `node ../shared/host check`; if it fails, run
   `node ../shared/host install` from an elevated terminal.
 
@@ -53,7 +50,8 @@ pnpm run setup
 pnpm dev
 ```
 
-Keep the service terminal open. In another terminal, run:
+Set `P3_OPENROUTER_API_KEY` in P3's generated `.env`. Keep the service terminal
+open and, in another terminal, run:
 
 ```bash
 pnpm chat dana
@@ -61,15 +59,28 @@ pnpm chat dana
 
 ## Exercise
 
-The business workflow is an incident-operations assistant:
+The intended responsibilities are:
 
-- **Dana (`dana`)** — Capability-catalog maintainer who reconciles discovery.
-- **Amir (`amir`)** — Incident analyst assigned approved operational work.
-- **Eve (`eve`)** — Authenticated caller without approved incident authority.
+- **Dana (`dana`)** — Incident supervisor responsible for all incidents.
+- **Amir (`amir`)** — Analyst responsible for assigned incidents.
+- **Eve (`eve`)** — Authenticated caller without incident authority.
 
-Run `pnpm chat <persona>`, discover the catalog, read the runbook, inspect an
-incident, and try a mutation. The current seam accepts every mapped persona;
-Cedarling will authorize each MCP capability against its principal and resource.
+Run `pnpm chat <persona>` and send one request at a time:
+
+1. As Amir, ask to find the payment incident (`INC-1001`), read the runbook,
+   and obtain its triage guidance.
+2. Ask to advance `INC-1001` from `open` to `investigating`. Confirm the
+   change when prompted; declining leaves it unchanged.
+3. As Dana, find the unassigned audit incident (`INC-2001`).
+4. As Eve or Amir, find that same incident and request a valid next status.
+   Both callers currently succeed despite lacking the intended authority.
+
+Cedarling will restrict discovery and enforce authorization again before each
+server operation. Host confirmation protects against accidental changes; it
+does not replace server authorization. Statuses advance through `open` →
+`investigating` → `mitigated` → `resolved`. Restart P3 to restore the fixtures.
+
+`pnpm test:e2e` runs these paths with a scripted model, without an OpenRouter key.
 
 ## Commands
 

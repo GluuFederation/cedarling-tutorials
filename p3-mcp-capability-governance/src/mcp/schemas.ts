@@ -1,17 +1,5 @@
 import { z } from "zod";
 
-const runtimeDescriptor = z
-  .object({
-    kind: z.enum(["tool", "resource", "prompt"]),
-    name: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/),
-    schema: z.record(z.string().max(100), z.unknown()),
-  })
-  .strict();
-
-export const reconcileInput = z
-  .object({ observed: z.array(runtimeDescriptor).min(1).max(12) })
-  .strict();
-export const listCapabilitiesInput = z.object({}).strict();
 export const searchIncidentsInput = z
   .object({
     query: z.string().trim().min(1).max(120),
@@ -30,17 +18,3 @@ export const updateIncidentInput = z
 export const triagePromptArguments = z
   .object({ incidentId: z.string().regex(/^INC-[0-9]{4}$/) })
   .strict();
-
-/** Stable request shape used to bind one discovered static resource URI. */
-export function resourceRequestSchema(
-  uri: string,
-): Readonly<Record<string, unknown>> {
-  return {
-    type: "object",
-    properties: {
-      uri: { const: uri, type: "string" },
-    },
-    required: ["uri"],
-    additionalProperties: false,
-  };
-}
