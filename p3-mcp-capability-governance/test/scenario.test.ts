@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { IncidentChatHost } from "../src/chat/host.js";
-import { ScriptedChatModel } from "../src/chat/model.js";
+import { ScriptedChatModel, type ModelTool } from "../src/chat/model.js";
 import { McpClientSession } from "../src/mcp/client.js";
 import { startTestApplication, type TestApplication } from "./helpers.js";
 
 const applications: TestApplication[] = [];
+const sessions: McpClientSession[] = [];
 afterEach(async () => {
+  await Promise.all(sessions.splice(0).map((client) => client.close()));
   await Promise.all(
     applications.splice(0).map((application) => application.close()),
   );
@@ -15,40 +17,20 @@ async function session(
   application: TestApplication,
   persona: "dana" | "amir" | "eve",
 ) {
-  const token = await application.token(persona);
-  return McpClientSession.connect({
+  const client = await McpClientSession.connect({
     endpoint: application.endpoint,
-    accessToken: token,
+    accessToken: await application.token(persona),
   });
+  sessions.push(client);
+  return client;
 }
 
-describe("deterministic P3 permissive", () => {
-  it("runs Dana, Amir, and Eve through the same host, MCP, and domain path", async () => {
+describe("P3 incident workflows", () => {
+  it("runs all four operations through the chat host and MCP", async () => {
     const application = await startTestApplication();
     applications.push(application);
-
-    const danaMcp = await session(application, "dana");
-    const dana = new IncidentChatHost({
-      mcp: danaMcp,
-      model: new ScriptedChatModel([
-        {
-          kind: "capability_call",
-          name: "reconcile_capability_catalog",
-          arguments: {},
-        },
-      ]),
-      confirm: async () => true,
-    });
-    const danaReconciliation = await dana.connect();
-    expect(danaReconciliation.isError).not.toBe(true);
-    expect(await dana.send("Reconcile the capability catalog.")).toContain(
-      '"status":"aligned"',
-    );
-    await danaMcp.close();
-
-    const amirMcp = await session(application, "amir");
-    const amir = new IncidentChatHost({
-      mcp: amirMcp,
+    const host = new IncidentChatHost({
+      mcp: await session(application, "amir"),
       model: new ScriptedChatModel([
         {
           kind: "capability_call",
@@ -77,60 +59,75 @@ describe("deterministic P3 permissive", () => {
       ]),
       confirm: async () => true,
     });
-    await amir.connect();
-    expect(await amir.send("Find the payment incident.")).toContain("INC-1001");
-    expect(await amir.send("Read the runbook.")).toContain("Incident response");
-    expect(await amir.send("Build a triage prompt.")).toContain(
+    await host.connect();
+    expect(await host.send("Find the payment incident.")).toContain("INC-1001");
+    expect(await host.send("Read the runbook.")).toContain("Incident response");
+    expect(await host.send("Build a triage prompt.")).toContain(
       "Triage INC-1001",
     );
-    expect(await amir.send("Advance the incident.")).toContain(
+    expect(await host.send("Advance the incident.")).toContain(
       '"status":"investigating"',
     );
-    await amirMcp.close();
+    expect(application.incidents.get("INC-1001").version).toBe(2);
+    expect(application.traces.map((trace) => trace.capabilityId)).toEqual([
+      "incident.search",
+      "runbook.read",
+      "incident.triage",
+      "incident.update",
+    ]);
+  });
 
-    const eveMcp = await session(application, "eve");
-    const eve = new IncidentChatHost({
-      mcp: eveMcp,
-      model: new ScriptedChatModel([
-        {
-          kind: "capability_call",
-          name: "search_incidents",
-          arguments: { query: "notification", limit: 5 },
-        },
-        {
-          kind: "capability_call",
-          name: "update_incident_status",
-          arguments: {
-            incidentId: "INC-1002",
-            expectedStatus: "investigating",
-            nextStatus: "mitigated",
+  it.each(["dana", "amir", "eve"] as const)(
+    "allows %s to find and update an unassigned incident",
+    async (persona) => {
+      const application = await startTestApplication();
+      applications.push(application);
+      const host = new IncidentChatHost({
+        mcp: await session(application, persona),
+        model: new ScriptedChatModel([
+          {
+            kind: "capability_call",
+            name: "search_incidents",
+            arguments: { query: "audit" },
           },
-        },
-      ]),
-      confirm: async () => true,
-    });
-    await eve.connect();
-    expect(await eve.send("Search incidents.")).toContain("INC-1002");
-    expect(await eve.send("Advance INC-1002.")).toContain(
-      '"status":"mitigated"',
-    );
-    await eveMcp.close();
+          {
+            kind: "capability_call",
+            name: "update_incident_status",
+            arguments: {
+              incidentId: "INC-2001",
+              expectedStatus: "mitigated",
+              nextStatus: "resolved",
+            },
+          },
+        ]),
+        confirm: async () => true,
+      });
+      await host.connect();
+      expect(await host.send("Find the audit incident.")).toContain("INC-2001");
+      expect(await host.send("Resolve it.")).toContain('"status":"resolved"');
+      expect(application.incidents.get("INC-2001")).toMatchObject({
+        assignedTo: null,
+        status: "resolved",
+        version: 2,
+      });
+      expect(application.traces).toEqual([
+        expect.objectContaining({
+          principal: persona,
+          capabilityId: "incident.search",
+        }),
+        expect.objectContaining({
+          principal: persona,
+          capabilityId: "incident.update",
+        }),
+      ]);
+    },
+  );
 
-    expect(
-      application.traces.some(
-        (trace) =>
-          trace.principal === "eve" && trace.capabilityId === "incident.update",
-      ),
-    ).toBe(true);
-    expect(JSON.stringify(application.traces)).not.toContain("access-secret");
-  }, 15_000);
-
-  it("requires learner confirmation before a status-changing call", async () => {
+  it("cancels without an MCP effect even when the model claims confirmation", async () => {
     const application = await startTestApplication();
     applications.push(application);
-    const mcp = await session(application, "amir");
     const host = new IncidentChatHost({
-      mcp,
+      mcp: await session(application, "amir"),
       model: new ScriptedChatModel([
         {
           kind: "capability_call",
@@ -139,90 +136,119 @@ describe("deterministic P3 permissive", () => {
             incidentId: "INC-1001",
             expectedStatus: "open",
             nextStatus: "investigating",
+            confirmed: true,
           },
         },
       ]),
       confirm: async () => false,
     });
     await host.connect();
-    const before = application.traces.length;
     expect(await host.send("Advance INC-1001.")).toBe(
       "Status change cancelled.",
     );
-    expect(application.traces).toHaveLength(before);
-    await mcp.close();
+    expect(application.traces).toHaveLength(0);
+    expect(application.incidents.get("INC-1001")).toMatchObject({
+      status: "open",
+      version: 1,
+    });
   });
 
-  it("reports schema drift observed through actual MCP discovery", async () => {
+  it("supplies discovered descriptors and owns update safety arguments", async () => {
     const application = await startTestApplication();
     applications.push(application);
-    const mcp = await session(application, "dana");
-    const discovery = await mcp.discover();
-    expect(discovery.reconciliation.structuredContent).toMatchObject({
-      status: "aligned",
-    });
-
-    const changedObservation = discovery.observed.map((descriptor) =>
-      descriptor.name === "search_incidents"
-        ? { ...descriptor, schema: { type: "string" } }
-        : descriptor,
-    );
-    const reconciliation = await mcp.reconcile(changedObservation);
-    expect(reconciliation.structuredContent).toMatchObject({
-      status: "drift",
-      schemaMismatch: ["tool:search_incidents"],
-    });
-    await mcp.close();
-  });
-
-  it("reports drift, hides it from the model, and rejects direct execution", async () => {
-    const application = await startTestApplication(true);
-    applications.push(application);
-    const mcp = await session(application, "dana");
-    let observedTools:
-      | Parameters<
-          ConstructorParameters<typeof IncidentChatHost>[0]["model"]["next"]
-        >[1]
-      | undefined;
-    const activity: string[] = [];
+    let tools: readonly ModelTool[] = [];
     const host = new IncidentChatHost({
-      mcp,
+      mcp: await session(application, "dana"),
       model: {
-        async next(_messages, tools) {
-          observedTools = tools;
-          return { kind: "message", text: "Observed." };
+        async next(_messages, descriptors) {
+          tools = descriptors;
+          const status = application.incidents.get("INC-1001").status;
+          return {
+            kind: "capability_call",
+            name: "update_incident_status",
+            arguments: {
+              incidentId: "INC-1001",
+              expectedStatus: status,
+              nextStatus: status === "open" ? "investigating" : "mitigated",
+              confirmed: false,
+              idempotencyKey: "model-reused-key",
+            },
+          };
         },
       },
       confirm: async () => true,
-      activity: (message) => activity.push(message),
     });
-    const reconciliation = await host.connect();
-    expect(JSON.stringify(reconciliation.structuredContent)).toContain(
-      "tool:export_incident_bundle",
-    );
-    expect(activity).toContain(
-      "MCP catalog drift: tool:export_incident_bundle.",
-    );
-    await host.send("What is available?");
-    const tools = observedTools ?? [];
-    expect(tools.map(({ name }) => name)).not.toContain(
-      "export_incident_bundle",
-    );
-    expect(
-      tools.find(({ name }) => name === "update_incident_status")?.inputSchema,
-    ).not.toMatchObject({
-      required: expect.arrayContaining(["confirmed", "idempotencyKey"]),
+    await host.connect();
+    await host.send("Investigate the incident.");
+    await host.send("Mitigate the incident.");
+    expect(application.incidents.get("INC-1001")).toMatchObject({
+      status: "mitigated",
+      version: 3,
     });
-    expect(
-      tools.find(({ name }) => name === "reconcile_capability_catalog")
-        ?.inputSchema,
-    ).not.toMatchObject({ required: expect.arrayContaining(["observed"]) });
+    expect(tools.map(({ kind, name }) => ({ kind, name }))).toEqual([
+      { kind: "tool", name: "search_incidents" },
+      { kind: "tool", name: "update_incident_status" },
+      { kind: "resource", name: "incident_response_runbook" },
+      { kind: "prompt", name: "triage_incident" },
+    ]);
+    const schema = tools.find(
+      ({ name }) => name === "update_incident_status",
+    )!.inputSchema;
+    expect(Object.keys(schema.properties as object)).toEqual([
+      "incidentId",
+      "expectedStatus",
+      "nextStatus",
+    ]);
+    expect(schema.required).toEqual([
+      "incidentId",
+      "expectedStatus",
+      "nextStatus",
+    ]);
+    expect(tools.find(({ kind }) => kind === "resource")!.inputSchema).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+  });
 
-    const direct = await mcp.callToolDirect("export_incident_bundle", {
-      incidentId: "INC-1001",
+  it("validates direct tool calls while leaving authorization permissive", async () => {
+    const application = await startTestApplication();
+    applications.push(application);
+    const token = await application.token("eve");
+    const mcp = await McpClientSession.connect({
+      endpoint: application.endpoint,
+      accessToken: token,
     });
-    expect(direct.isError).toBe(true);
-    expect(JSON.stringify(direct.content)).toContain("unreviewed_capability");
-    await mcp.close();
+    sessions.push(mcp);
+    const input = {
+      incidentId: "INC-1001",
+      expectedStatus: "open",
+      nextStatus: "investigating",
+      idempotencyKey: "direct-update",
+    };
+    const invalid = await mcp.callToolDirect("update_incident_status", input);
+    expect(invalid.isError).toBe(true);
+    expect(application.traces).toHaveLength(0);
+    expect(application.incidents.get("INC-1001").version).toBe(1);
+
+    const valid = { ...input, confirmed: true };
+    const result = await mcp.callToolDirect("update_incident_status", valid);
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      incident: { id: "INC-1001", status: "investigating", version: 2 },
+    });
+    await mcp.callToolDirect("update_incident_status", valid);
+    expect(application.incidents.get("INC-1001").version).toBe(2);
+    const stale = await mcp.callToolDirect("update_incident_status", {
+      ...valid,
+      idempotencyKey: "another-update",
+    });
+    expect(stale.isError).toBe(true);
+    expect(stale.content).toContainEqual({
+      type: "text",
+      text: "stale_incident_state",
+    });
+    expect(application.incidents.get("INC-1001").version).toBe(2);
+    expect(JSON.stringify(application.traces)).not.toContain(token);
   });
 });

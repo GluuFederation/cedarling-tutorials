@@ -257,7 +257,7 @@ export function loadConfig(
     [
       "p3-mcp-capability-governance",
       {
-        name: "P3 MCP Capability Governance",
+        name: "P3 Incident Assistant",
         clientId:
           env.P3_CLIENT_ID?.trim() || "p3-mcp-capability-governance-cli",
         clientType: "public",

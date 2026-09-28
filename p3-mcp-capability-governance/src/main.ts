@@ -6,7 +6,7 @@ loadProjectEnvironment();
 console.info("P3 authorization: FAKE ALLOW; Cedarling is not called.");
 
 const config = loadConfig();
-const runtime = await createRuntime(config);
+const runtime = createRuntime(config);
 const listener = runtime.app.listen(config.port, config.host, () => {
   console.log(`P3 MCP server listening at ${config.mcpResource}`);
 });

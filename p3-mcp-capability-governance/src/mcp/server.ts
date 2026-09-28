@@ -1,24 +1,18 @@
 import { McpServer, type AuthInfo } from "@modelcontextprotocol/server";
-import type { GovernanceCatalog, SurfaceKind } from "../catalog/types.js";
-import { bindingFor, reconcileCatalog } from "../catalog/catalog.js";
 import { runbookText, runbookUri, triagePrompt } from "../incidents/content.js";
 import { DomainError } from "../incidents/errors.js";
 import { IncidentRepository } from "../incidents/repository.js";
 import type { PersonaId } from "../incidents/types.js";
 import { MCP_PROTOCOL_VERSION } from "../config/project-config.js";
 import {
-  listCapabilitiesInput,
-  reconcileInput,
   searchIncidentsInput,
   triagePromptArguments,
   updateIncidentInput,
 } from "./schemas.js";
-import { createPermissiveSeam, type FakeTrace } from "./trace.js";
+import { createPermissiveSeam } from "./trace.js";
 
 type McpServices = Readonly<{
-  catalog: GovernanceCatalog;
   incidents: IncidentRepository;
-  driftMode: boolean;
   seam?: ReturnType<typeof createPermissiveSeam>;
 }>;
 
@@ -57,61 +51,8 @@ export function createIncidentMcpServer(
   const principal = principalFrom(authInfo);
   const seam = services.seam ?? createPermissiveSeam();
   const server = new McpServer(
-    { name: "govops-incident-assistant", version: "0.0.1" },
+    { name: "p3-incident-assistant", version: "0.0.1" },
     { supportedProtocolVersions: [MCP_PROTOCOL_VERSION] },
-  );
-
-  function review(
-    kind: SurfaceKind,
-    name: string,
-    resource: string,
-  ): FakeTrace {
-    const binding = bindingFor(services.catalog, kind, name);
-    if (!binding) throw new Error("unreviewed_capability");
-    const capability = services.catalog.capabilities.get(binding.capabilityId);
-    if (!capability) throw new Error("invalid_capability_binding");
-    return seam(principal, binding.capabilityId, binding.cedarAction, resource);
-  }
-
-  server.registerTool(
-    "reconcile_capability_catalog",
-    {
-      title: "Reconcile capability catalog",
-      description:
-        "Compare bounded MCP discovery with the reviewed ACC binding.",
-      inputSchema: reconcileInput,
-    },
-    async ({ observed }) => {
-      const trace = review(
-        "tool",
-        "reconcile_capability_catalog",
-        "catalog:p3",
-      );
-      return json({
-        requestId: trace.requestId,
-        ...reconcileCatalog(services.catalog, observed),
-      });
-    },
-  );
-
-  server.registerTool(
-    "list_capabilities",
-    {
-      title: "List reviewed capabilities",
-      description: "List reviewed capability IDs and MCP surface identities.",
-      inputSchema: listCapabilitiesInput,
-    },
-    async () => {
-      const trace = review("tool", "list_capabilities", "catalog:p3");
-      return json({
-        requestId: trace.requestId,
-        capabilities: services.catalog.bindings.map((binding) => ({
-          capabilityId: binding.capabilityId,
-          kind: binding.kind,
-          name: binding.name,
-        })),
-      });
-    },
   );
 
   server.registerTool(
@@ -122,7 +63,12 @@ export function createIncidentMcpServer(
       inputSchema: searchIncidentsInput,
     },
     async ({ query, limit }) => {
-      const trace = review("tool", "search_incidents", "incident:collection");
+      const trace = seam(
+        principal,
+        "incident.search",
+        "Incident::Search",
+        "incident:collection",
+      );
       return json({
         requestId: trace.requestId,
         incidents: services.incidents
@@ -150,9 +96,10 @@ export function createIncidentMcpServer(
       try {
         // Reload current state before the future authorization seam.
         services.incidents.get(incidentId);
-        const trace = review(
-          "tool",
-          "update_incident_status",
+        const trace = seam(
+          principal,
+          "incident.update",
+          "Incident::UpdateStatus",
           `incident:${incidentId}`,
         );
         const incident = services.incidents.updateStatus({
@@ -184,9 +131,10 @@ export function createIncidentMcpServer(
       mimeType: "text/plain",
     },
     async (uri) => {
-      const trace = review(
-        "resource",
-        "incident_response_runbook",
+      const trace = seam(
+        principal,
+        "runbook.read",
+        "Runbook::Read",
         "runbook:core",
       );
       return {
@@ -210,9 +158,10 @@ export function createIncidentMcpServer(
     },
     async ({ incidentId }) => {
       const incident = services.incidents.get(incidentId);
-      const trace = review(
-        "prompt",
-        "triage_incident",
+      const trace = seam(
+        principal,
+        "incident.triage",
+        "Incident::Triage",
         `incident:${incidentId}`,
       );
       return {
@@ -227,21 +176,5 @@ export function createIncidentMcpServer(
     },
   );
 
-  if (services.driftMode) {
-    server.registerTool(
-      "export_incident_bundle",
-      {
-        title: "Export incident bundle",
-        description: "Controlled unreviewed drift fixture.",
-        inputSchema: {
-          incidentId: updateIncidentInput.shape.incidentId,
-        },
-      },
-      async () => ({
-        isError: true,
-        content: [{ type: "text" as const, text: "unreviewed_capability" }],
-      }),
-    );
-  }
   return server;
 }

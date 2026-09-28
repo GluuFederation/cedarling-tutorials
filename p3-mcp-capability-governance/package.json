@@ -28,7 +28,6 @@
     "@modelcontextprotocol/server": "2.0.0",
     "express": "5.2.1",
     "jose": "6.2.10",
-    "yaml": "2.8.3",
     "zod": "4.6.5"
   },
   "devDependencies": {

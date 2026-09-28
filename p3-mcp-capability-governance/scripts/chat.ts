@@ -42,7 +42,7 @@ async function main() {
   try {
     await host.connect();
     console.log(
-      "GovOps Incident Assistant. Enter one request at a time; type /quit to exit.",
+      "P3 Incident Assistant. Enter one request at a time; type /quit to exit.",
     );
     while (true) {
       const message = (await prompt.question("You > ")).trim();

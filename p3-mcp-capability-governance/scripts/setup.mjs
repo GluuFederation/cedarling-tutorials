@@ -34,7 +34,6 @@ const merged = mergeProjectEnvironment(current.text, {
     P3_HOST: "127.0.0.1",
     P3_PORT: "3003",
     P3_PROVIDER_TIMEOUT_MS: "15000",
-    P3_DRIFT_MODE: "false",
   },
 });
 writePrivateEnvironment(target, merged.text);

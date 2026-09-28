@@ -59,8 +59,6 @@ export class IncidentRepository {
   }
 
   search(query: string, limit: number): Incident[] {
-    // A retried effect must repeat the original mutation exactly; the key
-    // cannot be reused to apply different incident input.
     const normalized = query.toLowerCase();
     return [...this.#incidents.values()]
       .filter((incident) =>
@@ -81,6 +79,7 @@ export class IncidentRepository {
     };
     const prior = this.#effects.get(input.idempotencyKey);
     if (prior) {
+      // A retry must repeat the original mutation, not reuse its key for new input.
       if (JSON.stringify(prior.mutation) !== JSON.stringify(mutation)) {
         throw new DomainError("idempotency_conflict");
       }

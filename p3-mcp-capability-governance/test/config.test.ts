@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   loadConfig,
@@ -6,21 +5,15 @@ import {
 } from "../src/config/project-config.js";
 
 describe("P3 configuration", () => {
-  it("uses the locked protocol and project-local governance files", () => {
-    const root = resolve("fixture-root");
-    const config = loadConfig(
-      {
-        P3_PROJECT_ROOT: "/tmp/ignored",
-        P3_DRIFT_MODE: "true",
-      },
-      root,
-    );
+  it("uses the locked protocol and local service defaults", () => {
+    const config = loadConfig({});
 
     expect(MCP_PROTOCOL_VERSION).toBe("2026-07-28");
-    expect(config.accPath).toBe(resolve(root, "ACC.yaml"));
-    expect(config.bindingPath).toBe(resolve(root, "mcp-binding.json"));
+    expect(config.host).toBe("127.0.0.1");
+    expect(config.port).toBe(3003);
+    expect(config.issuer).toBe("http://idp.localhost:4000");
+    expect(config.mcpResource).toBe("http://p3.localhost:3003/mcp");
     expect(config.openRouterApiKey).toBeUndefined();
-    expect(config.driftMode).toBe(true);
   });
 
   it("rejects invalid ports and resource URI fragments", () => {

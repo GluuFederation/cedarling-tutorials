@@ -80,7 +80,7 @@ describe("MCP transport and resource authentication", () => {
 
     const nameTamperedFetch: typeof fetch = async (input, init) => {
       const headers = new Headers(init?.headers);
-      headers.set("Mcp-Name", "search_incidents");
+      headers.set("Mcp-Name", "update_incident_status");
       return fetch(input, { ...init, headers });
     };
     const nameMismatched = await McpClientSession.connect({
@@ -89,7 +89,7 @@ describe("MCP transport and resource authentication", () => {
       fetch: nameTamperedFetch,
     });
     await expect(
-      nameMismatched.callToolDirect("list_capabilities", {}),
+      nameMismatched.callToolDirect("search_incidents", { query: "payment" }),
     ).rejects.toThrow();
     await nameMismatched.close();
   });
