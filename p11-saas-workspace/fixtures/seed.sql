@@ -3,10 +3,10 @@ TRUNCATE idempotency_records, application_sessions, oidc_transactions,
   projects, active_selections, memberships, organizations, principals CASCADE;
 
 INSERT INTO principals (id, issuer, subject, name) VALUES
-  ('user-maya', 'http://idp.localhost:4000', 'maya', 'Maya'),
-  ('user-noah', 'http://idp.localhost:4000', 'noah', 'Noah'),
-  ('user-lena', 'http://idp.localhost:4000', 'lena', 'Lena'),
-  ('user-imani', 'http://idp.localhost:4000', 'imani', 'Imani');
+  ('user-maya', 'http://localhost:18011', 'maya', 'Maya'),
+  ('user-noah', 'http://localhost:18011', 'noah', 'Noah'),
+  ('user-lena', 'http://localhost:18011', 'lena', 'Lena'),
+  ('user-imani', 'http://localhost:18011', 'imani', 'Imani');
 
 INSERT INTO organizations (id, name) VALUES
   ('aster', 'Tenant A · Aster'),

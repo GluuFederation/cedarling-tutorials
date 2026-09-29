@@ -1,32 +1,21 @@
-import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseEnv } from "node:util";
 import {
   mergeProjectEnvironment,
   readProjectEnvironment,
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { loadConfig, prepareDataDirectory } from "../src/server/config.ts";
 import { AppDatabase } from "../src/server/database.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const identityRoot = resolve(root, "../shared/identity-provider");
 const target = resolve(root, ".env");
-const identityTarget = resolve(identityRoot, ".env");
-execFileSync(process.execPath, [resolve(identityRoot, "scripts/setup.mjs")], {
-  cwd: identityRoot,
-  stdio: "inherit",
-});
-if (!existsSync(identityTarget))
-  throw new Error("Identity setup did not create .env");
-const identity = parseEnv(readFileSync(identityTarget, "utf8"));
+const identity = ensureProjectIdentity("P4", resolve(root, ".local/idp/.env"));
 
 function required(name: string): string {
   const value = identity[name]?.trim();
-  if (!value)
-    throw new Error(`${name} is missing from shared/identity-provider/.env`);
+  if (!value) throw new Error(`${name} is missing from .local/idp/.env`);
   return value;
 }
 const url = (name: string): string => required(name).replace(/\/$/u, "");
@@ -47,7 +36,7 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P4_HOST: "127.0.0.1",
-    P4_PORT: "3004",
+    P4_PORT: "17004",
     P4_DATA_DIR: ".local/p4-data",
     P4_SESSION_SECRET: randomBytes(32).toString("base64url"),
   },

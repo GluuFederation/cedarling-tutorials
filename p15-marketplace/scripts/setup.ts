@@ -1,27 +1,20 @@
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseEnv } from "node:util";
 import {
   mergeProjectEnvironment,
   readProjectEnvironment,
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { loadConfig } from "../src/server/config.ts";
 import { prepareData } from "../src/server/prepare-data.ts";
 
 export function setup() {
   const target = resolve(".env");
-  const identityTarget = resolve("../shared/identity-provider/.env");
-  if (!existsSync(identityTarget))
-    throw new Error(
-      "Run pnpm --dir ../shared/identity-provider run setup before P15 setup",
-    );
-  const identity = parseEnv(readFileSync(identityTarget, "utf8"));
+  const identity = ensureProjectIdentity("P15");
   function required(name: string): string {
     const value = identity[name]?.trim();
-    if (!value)
-      throw new Error(`${name} is missing from shared/identity-provider/.env`);
+    if (!value) throw new Error(`${name} is missing from .local/idp/.env`);
     return value;
   }
   const url = (name: string): string => required(name).replace(/\/$/u, "");
@@ -42,7 +35,7 @@ export function setup() {
     },
     defaults: {
       P15_HOST: "127.0.0.1",
-      P15_PORT: "3015",
+      P15_PORT: "17015",
       P15_DATA_DIR: ".local/p15-data",
     },
   });

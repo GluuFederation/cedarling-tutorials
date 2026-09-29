@@ -16,7 +16,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test:e2e": "vitest run test/scenario.test.ts --reporter=verbose",
-    "setup": "node ../shared/host check && node scripts/setup.mjs",
+    "setup": "node scripts/setup.mjs",
     "start": "node dist/src/main.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"

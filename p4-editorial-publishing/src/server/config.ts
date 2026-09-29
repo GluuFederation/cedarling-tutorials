@@ -4,12 +4,12 @@ import { z } from "zod";
 
 const schema = z.object({
   P4_HOST: z.string().trim().min(1).default("127.0.0.1"),
-  P4_PORT: z.coerce.number().int().min(1).max(65_535).default(3004),
-  P4_BASE_URL: z.url().default("http://p4.localhost:3004"),
-  P4_ISSUER: z.url().default("http://idp.localhost:4000"),
+  P4_PORT: z.coerce.number().int().min(1).max(65_535).default(17004),
+  P4_BASE_URL: z.url().default("http://localhost:17004"),
+  P4_ISSUER: z.url().default("http://localhost:18004"),
   P4_CLIENT_ID: z.string().trim().min(1).default("p4-editorial-publishing"),
   P4_CLIENT_SECRET: z.string().min(32),
-  P4_API_RESOURCE: z.url().default("http://p4.localhost:3004/api"),
+  P4_API_RESOURCE: z.url().default("http://localhost:17004/api"),
   P4_SESSION_SECRET: z.string().min(32),
   P4_DATA_DIR: z.string().trim().min(1).default(".local/p4-data"),
 });

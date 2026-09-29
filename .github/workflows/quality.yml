@@ -74,20 +74,14 @@ jobs:
           node-version: 24.21.0
           cache: pnpm
           cache-dependency-path: ${{ matrix.project }}/pnpm-lock.yaml
-      - name: Configure Windows tutorial hostnames
-        if: runner.os == 'Windows'
-        run: |
-          node shared/host install
-          node shared/host check
       - name: Install
         working-directory: ${{ matrix.project }}
         run: pnpm install --frozen-lockfile
       - name: Prepare shared identity provider
-        if: matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p12-hr-access-governance' || matrix.project == 'p13-student-records' || matrix.project == 'p14-ai-scheduling-assistant' || matrix.project == 'p15-marketplace'
+        if: matrix.project != 'shared/identity-provider'
         working-directory: shared/identity-provider
         run: |
           pnpm install --frozen-lockfile
-          pnpm run setup
           pnpm build
       - name: Install browser and Linux dependencies
         if: (matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os == 'Linux'
@@ -109,17 +103,69 @@ jobs:
         run: pnpm audit --audit-level low
 
   compose-config:
-    name: Compose config (${{ matrix.project }})
+    name: Compose startup (${{ matrix.project }})
     needs: changes
     if: needs.changes.outputs.compose != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         project: ${{ fromJSON(needs.changes.outputs.compose) }}
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.21.0
       - name: Validate Compose
         working-directory: ${{ matrix.project }}
         run: docker compose config --quiet
+      - name: Build stack
+        working-directory: ${{ matrix.project }}
+        run: docker compose build
+      - name: Start stack
+        if: matrix.project != 'p2-tenantrag'
+        working-directory: ${{ matrix.project }}
+        run: docker compose up -d --wait --wait-timeout 120
+      - name: Start P2 identity provider
+        if: matrix.project == 'p2-tenantrag'
+        working-directory: ${{ matrix.project }}
+        run: docker compose up -d --wait --wait-timeout 120 identity-provider
+      - name: Verify localhost endpoints
+        run: node shared/tools/repository-automation/smoke-localhost.mjs ${{ matrix.project }}
+      - name: Stack diagnostics
+        if: failure()
+        working-directory: ${{ matrix.project }}
+        run: docker compose logs --no-color --tail=80
+      - name: Stop stack
+        if: always()
+        working-directory: ${{ matrix.project }}
+        run: docker compose down --volumes
+
+  compose-concurrency:
+    name: Concurrent project stacks
+    needs: changes
+    if: needs.changes.outputs.compose != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.21.0
+      - name: Start independent stacks
+        run: |
+          docker compose -f p1-task-manager/compose.yaml up --build -d --wait --wait-timeout 120
+          docker compose -f p4-editorial-publishing/compose.yaml up --build -d --wait --wait-timeout 120
+          docker compose -f p10-warehouse-workloads/compose.yaml up --build -d --wait --wait-timeout 120
+      - name: Verify simultaneous operation
+        run: |
+          node shared/tools/repository-automation/smoke-localhost.mjs p1-task-manager p4-editorial-publishing p10-warehouse-workloads
+          docker compose -f p4-editorial-publishing/compose.yaml down --volumes
+          node shared/tools/repository-automation/smoke-localhost.mjs p1-task-manager p10-warehouse-workloads
+      - name: Stop owned stacks
+        if: always()
+        run: |
+          docker compose -f p1-task-manager/compose.yaml down --volumes
+          docker compose -f p4-editorial-publishing/compose.yaml down --volumes
+          docker compose -f p10-warehouse-workloads/compose.yaml down --volumes

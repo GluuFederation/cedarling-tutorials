@@ -27,7 +27,7 @@ async function fixture() {
     database: opened.database,
     oidc: {
       async authorizationUrl() {
-        return new URL("http://idp.localhost:4000/auth");
+        return new URL("http://localhost:18014/auth");
       },
       async exchange() {
         return {
@@ -82,7 +82,7 @@ describe("HTTP boundary", () => {
       url: "/api/assistant/proposals",
       headers: {
         cookie,
-        origin: "http://p14.localhost:3014",
+        origin: "http://localhost:17014",
         "x-csrf-token": csrf,
       },
       payload: { requestId: "list-meetings" },

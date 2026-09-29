@@ -29,7 +29,7 @@ export type TestApplication = Readonly<{
 
 export async function startTestApplication(): Promise<TestApplication> {
   const config = loadConfig({
-    P3_MCP_RESOURCE: "http://p3.localhost:3003/mcp",
+    P3_MCP_RESOURCE: "http://localhost:17003/mcp",
   });
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const traces: FakeTrace[] = [];

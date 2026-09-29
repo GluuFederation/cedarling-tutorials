@@ -16,7 +16,7 @@ async function signIn(
   await page.getByRole("textbox", { name: "and password" }).fill("tutorial");
   await page.getByRole("button", { name: "Sign-in" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/p5\.localhost:3005\//u);
+  await expect(page).toHaveURL(/localhost:17005\//u);
   await expect(
     page.getByRole("heading", { name: "Query plan", exact: true }),
   ).toBeVisible();

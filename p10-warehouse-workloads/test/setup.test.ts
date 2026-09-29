@@ -22,7 +22,7 @@ it("synchronizes four workload registrations while preserving local settings", (
   const root = mkdtempSync(resolve(tmpdir(), "p10-setup-"));
   roots.push(root);
   const project = resolve(root, "p10-warehouse-workloads");
-  const identity = resolve(root, "shared/identity-provider");
+  const identity = resolve(project, ".local/idp");
   mkdirSync(project, { recursive: true });
   mkdirSync(identity, { recursive: true });
   const prefixes = [
@@ -34,8 +34,8 @@ it("synchronizes four workload registrations while preserving local settings", (
   writeFileSync(
     resolve(identity, ".env"),
     [
-      "IDP_ISSUER=http://idp.localhost:4000",
-      "P10_API_RESOURCE=http://p10.localhost:3010/api",
+      "IDP_ISSUER=http://localhost:18010",
+      "P10_API_RESOURCE=http://localhost:17010/api",
       ...prefixes.flatMap((prefix, index) => [
         `${prefix}_CLIENT_ID=${prefix.toLowerCase().replaceAll("_", "-")}`,
         `${prefix}_CLIENT_SECRET=${String(index + 1).repeat(32)}`,

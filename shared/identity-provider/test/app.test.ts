@@ -24,13 +24,13 @@ const p1Application = {
   grantTypes: ["authorization_code", "refresh_token"],
   responseTypes: ["code"],
   tokenEndpointAuthMethod: "client_secret_basic",
-  redirectUris: ["http://p1.localhost:3000/auth/callback"],
-  postLogoutRedirectUris: ["http://p1.localhost:3000"],
+  redirectUris: ["http://localhost:17001/auth/callback"],
+  postLogoutRedirectUris: ["http://localhost:17001"],
   resources: new Map([
     [
       "api",
       {
-        audience: "http://p1.localhost:3000/api",
+        audience: "http://localhost:17001/api",
         scopes: p1TaskScopes,
         accessTokenTtlSeconds: 300,
       },
@@ -39,10 +39,10 @@ const p1Application = {
 } satisfies TutorialApplicationConfig;
 
 const config: IdentityProviderConfig = {
-  profile: "default",
+  project: "P1",
   host: "127.0.0.1",
-  port: 4000,
-  issuer: "http://idp.localhost:4000",
+  port: 18001,
+  issuer: "http://localhost:18001",
   applications: new Map([["p1-task-manager", p1Application]]),
 };
 
@@ -257,13 +257,13 @@ describe("development interactions", () => {
       grantTypes: ["authorization_code", "refresh_token"],
       responseTypes: ["code"],
       tokenEndpointAuthMethod: "client_secret_basic",
-      redirectUris: ["http://p2.localhost:3000/auth/callback"],
-      postLogoutRedirectUris: ["http://p2.localhost:3000"],
+      redirectUris: ["http://localhost:17002/auth/callback"],
+      postLogoutRedirectUris: ["http://localhost:17002"],
       resources: new Map([
         [
           "api",
           {
-            audience: "http://p2.localhost:3000/api",
+            audience: "http://localhost:17002/api",
             scopes: ["message.view"],
             accessTokenTtlSeconds: 300,
           },

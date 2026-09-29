@@ -14,4 +14,4 @@ COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/dist ./dist
 RUN mkdir -p /app/.local/p10-data && chown -R node:node /app/.local
 USER node
-EXPOSE 3010 3110 3020
+EXPOSE 17010 3110 3020

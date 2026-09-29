@@ -10,7 +10,7 @@ else if (!process.env.P4_CLIENT_SECRET)
   throw new Error("P4 environment is missing; run pnpm run setup.");
 if (!existsSync(".next/BUILD_ID"))
   throw new Error("P4 production build is missing; run pnpm build.");
-const issuer = process.env.P4_ISSUER ?? "http://idp.localhost:4000";
+const issuer = process.env.P4_ISSUER ?? "http://localhost:18004";
 await checkDependencies([
   {
     kind: "http",

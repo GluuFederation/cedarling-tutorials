@@ -16,7 +16,7 @@
     "lint": "biome lint .",
     "test:e2e": "node scripts/verify-docker.ts",
     "reset": "node --env-file=.env scripts/reset.ts",
-    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "setup": "node scripts/setup.ts",
     "start": "node --env-file=.env dist/src/server/main.js",
     "test": "vitest run",
     "typecheck": "tsc -b tsconfig.json --pretty false"

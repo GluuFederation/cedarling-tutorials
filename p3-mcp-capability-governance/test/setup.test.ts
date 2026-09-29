@@ -29,14 +29,14 @@ describe("P3 setup", () => {
     const root = await mkdtemp(join(tmpdir(), "p3-setup-"));
     temporaryDirectories.push(root);
     const directory = join(root, "p3-mcp-capability-governance");
-    const identityDirectory = join(root, "shared/identity-provider");
+    const identityDirectory = join(directory, ".local/idp");
     await mkdir(directory, { recursive: true });
     await mkdir(identityDirectory, { recursive: true });
     const target = join(directory, ".env");
     const setupScript = resolve("scripts/setup.mjs");
     await writeFile(
       join(identityDirectory, ".env"),
-      "IDP_ISSUER=http://idp.localhost:4000\nP3_CLIENT_ID=p3-client\nP3_MCP_RESOURCE=http://p3.localhost:3003/mcp\n",
+      "IDP_ISSUER=http://localhost:18003\nP3_CLIENT_ID=p3-client\nP3_MCP_RESOURCE=http://localhost:17003/mcp\n",
     );
 
     await execute(process.execPath, [setupScript], { cwd: directory });

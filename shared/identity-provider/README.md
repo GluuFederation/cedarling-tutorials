@@ -1,6 +1,7 @@
 # Cedarling Tutorial Identity Provider
 
-Shared local OpenID Provider for the Cedarling tutorial projects. It uses
+Reusable local OpenID Provider source for the Cedarling tutorial projects.
+Each project runs a separate instance, selected by `IDP_PROJECT=P1` through `P15`. It uses
 `oidc-provider`, an independently configured client and resource boundary for
 each application, and the provider's default development login and consent
 pages.
@@ -17,7 +18,7 @@ The default development form requires a password but
 accepts any non-empty value.
 
 P1 requests `openid profile email offline_access` and its six task scopes for
-the exact `http://p1.localhost:3000/api` resource. The provider issues:
+the exact `http://localhost:17001/api` resource. The provider issues:
 
 | Artifact            | Format                                            | Lifetime   |
 | ------------------- | ------------------------------------------------- | ---------- |
@@ -28,64 +29,61 @@ the exact `http://p1.localhost:3000/api` resource. The provider issues:
 
 P2 uses a public Device Authorization Grant client. It requests
 `openid profile email`, `corpus.search`, and `document.retrieve` for the exact
-`http://p2.localhost:3000/api` resource. Its API access token is a thirty-minute
+`http://localhost:17002/api` resource. Its API access token is a thirty-minute
 RS256 JWT; the P2 helper keeps it transient.
 
 P3 uses a public Device Authorization Grant client. It requests `openid`,
 `profile`, `email`, and `mcp.access` for the exact
-`http://p3.localhost:3003/mcp` resource. Its access token is a thirty-minute
+`http://localhost:17003/mcp` resource. Its access token is a thirty-minute
 RS256 JWT retained by the terminal process.
 
 P4 and P5 use confidential Authorization Code clients with PKCE S256 and
 rotating refresh tokens. P4 requests its six editorial capabilities for
-`http://p4.localhost:3004/api`; P5 requests `data.access` for
-`http://p5.localhost:3005/api`. Their resource access tokens last thirty
+`http://localhost:17004/api`; P5 requests `data.access` for
+`http://localhost:17005/api`. Their resource access tokens last thirty
 minutes, while each application owns its bounded server session.
 
 P6 uses a confidential Authorization Code client with PKCE S256 and rotating
 refresh tokens for Elena, Malik, and Rowan. It requests the field-inspection
-capabilities for `http://p6.localhost:3006/api`; the application keeps tokens
+capabilities for `http://localhost:17006/api`; the application keeps tokens
 inside its Node.js BFF.
 
 P7 uses a confidential Authorization Code client with PKCE S256 for Maya,
 Noah, and Lena. It requests the six collaborative-document capabilities for
-the exact `http://p7.localhost:3007/api` resource.
+the exact `http://localhost:17007/api` resource.
 
 P8 uses a confidential Authorization Code client with PKCE S256 and rotating
 refresh tokens for Jordan, Priya, and Lee. It requests `file.access` for the
-exact `http://p8.localhost:3008/api` resource.
+exact `http://localhost:17008/api` resource.
 
 P9 uses a confidential Authorization Code client with PKCE S256 and rotating
 refresh tokens for Mei, Kwame, and Yuki. It requests `chat.access` for the
-exact `http://p9.localhost:3009/api` resource.
+exact `http://localhost:17009/api` resource.
 
 P10 registers four confidential Client Credentials workloads: transfer
 planner, North Warehouse, South Warehouse, and inventory auditor. Each has an
 independent secret and receives a five-minute JWT containing the common
-`warehouse.api` scope for the exact `http://p10.localhost:3010/api` resource.
+`warehouse.api` scope for the exact `http://localhost:17010/api` resource.
 The Warehouse API and Cedarling decide operation-specific authority.
 
 P11 uses a confidential Authorization Code client with PKCE S256 and rotating
 refresh tokens for Maya, Noah, Lena, and Imani. It requests
-`workspace.access` for the exact `http://p11.localhost:3011/api` resource.
+`workspace.access` for the exact `http://localhost:17011/api` resource.
 
 P12–P15 also use confidential Authorization Code clients with PKCE S256:
 
-| Client                        | Resource                        | Scope             |
-| ----------------------------- | ------------------------------- | ----------------- |
-| `p12-hr-access-governance`    | `http://p12.localhost:3012/api` | `hr.access`       |
-| `p13-student-records`         | `http://p13.localhost:3013/api` | `grade.access`    |
-| `p14-ai-scheduling-assistant` | `http://p14.localhost:3014/api` | `schedule.access` |
-| `p15-marketplace`             | `http://p15.localhost:3015/api` | `refund.access`   |
+| Client                        | Resource                     | Scope             |
+| ----------------------------- | ---------------------------- | ----------------- |
+| `p12-hr-access-governance`    | `http://localhost:17012/api` | `hr.access`       |
+| `p13-student-records`         | `http://localhost:17013/api` | `grade.access`    |
+| `p14-ai-scheduling-assistant` | `http://localhost:17014/api` | `schedule.access` |
+| `p15-marketplace`             | `http://localhost:17015/api` | `refund.access`   |
 
-Setup generates each client secret without replacing existing settings. A
-registration is enabled when its `Pn_CLIENT_SECRET` is supplied, so each
-independent project can configure only its own client. `Pn_CLIENT_ID`,
-`Pn_REDIRECT_URI`, `Pn_POST_LOGOUT_REDIRECT_URI`, and `Pn_API_RESOURCE` support
-isolated local scenario endpoints.
+Project setup generates only its own client registrations and secrets.
+Re-running setup preserves credentials and synchronizes the application settings.
+P2 and P3 are public clients; P10 has four independent workload credentials.
 
-The UserInfo endpoint is disabled. Signed UserInfo is deferred until a tutorial
-needs it; P1 does not manufacture a “UserInfo token.”
+The UserInfo endpoint is disabled; these projects use signed ID and access tokens.
 
 ## Tutorial boundary
 
@@ -96,18 +94,25 @@ network or use its synthetic credentials for real authentication.
 
 ## Run independently
 
-Generate missing provider-local settings and client secrets, then run:
+From the chosen project directory:
 
 ```bash
+pnpm --dir ../shared/identity-provider install --frozen-lockfile
+pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
 pnpm run setup
-pnpm dev
+node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js
 ```
 
-`pnpm run setup` appends missing settings and preserves every existing `.env`
-value. The provider loads only this package's `.env`. Each confidential
-application copies its matching client values into its own local `.env` during
-application setup. Runtime configuration remains project-local.
+The project README lists any additional setup requirements. The process reads
+the explicit environment file, not a global provider configuration. Project n
+uses localhost ports 18000 + n for its issuer and 17000 + n for its application
+(P1: `http://localhost:18001` and `http://localhost:17001`).
+Docker uses the same issuer and application URLs.
+
+IdP cookies have project-specific names. They prevent accidental session
+collisions, not hostile isolation between services on localhost. Keep the
+tutorial provider on loopback and use only synthetic credentials.
 
 ## Verify
 

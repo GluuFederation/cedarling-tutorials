@@ -24,32 +24,31 @@ Lin / Nia / Ben ── sign in ──→ Tutorial IdP
 ## Prerequisites
 
 - Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x, pnpm 10, and the shared tutorial identity provider.
-- On Windows, run `node ../shared/host check`; if it fails, run
-  `node ../shared/host install` from an elevated terminal.
+- Node.js 24.21 or newer within 24.x, pnpm 10, and the project-local tutorial identity provider.
 
 ## Run
+
+Start the application and its own IdP:
 
 ```bash
 docker compose up --build
 ```
 
-Open <http://p12.localhost:3012>. For native development, prepare and start the
-shared identity provider first:
+Open <http://localhost:17012>. The issuer is <http://localhost:18012>. Stop the stack with `Ctrl+C`, then `docker compose down`.
+
+For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider run setup
-pnpm --dir ../shared/identity-provider dev
-```
-
-Then, in another terminal, prepare and start P12:
-
-```bash
+pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
 pnpm run setup
 pnpm dev
 ```
+
+`pnpm dev` starts this project’s IdP and application together.
+
+For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
 
 ## Exercise
 
@@ -79,5 +78,4 @@ Cedarling will enforce separation, employee scope, and grant effectiveness.
 pnpm check
 pnpm test:e2e
 pnpm audit --audit-level low
-docker compose config
 ```

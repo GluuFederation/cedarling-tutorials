@@ -10,7 +10,7 @@ const secret = "isolated-provider-flow-secret-for-tests";
 
 function location(value: unknown): string {
   if (typeof value !== "string") throw new Error("Expected redirect");
-  const url = new URL(value, "http://idp.localhost:4000");
+  const url = new URL(value, "http://localhost:18001");
   return `${url.pathname}${url.search}`;
 }
 
@@ -21,6 +21,8 @@ function action(html: string): string {
 }
 
 it.each([
+  ["P1", "p1-task-manager", "alex"],
+  ["P4", "p4-editorial-publishing", "riley"],
   ["P12", "p12-hr-access-governance", "lin"],
   ["P13", "p13-student-records", "sam"],
   ["P14", "p14-ai-scheduling-assistant", "benoit"],
@@ -33,18 +35,7 @@ it.each([
   "issues a signed isolated %s grant for %s / %s",
   async (prefix, id, subject) => {
     const config = loadConfig({
-      P1_CLIENT_SECRET: secret,
-      P4_CLIENT_SECRET: secret,
-      P5_CLIENT_SECRET: secret,
-      P6_CLIENT_SECRET: secret,
-      P7_CLIENT_SECRET: secret,
-      P8_CLIENT_SECRET: secret,
-      P9_CLIENT_SECRET: secret,
-      P10_TRANSFER_PLANNER_CLIENT_SECRET: secret,
-      P10_WAREHOUSE_NORTH_CLIENT_SECRET: secret,
-      P10_WAREHOUSE_SOUTH_CLIENT_SECRET: secret,
-      P10_INVENTORY_AUDITOR_CLIENT_SECRET: secret,
-      P11_CLIENT_SECRET: secret,
+      IDP_PROJECT: prefix,
       [`${prefix}_CLIENT_SECRET`]: secret,
     });
     const client = config.applications.get(id);
@@ -69,6 +60,16 @@ it.each([
       code_challenge_method: "S256",
     });
     expect(authorization.status).toBe(303);
+    const cookies = authorization.headers["set-cookie"];
+    const interactionCookies = Array.isArray(cookies) ? cookies : [cookies];
+    expect(interactionCookies.length).toBeGreaterThan(0);
+    expect(
+      interactionCookies.every(
+        (cookie) =>
+          typeof cookie === "string" &&
+          cookie.startsWith(`${prefix.toLowerCase()}_idp_`),
+      ),
+    ).toBe(true);
     const login = await agent.get(location(authorization.headers.location));
     expect(login.status).toBe(200);
     const signedIn = await agent
@@ -128,7 +129,7 @@ it.each([
     const forbidden = await agent.get("/auth").query({
       client_id: client.clientId,
       redirect_uri: redirect,
-      resource: "http://p1.localhost:3000/api",
+      resource: "http://localhost:17002/api",
       response_type: "code",
       scope: "openid task.view",
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),

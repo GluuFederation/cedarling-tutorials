@@ -34,32 +34,35 @@ and only then attempts a versioned SQLite transaction.
 ## Prerequisites
 
 - Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x, pnpm 10, and the shared tutorial identity provider.
-- On Windows, run `node ../shared/host check`; if it fails, run
-  `node ../shared/host install` from an elevated terminal.
+- Node.js 24.21 or newer within 24.x, pnpm 10, and the project-local tutorial identity provider.
 
 The commands work from PowerShell, macOS terminals, and Ubuntu shells.
 
 ## Run
 
-Start the complete isolated stack:
+Start the application and its own IdP:
 
 ```bash
 docker compose up --build
 ```
 
-Open <http://p10.localhost:3010>.
+Open <http://localhost:17010>. The issuer is <http://localhost:18010>. Stop the stack with `Ctrl+C`, then `docker compose down`.
 
-For native development, install this project and the shared identity provider:
+For native development, run from this project directory:
 
 ```bash
-pnpm install --frozen-lockfile
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
+pnpm --dir ../shared/identity-provider build
+pnpm install --frozen-lockfile
+pnpm run setup
 pnpm dev
 ```
 
-`pnpm dev` prepares configuration, builds both applications, and supervises the
-identity provider, Warehouse API, four workload agents, and React console.
+`pnpm dev` starts this project’s IdP and application together.
+
+`pnpm build` followed by `pnpm start` runs the compiled application stack and its project IdP.
+
+Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
 
 ## Exercise
 
@@ -102,5 +105,4 @@ Install Chromium once before the complete local check:
 pnpm exec playwright install chromium
 pnpm check
 pnpm audit --audit-level low
-docker compose config
 ```

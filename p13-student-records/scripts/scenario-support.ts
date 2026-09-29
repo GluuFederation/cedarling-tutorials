@@ -27,30 +27,9 @@ export async function scenarioEnvironment() {
   while (issuerPort === appPort) issuerPort = await freePort();
   const baseUrl = `http://127.0.0.1:${appPort}`;
   const issuer = `http://127.0.0.1:${issuerPort}`;
-  const clientSecretNames = [
-    "P1_CLIENT_SECRET",
-    "P4_CLIENT_SECRET",
-    "P5_CLIENT_SECRET",
-    "P6_CLIENT_SECRET",
-    "P7_CLIENT_SECRET",
-    "P8_CLIENT_SECRET",
-    "P9_CLIENT_SECRET",
-    "P10_TRANSFER_PLANNER_CLIENT_SECRET",
-    "P10_WAREHOUSE_NORTH_CLIENT_SECRET",
-    "P10_WAREHOUSE_SOUTH_CLIENT_SECRET",
-    "P10_INVENTORY_AUDITOR_CLIENT_SECRET",
-    "P11_CLIENT_SECRET",
-    "P13_CLIENT_SECRET",
-  ] as const;
-  const secrets = Object.fromEntries(
-    clientSecretNames.map((name) => [
-      name,
-      randomBytes(32).toString("base64url"),
-    ]),
-  );
   const identity = {
-    ...secrets,
-    IDP_PROFILE: "default",
+    P13_CLIENT_SECRET: randomBytes(32).toString("base64url"),
+    IDP_PROJECT: "P13",
     IDP_HOST: "127.0.0.1",
     IDP_PORT: String(issuerPort),
     IDP_ISSUER: issuer,
@@ -62,8 +41,6 @@ export async function scenarioEnvironment() {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...identity,
-    P12_CLIENT_SECRET: undefined,
-    P14_CLIENT_SECRET: undefined,
     P13_BASE_URL: baseUrl,
     P13_ISSUER: issuer,
     P13_HOST: "127.0.0.1",

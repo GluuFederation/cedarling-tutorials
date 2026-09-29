@@ -16,5 +16,5 @@ COPY --chown=node:node --from=build /app/build ./build
 COPY --chown=node:node --from=build /app/migrations ./migrations
 COPY --chown=node:node --from=build /app/fixtures ./fixtures
 USER node
-EXPOSE 3011
+EXPOSE 17011
 CMD ["node", "server.js"]

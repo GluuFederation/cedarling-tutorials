@@ -18,7 +18,7 @@ async function signIn(
   await page.getByRole("textbox", { name: "and password" }).fill("tutorial");
   await page.getByRole("button", { name: "Sign-in" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/p4\.localhost:3004\/articles/u);
+  await expect(page).toHaveURL(/localhost:17004\/articles/u);
 }
 
 async function openArticle(page: Page, title: string): Promise<void> {
@@ -45,14 +45,14 @@ test("reproduces the three editorial authorization gaps and valid control", asyn
   try {
     const riley = await rileyContext.newPage();
     const rejectedOrigin = await riley.request.post(
-      "http://127.0.0.1:3004/articles/article-launch-brief",
+      "http://127.0.0.1:17004/articles/article-launch-brief",
     );
     expect(rejectedOrigin.status()).toBe(400);
     expect(await rejectedOrigin.json()).toEqual({
       error: "canonical_origin_required",
     });
-    await signIn(riley, "Riley", "riley", "http://127.0.0.1:3004/");
-    expect(new URL(riley.url()).hostname).toBe("p4.localhost");
+    await signIn(riley, "Riley", "riley", "http://127.0.0.1:17004/");
+    expect(new URL(riley.url()).hostname).toBe("localhost");
     await openArticle(riley, "Launch brief");
     await riley.getByRole("button", { name: "Submit for review" }).click();
     await expect(riley.getByRole("status")).toContainText("Revision submitted");

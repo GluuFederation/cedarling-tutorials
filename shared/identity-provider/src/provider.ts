@@ -127,6 +127,11 @@ export async function createProvider(
       email: ["email", "email_verified"],
     },
     cookies: {
+      names: {
+        session: `${config.project.toLowerCase()}_idp_session`,
+        interaction: `${config.project.toLowerCase()}_idp_interaction`,
+        resume: `${config.project.toLowerCase()}_idp_resume`,
+      },
       keys: [randomBytes(32).toString("base64url")],
       long: {
         httpOnly: true,

@@ -31,7 +31,7 @@ function localUrl(value: string, name: string): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const port = Number(env.P7_PORT ?? "3007");
+  const port = Number(env.P7_PORT ?? "17007");
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error("P7_PORT must be a valid TCP port");
   }
@@ -40,7 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error("P7_HOST must be a local or container bind address");
   }
   const baseUrl = localUrl(
-    env.P7_BASE_URL ?? "http://p7.localhost:3007",
+    env.P7_BASE_URL ?? "http://localhost:17007",
     "P7_BASE_URL",
   );
   if (Number(new URL(baseUrl).port || 80) !== port) {
@@ -69,7 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host,
     port,
     baseUrl,
-    issuer: localUrl(env.P7_ISSUER ?? "http://idp.localhost:4000", "P7_ISSUER"),
+    issuer: localUrl(env.P7_ISSUER ?? "http://localhost:18007", "P7_ISSUER"),
     apiResource: localUrl(
       env.P7_API_RESOURCE ?? `${baseUrl}/api`,
       "P7_API_RESOURCE",

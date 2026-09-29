@@ -15,7 +15,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "reset": "node scripts/reset.mjs",
-    "setup": "node ../shared/host check && node scripts/setup.mjs",
+    "setup": "node scripts/setup.mjs",
     "start": "node dist/server/main.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json"

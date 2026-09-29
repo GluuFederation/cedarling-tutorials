@@ -39,7 +39,7 @@ export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): AppConfig {
-  const port = Number.parseInt(env.P8_PORT ?? "3008", 10);
+  const port = Number.parseInt(env.P8_PORT ?? "17008", 10);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error("P8_PORT must be a valid TCP port");
   }
@@ -67,13 +67,13 @@ export function loadConfig(
     host: env.P8_HOST?.trim() || "127.0.0.1",
     port,
     baseUrl: httpUrl(
-      env.P8_BASE_URL ?? "http://p8.localhost:3008",
+      env.P8_BASE_URL ?? "http://localhost:17008",
       "P8_BASE_URL",
     ),
     dataRoot,
-    issuer: httpUrl(env.P8_ISSUER ?? "http://idp.localhost:4000", "P8_ISSUER"),
+    issuer: httpUrl(env.P8_ISSUER ?? "http://localhost:18008", "P8_ISSUER"),
     apiResource: httpUrl(
-      env.P8_API_RESOURCE ?? "http://p8.localhost:3008/api",
+      env.P8_API_RESOURCE ?? "http://localhost:17008/api",
       "P8_API_RESOURCE",
     ),
     clientId: env.P8_CLIENT_ID?.trim() || "p8-cedarfile",

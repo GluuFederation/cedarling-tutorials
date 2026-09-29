@@ -28,8 +28,8 @@ export function createApp(dependencies: AppDependencies) {
   const { config } = dependencies;
   const app = createMcpExpressApp({
     host: config.host,
-    allowedHosts: ["p3.localhost", "localhost", "127.0.0.1", "[::1]"],
-    allowedOrigins: ["p3.localhost", "localhost", "127.0.0.1", "[::1]"],
+    allowedHosts: ["localhost", "127.0.0.1", "[::1]"],
+    allowedOrigins: ["localhost", "127.0.0.1", "[::1]"],
     jsonLimit: "32kb",
   });
   app.disable("x-powered-by");

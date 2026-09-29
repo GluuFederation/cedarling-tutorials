@@ -31,7 +31,7 @@ export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): AppConfig {
-  const port = Number.parseInt(env.P5_PORT ?? "3005", 10);
+  const port = Number.parseInt(env.P5_PORT ?? "17005", 10);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error("P5_PORT must be a valid TCP port");
   }
@@ -60,16 +60,16 @@ export function loadConfig(
     host: env.P5_HOST?.trim() || "127.0.0.1",
     port,
     baseUrl: normalizedUrl(
-      env.P5_BASE_URL ?? "http://p5.localhost:3005",
+      env.P5_BASE_URL ?? "http://localhost:17005",
       "P5_BASE_URL",
     ),
     dataDirectory,
     issuer: normalizedUrl(
-      env.P5_ISSUER ?? "http://idp.localhost:4000",
+      env.P5_ISSUER ?? "http://localhost:18005",
       "P5_ISSUER",
     ),
     apiResource: normalizedUrl(
-      env.P5_API_RESOURCE ?? "http://p5.localhost:3005/api",
+      env.P5_API_RESOURCE ?? "http://localhost:17005/api",
       "P5_API_RESOURCE",
     ),
     clientId: env.P5_CLIENT_ID?.trim() || "p5-dataguard",

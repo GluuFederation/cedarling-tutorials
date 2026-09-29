@@ -34,9 +34,9 @@ it("rejects unsupported modes, remote plain HTTP, and broad storage paths", () =
 it("requires the native HTTP origin to match its loopback listener", () => {
   const env = { P12_CLIENT_SECRET: "x".repeat(40) };
   for (const overrides of [
-    { P12_BASE_URL: "http://p12.localhost:4212" },
-    { P12_BASE_URL: "https://p12.localhost:3012" },
-    { P12_BASE_URL: "https://outside.example:3012" },
+    { P12_BASE_URL: "http://localhost:4212" },
+    { P12_BASE_URL: "https://localhost:17012" },
+    { P12_BASE_URL: "https://outside.example:17012" },
     { P12_HOST: "::1" },
     { P12_IDP_PORT: "4001" },
   ])
@@ -44,7 +44,7 @@ it("requires the native HTTP origin to match its loopback listener", () => {
   expect(
     loadConfig({
       ...env,
-      P12_BASE_URL: "http://p12.localhost:4212",
+      P12_BASE_URL: "http://localhost:4212",
       P12_PORT: "4212",
     }).port,
   ).toBe(4212);
@@ -78,7 +78,7 @@ it("setup preserves linked configuration targets and derives registered service 
   mkdirSync(resolve(".local"), { recursive: true });
   const root = mkdtempSync(resolve(".local/setup-test-"));
   const project = resolve(root, "project");
-  const shared = resolve(root, "shared/identity-provider");
+  const shared = resolve(project, ".local/idp");
   mkdirSync(project);
   mkdirSync(shared, { recursive: true });
   writeFileSync(
@@ -86,10 +86,10 @@ it("setup preserves linked configuration targets and derives registered service 
     [
       "P12_CLIENT_ID=p12-test",
       `P12_CLIENT_SECRET=${"x".repeat(40)}`,
-      "P12_API_RESOURCE=http://p12.localhost:4212/api",
-      "IDP_ISSUER=http://idp.localhost:4400",
-      "P12_POST_LOGOUT_REDIRECT_URI=http://p12.localhost:4212",
-      "P12_REDIRECT_URI=http://p12.localhost:4212/auth/callback",
+      "P12_API_RESOURCE=http://localhost:4212/api",
+      "IDP_ISSUER=http://localhost:4400",
+      "P12_POST_LOGOUT_REDIRECT_URI=http://localhost:4212",
+      "P12_REDIRECT_URI=http://localhost:4212/auth/callback",
     ].join("\n"),
   );
   const run = () =>

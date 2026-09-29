@@ -87,7 +87,7 @@ describe("P5 permissive API", () => {
     if (!transactionValue) throw new Error("Missing transaction cookie value");
     const rawTransaction = transactionValue.replace("p5_oidc_transaction=", "");
     const callback = await harness.app.request(
-      "http://p5.localhost:3005/auth/callback?code=test",
+      "http://localhost:17005/auth/callback?code=test",
       { headers: { cookie: `p5_oidc_transaction=${rawTransaction}` } },
     );
     expect(callback.status).toBe(302);

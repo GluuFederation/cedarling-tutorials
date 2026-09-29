@@ -31,14 +31,14 @@ function localUrl(value: string, name: string): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const port = Number(env.P14_PORT ?? "3014");
+  const port = Number(env.P14_PORT ?? "17014");
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535)
     throw new Error("P14_PORT must be a valid TCP port");
   const host = env.P14_HOST ?? "127.0.0.1";
   if (!new Set(["127.0.0.1", "0.0.0.0"]).has(host))
     throw new Error("P14_HOST must be a local or container bind address");
   const baseUrl = localUrl(
-    env.P14_BASE_URL ?? "http://p14.localhost:3014",
+    env.P14_BASE_URL ?? "http://localhost:17014",
     "P14_BASE_URL",
   );
   if (Number(new URL(baseUrl).port || 80) !== port)
@@ -73,10 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host,
     port,
     baseUrl,
-    issuer: localUrl(
-      env.P14_ISSUER ?? "http://idp.localhost:4000",
-      "P14_ISSUER",
-    ),
+    issuer: localUrl(env.P14_ISSUER ?? "http://localhost:18014", "P14_ISSUER"),
     apiResource: localUrl(
       env.P14_API_RESOURCE ?? `${baseUrl}/api`,
       "P14_API_RESOURCE",

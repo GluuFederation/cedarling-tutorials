@@ -23,39 +23,35 @@ Dana / Amir / Eve ── Device Flow ──→ Tutorial IdP
 ## Prerequisites
 
 - Node.js 24.21 or newer within 24.x and pnpm 10 on Ubuntu, macOS, or Windows.
-- A running shared tutorial identity provider.
+- Docker Desktop or Docker Engine with Compose when using Docker startup.
+- The project-local tutorial identity provider (started below).
 - An OpenRouter API key in `P3_OPENROUTER_API_KEY` for interactive chat.
-- On Windows, run `node ../shared/host check`; if it fails, run
-  `node ../shared/host install` from an elevated terminal.
-
-P3 does not include Docker Compose because the learner operates its terminal
-client and local MCP service directly. The commands support Ubuntu, macOS, and
-Windows terminals.
 
 ## Run
 
-Prepare and start the shared identity provider first:
+Start the application and its own IdP:
+
+```bash
+docker compose up --build
+```
+
+MCP endpoint: <http://localhost:17003/mcp>. The issuer is <http://localhost:18003>. Stop the stack with `Ctrl+C`, then `docker compose down`.
+
+For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider run setup
-pnpm --dir ../shared/identity-provider dev
-```
-
-Then, in another terminal, prepare and start P3:
-
-```bash
+pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
 pnpm run setup
 pnpm dev
 ```
 
-Set `P3_OPENROUTER_API_KEY` in P3's generated `.env`. Keep the service terminal
-open and, in another terminal, run:
+`pnpm dev` starts this project’s IdP and application together.
 
-```bash
-pnpm chat dana
-```
+For interactive chat, install the project dependencies on the host, set `P3_OPENROUTER_API_KEY` in its `.env`, and run `pnpm chat dana` in another terminal. This client works with either the native or Docker service.
+
+For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
 
 ## Exercise
 

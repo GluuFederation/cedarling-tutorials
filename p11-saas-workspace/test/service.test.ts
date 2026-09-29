@@ -17,7 +17,7 @@ import { WorkspaceService } from "../src/server/service.ts";
 
 const maya: Principal = {
   id: "user-maya",
-  issuer: "http://idp.localhost:4000",
+  issuer: "http://localhost:18011",
   subject: "maya",
   name: "Maya",
 };

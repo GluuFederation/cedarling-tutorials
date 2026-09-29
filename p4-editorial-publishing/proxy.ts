@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
   const canonicalOrigin = new URL(
-    process.env.P4_BASE_URL ?? "http://p4.localhost:3004",
+    process.env.P4_BASE_URL ?? "http://localhost:17004",
   ).origin;
   const forwardedProtocol = request.headers
     .get("x-forwarded-proto")
@@ -33,7 +33,7 @@ export function proxy(request: NextRequest) {
   const requestId = randomBytes(12).toString("base64url");
   const development = process.env.NODE_ENV === "development";
   const issuerOrigin = new URL(
-    process.env.P4_ISSUER ?? "http://idp.localhost:4000",
+    process.env.P4_ISSUER ?? "http://localhost:18004",
   ).origin;
   const policy = [
     "default-src 'self'",

@@ -78,14 +78,14 @@ export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   root = process.cwd(),
 ): AppConfig {
-  const port = Number(env.P13_PORT ?? 3013);
+  const port = Number(env.P13_PORT ?? 17013);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
     throw new Error("P13_PORT must be a TCP port");
   const host = env.P13_HOST ?? "127.0.0.1";
   if (!["127.0.0.1", "::1", "0.0.0.0"].includes(host))
     throw new Error("P13_HOST must use a local or container bind address");
   const base = localUrl(
-    env.P13_BASE_URL ?? "http://p13.localhost:3013",
+    env.P13_BASE_URL ?? "http://localhost:17013",
     "P13_BASE_URL",
   );
   if (
@@ -94,7 +94,7 @@ export function loadConfig(
   )
     throw new Error("P13_BASE_URL must match P13_PORT and have no path");
   const issuer = localUrl(
-    env.P13_ISSUER ?? "http://idp.localhost:4000",
+    env.P13_ISSUER ?? "http://localhost:18013",
     "P13_ISSUER",
   );
   if (issuer.pathname !== "/")

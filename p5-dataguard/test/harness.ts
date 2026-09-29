@@ -14,7 +14,7 @@ import type {
 
 const now = Date.now();
 const tokens = (subject: string): OidcTokens => ({
-  issuer: "http://idp.localhost:4000",
+  issuer: "http://localhost:18005",
   subject,
   accessToken: `access-${subject}`,
   accessTokenExpiresAt: now + 1_800_000,
@@ -28,14 +28,12 @@ const tokens = (subject: string): OidcTokens => ({
 const oidc: OidcRuntime = {
   authorizationUrl(_transaction, loginHint) {
     return Promise.resolve(
-      new URL(
-        `http://idp.localhost:4000/authorization?login_hint=${loginHint}`,
-      ),
+      new URL(`http://localhost:18005/authorization?login_hint=${loginHint}`),
     );
   },
   exchange(): Promise<OidcIdentity> {
     return Promise.resolve({
-      issuer: "http://idp.localhost:4000",
+      issuer: "http://localhost:18005",
       subject: "amina",
       tokens: tokens("amina"),
     });
@@ -68,11 +66,11 @@ export function createHarness(): Harness {
   const directory = mkdtempSync(path.join(tmpdir(), "p5-test-"));
   const config: AppConfig = {
     host: "127.0.0.1",
-    port: 3005,
-    baseUrl: "http://p5.localhost:3005",
+    port: 17005,
+    baseUrl: "http://localhost:17005",
     dataDirectory: directory,
-    issuer: "http://idp.localhost:4000",
-    apiResource: "http://p5.localhost:3005/api",
+    issuer: "http://localhost:18005",
+    apiResource: "http://localhost:17005/api",
     clientId: "p5-dataguard",
     clientSecret: "p5".repeat(16),
     sessionEncryptionKey: Buffer.alloc(32, 7),

@@ -8,7 +8,7 @@
   },
   "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "setup": "node scripts/setup.ts",
     "dev": "node scripts/dev.mjs",
     "start": "node scripts/dev.mjs --production",
     "reset": "node --env-file=.env scripts/reset.ts",

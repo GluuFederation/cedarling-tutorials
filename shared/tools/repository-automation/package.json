@@ -9,7 +9,7 @@
     "pnpm": ">=10.17.1 <11"
   },
   "scripts": {
-    "check": "node --test changed-projects.test.mjs host.test.mjs tutorial-release.test.mjs && node tutorial-release.mjs validate-all --repository ../../.."
+    "check": "node --test changed-projects.test.mjs tutorial-release.test.mjs && node tutorial-release.mjs validate-all --repository ../../.."
   },
   "devDependencies": {
     "dompurify": "3.4.13",

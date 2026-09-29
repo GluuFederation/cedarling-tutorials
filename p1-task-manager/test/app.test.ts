@@ -12,7 +12,7 @@ const roots: string[] = [];
 function tokenSet(overrides: Partial<OidcTokens> = {}): OidcTokens {
   const now = Date.now();
   return {
-    issuer: "http://idp.localhost:4000",
+    issuer: "http://localhost:18001",
     subject: "alex",
     accessToken: "access-token",
     accessTokenExpiresAt: now + 300_000,
@@ -27,9 +27,9 @@ function tokenSet(overrides: Partial<OidcTokens> = {}): OidcTokens {
 }
 
 const oidc: OidcRuntime = {
-  authorizationUrl: async () => new URL("http://idp.localhost:4000/auth"),
+  authorizationUrl: async () => new URL("http://localhost:18001/auth"),
   exchange: async () => ({
-    issuer: "http://idp.localhost:4000",
+    issuer: "http://localhost:18001",
     subject: "alex",
     tokens: tokenSet(),
   }),
@@ -56,11 +56,11 @@ async function fixture(
   );
   const config: AppConfig = {
     host: "127.0.0.1",
-    port: 3000,
-    baseUrl: "http://p1.localhost:3000",
+    port: 17001,
+    baseUrl: "http://localhost:17001",
     dataDirectory: root,
-    issuer: "http://idp.localhost:4000",
-    apiResource: "http://p1.localhost:3000/api",
+    issuer: "http://localhost:18001",
+    apiResource: "http://localhost:17001/api",
     clientId: "p1-task-manager",
     clientSecret: "x".repeat(32),
     sessionEncryptionKey: Buffer.alloc(32, 7),
@@ -85,7 +85,7 @@ async function fixture(
 function mutationHeaders(cookie: string, csrfToken: string) {
   return {
     cookie,
-    origin: "http://p1.localhost:3000",
+    origin: "http://localhost:17001",
     "sec-fetch-site": "same-origin",
     "x-csrf-token": csrfToken,
   };
@@ -318,7 +318,7 @@ describe("P1 HTTP boundary", () => {
       url: "/api/tasks/task-a-brief/assign",
       headers: {
         cookie,
-        origin: "http://p1.localhost:3000",
+        origin: "http://localhost:17001",
         "sec-fetch-site": "same-origin",
         "x-csrf-token": session.csrfToken,
       },
@@ -368,7 +368,7 @@ describe("P1 HTTP boundary", () => {
       ...oidc,
       authorizationUrl: async (_transaction, loginHint: string) => {
         receivedLoginHints.push(loginHint);
-        return new URL("http://idp.localhost:4000/auth");
+        return new URL("http://localhost:18001/auth");
       },
     };
     const { app } = await fixture("user-alex", hintedOidc);

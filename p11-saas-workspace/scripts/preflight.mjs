@@ -12,7 +12,7 @@ try {
   const databaseUrl = process.env.P11_DATABASE_URL;
   if (!databaseUrl) throw new Error("P11_DATABASE_URL is missing");
   const database = new URL(databaseUrl);
-  const issuer = process.env.P11_ISSUER ?? "http://idp.localhost:4000";
+  const issuer = process.env.P11_ISSUER ?? "http://localhost:18011";
   const issuerUrl = new URL(issuer);
   await checkDependencies([
     {

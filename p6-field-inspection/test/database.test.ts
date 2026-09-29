@@ -18,7 +18,7 @@ function database(): AppDatabase {
   directories.push(directory);
   const instance = new AppDatabase(
     resolve(directory, "test.sqlite"),
-    "http://idp.localhost:4000",
+    "http://localhost:18006",
   );
   databases.push(instance);
   return instance;

@@ -15,7 +15,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
-    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "setup": "node scripts/setup.ts",
     "test:e2e": "node scripts/verify-docker.ts",
     "preflight": "node scripts/preflight.mjs",
     "reset": "node --env-file=.env scripts/reset.ts",

@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/server/config.ts";
 
 const valid = {
-  P7_BASE_URL: "http://p7.localhost:3007",
-  P7_ISSUER: "http://idp.localhost:4000",
-  P7_API_RESOURCE: "http://p7.localhost:3007/api",
+  P7_BASE_URL: "http://localhost:17007",
+  P7_ISSUER: "http://localhost:18007",
+  P7_API_RESOURCE: "http://localhost:17007/api",
   P7_CLIENT_ID: "p7-collaborative-docs",
   P7_CLIENT_SECRET: "s".repeat(43),
   P7_DATA_DIR: ".local/test-data",
@@ -15,10 +15,10 @@ describe("P7 configuration", () => {
   it("accepts the bounded native configuration", () => {
     expect(loadConfig(valid)).toEqual({
       host: "127.0.0.1",
-      port: 3007,
-      baseUrl: "http://p7.localhost:3007",
-      issuer: "http://idp.localhost:4000",
-      apiResource: "http://p7.localhost:3007/api",
+      port: 17007,
+      baseUrl: "http://localhost:17007",
+      issuer: "http://localhost:18007",
+      apiResource: "http://localhost:17007/api",
       clientId: "p7-collaborative-docs",
       clientSecret: "s".repeat(43),
       dataDirectory: resolve(".local/test-data"),

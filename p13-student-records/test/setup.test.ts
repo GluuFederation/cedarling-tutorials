@@ -29,7 +29,7 @@ test("configuration rejects unsupported authorization, non-loopback origins and 
   );
   expect(loadConfig({ ...defaults, P13_HOST: "0.0.0.0" }).host).toBe("0.0.0.0");
   expect(() =>
-    loadConfig({ ...defaults, P13_BASE_URL: "http://p13.localhost:4001" }),
+    loadConfig({ ...defaults, P13_BASE_URL: "http://localhost:4001" }),
   ).toThrow("match");
   expect(() =>
     loadConfig({ ...defaults, P13_ISSUER: "https://remote.example" }),
@@ -37,7 +37,7 @@ test("configuration rejects unsupported authorization, non-loopback origins and 
   expect(() =>
     loadConfig({
       ...defaults,
-      P13_API_RESOURCE: "http://p13.localhost:3013/other",
+      P13_API_RESOURCE: "http://localhost:17013/other",
     }),
   ).toThrow("match");
 });
@@ -49,12 +49,12 @@ test("setup preserves configuration and learner state on repeat", () => {
   writeFileSync(
     identity,
     [
-      "IDP_ISSUER=http://idp.localhost:4000",
+      "IDP_ISSUER=http://localhost:18013",
       "P13_CLIENT_ID=p13-client",
       "P13_CLIENT_SECRET=temporary-test-secret-at-least-32-characters",
-      "P13_API_RESOURCE=http://p13.localhost:3013/api",
-      "P13_REDIRECT_URI=http://p13.localhost:3013/auth/callback",
-      "P13_POST_LOGOUT_REDIRECT_URI=http://p13.localhost:3013",
+      "P13_API_RESOURCE=http://localhost:17013/api",
+      "P13_REDIRECT_URI=http://localhost:17013/auth/callback",
+      "P13_POST_LOGOUT_REDIRECT_URI=http://localhost:17013",
       "",
     ].join("\n"),
     { mode: 0o600 },
@@ -62,7 +62,7 @@ test("setup preserves configuration and learner state on repeat", () => {
   setupProject(root, identity);
   const first = readFileSync(resolve(root, ".env"), "utf8");
   const databasePath = resolve(root, ".local/p13-data/school.sqlite");
-  const before = new SchoolDatabase(databasePath, "http://idp.localhost:4000");
+  const before = new SchoolDatabase(databasePath, "http://localhost:18013");
   before.sql.exec(
     "UPDATE grades SET feedback='Learner change',version=2 WHERE id='grade-sam-1'",
   );
@@ -70,7 +70,7 @@ test("setup preserves configuration and learner state on repeat", () => {
   before.close();
   setupProject(root, identity);
   expect(readFileSync(resolve(root, ".env"), "utf8")).toBe(first);
-  const after = new SchoolDatabase(databasePath, "http://idp.localhost:4000");
+  const after = new SchoolDatabase(databasePath, "http://localhost:18013");
   expect(after.snapshot("talia", "grade-sam-1")).toMatchObject({
     grade: { feedback: "Learner change", version: 2 },
     enrollment: { state: "withdrawn", version: 2 },

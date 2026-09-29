@@ -18,12 +18,6 @@ try {
   await runDevStack({
     prepare: [
       {
-        name: "shared identity-provider setup",
-        command: pnpm,
-        args: ["run", "setup"],
-        cwd: identityRoot,
-      },
-      {
         name: "shared identity-provider build",
         command: pnpm,
         args: ["run", "build"],
@@ -53,13 +47,13 @@ try {
 
 async function services() {
   const configured = parseEnv(await readFile(resolve(root, ".env"), "utf8"));
-  const issuer = configured.P14_ISSUER ?? "http://idp.localhost:4000";
-  const idpPort = new URL(issuer).port || "4000";
+  const issuer = configured.P14_ISSUER ?? "http://localhost:18014";
+  const idpPort = new URL(issuer).port || "18014";
   return [
     {
-      name: "shared identity provider",
+      name: "P14 identity provider",
       command: node,
-      args: ["dist/main.js"],
+      args: [`--env-file=${resolve(root, ".local/idp/.env")}`, "dist/main.js"],
       cwd: identityRoot,
       health: {
         url: `http://127.0.0.1:${idpPort}/.well-known/openid-configuration`,
@@ -72,7 +66,7 @@ async function services() {
       args: ["--env-file=.env", "--watch", "src/server/main.ts"],
       cwd: root,
       health: {
-        url: `http://127.0.0.1:${configured.P14_PORT ?? "3014"}/healthz`,
+        url: `http://127.0.0.1:${configured.P14_PORT ?? "17014"}/healthz`,
         validate: serviceHealth("p14-ai-scheduling-assistant"),
       },
     },

@@ -13,10 +13,10 @@ describe("P2 configuration", () => {
     const config = loadConfig(validEnvironment, "/tutorial/p2-tenantrag");
     expect(config).toMatchObject({
       host: "127.0.0.1",
-      port: 3000,
-      baseUrl: "http://p2.localhost:3000",
-      issuer: "http://idp.localhost:4000",
-      apiResource: "http://p2.localhost:3000/api",
+      port: 17002,
+      baseUrl: "http://localhost:17002",
+      issuer: "http://localhost:18002",
+      apiResource: "http://localhost:17002/api",
       clientId: "p2-tenantrag-cli",
       voyageModel: "voyage-4-lite",
       voyageDimensions: 256,

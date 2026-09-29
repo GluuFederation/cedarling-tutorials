@@ -32,7 +32,7 @@ function url(env: NodeJS.ProcessEnv, name: string, fallback?: string): string {
 }
 
 function port(value: string | undefined): number {
-  const parsed = Number(value ?? "3011");
+  const parsed = Number(value ?? "17011");
   if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 65_535) {
     throw new Error("P11_PORT must be a valid TCP port");
   }
@@ -49,10 +49,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     host: env.P11_HOST?.trim() || "127.0.0.1",
     port: port(env.P11_PORT),
-    baseUrl: url(env, "P11_BASE_URL", "http://p11.localhost:3011"),
+    baseUrl: url(env, "P11_BASE_URL", "http://localhost:17011"),
     databaseUrl: required(env, "P11_DATABASE_URL"),
-    issuer: url(env, "P11_ISSUER", "http://idp.localhost:4000"),
-    apiResource: url(env, "P11_API_RESOURCE", "http://p11.localhost:3011/api"),
+    issuer: url(env, "P11_ISSUER", "http://localhost:18011"),
+    apiResource: url(env, "P11_API_RESOURCE", "http://localhost:17011/api"),
     clientId: env.P11_CLIENT_ID?.trim() || "p11-saas-workspace",
     clientSecret: secret(env, "P11_CLIENT_SECRET"),
     sessionSecret: secret(env, "P11_SESSION_SECRET"),

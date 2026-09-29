@@ -11,7 +11,7 @@ describe("configuration", () => {
     const config = loadConfig(valid);
     expect(config).toMatchObject({
       host: "127.0.0.1",
-      port: 3014,
+      port: 17014,
       clientId: "p14-ai-scheduling-assistant",
     });
   });

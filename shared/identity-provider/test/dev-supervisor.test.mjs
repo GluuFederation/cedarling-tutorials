@@ -152,7 +152,7 @@ describe("native development supervision", () => {
           {
             kind: "http",
             name: "identity provider",
-            url: "http://idp.localhost:4000/health",
+            url: "http://localhost:18001/health",
             validate: async () => true,
           },
         ],

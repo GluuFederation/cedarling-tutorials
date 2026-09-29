@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["p4.localhost"],
+  // Preserve absolute redirects from 127.0.0.1 to the localhost OIDC origin.
+  skipProxyUrlNormalize: true,
   experimental: {
     serverActions: { bodySizeLimit: "64kb" },
   },

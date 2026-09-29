@@ -5,7 +5,7 @@ import { type Authorize, School } from "../src/server/school.ts";
 
 const databases: SchoolDatabase[] = [];
 function fixture(authorize: Authorize = async () => "allow") {
-  const database = new SchoolDatabase(":memory:", "http://idp.localhost:4000");
+  const database = new SchoolDatabase(":memory:", "http://localhost:18013");
   databases.push(database);
   return { school: new School(database, authorize), database };
 }

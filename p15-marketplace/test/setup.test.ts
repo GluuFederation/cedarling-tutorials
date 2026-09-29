@@ -42,7 +42,7 @@ it("rejects external listeners, mismatched ports, and escaping state", () => {
   ).toBe("0.0.0.0");
   for (const changes of [
     { P15_HOST: "192.0.2.1" },
-    { P15_BASE_URL: "http://evil.test:3015" },
+    { P15_BASE_URL: "http://evil.test:17015" },
     { P15_DATA_DIR: "../elsewhere" },
     { P15_PORT: "not-a-port" },
     { P15_PORT: "3016" },
@@ -80,19 +80,19 @@ it("prepares private state idempotently without overwriting learner data", () =>
 it("repairs shared registration values and preserves project settings", () => {
   const directory = testDirectory();
   const project = join(directory, "project");
-  const identity = join(directory, "shared/identity-provider");
+  const identity = join(project, ".local/idp");
   mkdirSync(project);
   mkdirSync(identity, { recursive: true });
   const secret = randomToken();
   writeFileSync(
     join(identity, ".env"),
     [
-      "IDP_ISSUER=http://idp.localhost:4000",
+      "IDP_ISSUER=http://localhost:18015",
       "P15_CLIENT_ID=p15-client",
       `P15_CLIENT_SECRET=${secret}`,
-      "P15_API_RESOURCE=http://p15.localhost:3015/api",
-      "P15_REDIRECT_URI=http://p15.localhost:3015/auth/callback",
-      "P15_POST_LOGOUT_REDIRECT_URI=http://p15.localhost:3015",
+      "P15_API_RESOURCE=http://localhost:17015/api",
+      "P15_REDIRECT_URI=http://localhost:17015/auth/callback",
+      "P15_POST_LOGOUT_REDIRECT_URI=http://localhost:17015",
       "",
     ].join("\n"),
   );

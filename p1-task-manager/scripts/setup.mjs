@@ -1,7 +1,6 @@
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseEnv } from "node:util";
 import {
   mergeProjectEnvironment,
   readProjectEnvironment,
@@ -9,17 +8,10 @@ import {
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
 
 const target = resolve(".env");
-const identityTarget = resolve("../shared/identity-provider/.env");
-if (!existsSync(identityTarget))
-  throw new Error(
-    "Run pnpm --dir ../shared/identity-provider run setup before P1 setup",
-  );
-
-const identity = parseEnv(readFileSync(identityTarget, "utf8"));
+const identity = ensureProjectIdentity("P1");
 function required(name) {
   const value = identity[name]?.trim();
-  if (!value)
-    throw new Error(`${name} is missing from shared/identity-provider/.env`);
+  if (!value) throw new Error(`${name} is missing from .local/idp/.env`);
   return value;
 }
 const url = (name) => required(name).replace(/\/$/, "");
@@ -41,7 +33,7 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P1_HOST: "127.0.0.1",
-    P1_PORT: "3000",
+    P1_PORT: "17001",
     P1_DATA_DIR: ".data",
     P1_SESSION_ENCRYPTION_KEY: randomBytes(32).toString("base64url"),
   },

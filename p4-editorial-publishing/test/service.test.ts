@@ -60,7 +60,7 @@ describe("editorial authorization boundaries", () => {
       "approved",
     );
     const riley = present(
-      opened.database.principal("http://idp.localhost:4000", "riley"),
+      opened.database.principal("http://localhost:18004", "riley"),
     );
     const rileySession = { ...opened.session, principal: riley };
     const approved = present(opened.database.article(first.id, "tenant-a"));
@@ -117,7 +117,7 @@ describe("editorial authorization boundaries", () => {
     );
     expect(opened.database.revokeOmar()).toBe(true);
     const ana = present(
-      opened.database.principal("http://idp.localhost:4000", "ana"),
+      opened.database.principal("http://localhost:18004", "ana"),
     );
     const current = present(opened.database.article(article.id, "tenant-a"));
     await opened.service.publish(

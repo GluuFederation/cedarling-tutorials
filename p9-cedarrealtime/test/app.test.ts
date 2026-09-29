@@ -11,7 +11,7 @@ describe("HTTP session boundary", () => {
     const harness = createHarness();
     const oidc: OidcRuntime = {
       async authorizationUrl() {
-        return new URL("http://idp.localhost:4000/authorize");
+        return new URL("http://localhost:18009/authorize");
       },
       async exchange() {
         throw new Error("not used");
@@ -71,7 +71,7 @@ describe("HTTP session boundary", () => {
       });
       expect(login.status).toBe(302);
       expect(login.headers.get("location")).toBe(
-        "http://idp.localhost:4000/authorize",
+        "http://localhost:18009/authorize",
       );
       expect(login.headers.get("set-cookie")).not.toContain(
         "test-access-token",

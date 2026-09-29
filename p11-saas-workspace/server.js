@@ -4,7 +4,7 @@ import express from "express";
 const buildPath = "./build/server/index.js";
 const development = process.env.NODE_ENV === "development";
 const host = process.env.P11_HOST || "127.0.0.1";
-const port = Number.parseInt(process.env.P11_PORT || "3011", 10);
+const port = Number.parseInt(process.env.P11_PORT || "17011", 10);
 const baseUrl = process.env.P11_BASE_URL || `http://${host}:${port}`;
 const requestBytes = 24_576;
 const requestsPerMinute = 120;

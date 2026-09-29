@@ -15,16 +15,16 @@ const databases: AppDatabase[] = [];
 const applications: FastifyInstance[] = [];
 const config: Config = {
   host: "127.0.0.1",
-  port: 3007,
-  baseUrl: "http://p7.localhost:3007",
-  issuer: "http://idp.localhost:4000",
-  apiResource: "http://p7.localhost:3007/api",
+  port: 17007,
+  baseUrl: "http://localhost:17007",
+  issuer: "http://localhost:18007",
+  apiResource: "http://localhost:17007/api",
   clientId: "p7-collaborative-docs",
   clientSecret: "s".repeat(43),
   dataDirectory: resolve(".local/test-data"),
 };
 const oidc: OidcRuntime = {
-  authorizationUrl: async () => new URL("http://idp.localhost:4000/auth"),
+  authorizationUrl: async () => new URL("http://localhost:18007/auth"),
   exchange: async () => ({ subject: "noah", expiresAt: Date.now() + 60_000 }),
 };
 

@@ -8,7 +8,7 @@ import { temporaryRoot } from "./temporary-root.ts";
 describe("replace recovery", () => {
   it("keeps committed new bytes and retries old-byte cleanup after restart", async () => {
     const root = temporaryRoot("p8-replace-");
-    const issuer = "http://idp.localhost:4000";
+    const issuer = "http://localhost:18008";
     const storage = new SafeStorage(root);
     let runtime = new AppDatabase(databasePath(root), issuer, storage);
     try {
