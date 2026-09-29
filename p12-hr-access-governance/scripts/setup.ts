@@ -1,26 +1,19 @@
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseEnv } from "node:util";
 import {
   mergeProjectEnvironment,
   readProjectEnvironment,
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { loadConfig, prepareDataDirectory } from "../src/server/config.ts";
 import { Database } from "../src/server/database.ts";
 
 const target = resolve(".env");
-const identityTarget = resolve("../shared/identity-provider/.env");
-if (!existsSync(identityTarget))
-  throw new Error(
-    "Run pnpm --dir ../shared/identity-provider run setup before P12 setup",
-  );
-const identity = parseEnv(readFileSync(identityTarget, "utf8"));
+const identity = ensureProjectIdentity("P12");
 
 function required(name: string): string {
   const value = identity[name]?.trim();
-  if (!value)
-    throw new Error(`${name} is missing from shared/identity-provider/.env`);
+  if (!value) throw new Error(`${name} is missing from .local/idp/.env`);
   return value;
 }
 const url = (name: string): string => required(name).replace(/\/$/u, "");

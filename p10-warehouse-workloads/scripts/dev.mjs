@@ -24,12 +24,6 @@ try {
   await runDevStack({
     prepare: [
       {
-        name: "shared identity-provider setup",
-        command: pnpm,
-        args: ["run", "setup"],
-        cwd: identityRoot,
-      },
-      {
         name: "shared identity-provider build",
         command: pnpm,
         args: ["run", "build"],
@@ -73,12 +67,12 @@ async function services() {
   const workloadIds = WORKLOADS.map(({ id }) => id);
   return [
     {
-      name: "shared identity provider",
+      name: "P10 identity provider",
       command: node,
-      args: ["dist/main.js"],
+      args: [`--env-file=${resolve(root, ".local/idp/.env")}`, "dist/main.js"],
       cwd: identityRoot,
       health: {
-        url: "http://127.0.0.1:4000/.well-known/openid-configuration",
+        url: "http://127.0.0.1:18010/.well-known/openid-configuration",
         validate: issuerHealth(configured.P10_ISSUER),
       },
     },

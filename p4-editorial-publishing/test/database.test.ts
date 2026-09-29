@@ -42,9 +42,9 @@ describe("editorial persistence", () => {
     const sentinel = resolve(directory, "keep.txt");
     writeFileSync(sentinel, "keep");
     try {
-      new AppDatabase(directory, "http://idp.localhost:4000").close();
-      resetDatabase(directory, "http://idp.localhost:4000");
-      const database = new AppDatabase(directory, "http://idp.localhost:4000");
+      new AppDatabase(directory, "http://localhost:18004").close();
+      resetDatabase(directory, "http://localhost:18004");
+      const database = new AppDatabase(directory, "http://localhost:18004");
       expect(database.listArticles("tenant-a")).toHaveLength(4);
       database.close();
       expect(existsSync(sentinel)).toBe(true);

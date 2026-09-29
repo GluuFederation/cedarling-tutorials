@@ -8,7 +8,7 @@
   },
   "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "setup": "node scripts/setup.ts",
     "fixture": "node --env-file=.env scripts/fixture.ts",
     "dev": "vite build && node --watch --env-file=.env src/server/main.ts",
     "start": "node --env-file=.env dist/server/main.js",

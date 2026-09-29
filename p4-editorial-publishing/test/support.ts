@@ -8,8 +8,8 @@ import { EditorialService } from "../src/server/service.ts";
 
 export function fixture(subject = "riley", allow = true) {
   const directory = mkdtempSync(join(tmpdir(), "p4-test-"));
-  const database = new AppDatabase(directory, "http://idp.localhost:4000");
-  const principal = database.principal("http://idp.localhost:4000", subject);
+  const database = new AppDatabase(directory, "http://localhost:18004");
+  const principal = database.principal("http://localhost:18004", subject);
   if (!principal) throw new Error(`Missing test principal ${subject}`);
   const requests: AuthorizationRequest[] = [];
   const service = new EditorialService(database, {

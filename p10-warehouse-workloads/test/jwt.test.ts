@@ -6,8 +6,8 @@ import { createTokenVerifier } from "../src/server/jwt.ts";
 const config: ApiConfig = {
   host: "127.0.0.1",
   port: 3110,
-  issuer: "http://idp.localhost:4000",
-  apiResource: "http://p10.localhost:3010/api",
+  issuer: "http://localhost:18010",
+  apiResource: "http://localhost:17010/api",
   dataDirectory: ".local/p10-data",
   workloadClientIds: {
     "transfer-planner": "custom-planner",

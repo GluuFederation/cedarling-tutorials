@@ -37,7 +37,7 @@ async function health(): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch("http://127.0.0.1:3009/health");
+      const response = await fetch("http://127.0.0.1:17009/health");
       if (response.ok) return;
     } catch {
       // Startup and restart briefly close the listener.

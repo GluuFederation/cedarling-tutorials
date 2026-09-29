@@ -42,7 +42,7 @@ async function waitForHealth(): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch("http://127.0.0.1:3008/health");
+      const response = await fetch("http://127.0.0.1:17008/health");
       if (response.ok) return;
     } catch {
       // A start or restart briefly closes the listener.
@@ -80,13 +80,13 @@ async function exerciseScenario(): Promise<void> {
   await waitForHealth();
 
   const login = await fetch(
-    "http://127.0.0.1:3008/auth/login?login_hint=jordan",
+    "http://127.0.0.1:17008/auth/login?login_hint=jordan",
     { redirect: "manual" },
   );
   const location = login.headers.get("location");
   if (
     login.status !== 302 ||
-    !location?.startsWith("http://idp.localhost:4000/")
+    !location?.startsWith("http://localhost:18008/")
   ) {
     throw new Error(
       "The P8 container could not reach the configured OIDC issuer",

@@ -30,31 +30,35 @@ Riley / Ana / Omar ── sign in ──→ Tutorial IdP
 ## Prerequisites
 
 - Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x, pnpm 10, and the shared tutorial identity provider.
-- On Windows, run `node ../shared/host check`; if it fails, run
-  `node ../shared/host install` from an elevated terminal.
+- Node.js 24.21 or newer within 24.x, pnpm 10, and the project-local tutorial identity provider.
 
 The commands work from PowerShell, macOS terminals, and Ubuntu shells.
 
 ## Run
 
-Start the complete isolated stack:
+Start the application and its own IdP:
 
 ```bash
 docker compose up --build
 ```
 
-Open <http://p4.localhost:3004>. For native development, install both dependency
-sets once:
+Open <http://localhost:17004>. The issuer is <http://localhost:18004>. Stop the stack with `Ctrl+C`, then `docker compose down`.
+
+For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
+pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
+pnpm run setup
 pnpm dev
 ```
 
-Both `pnpm dev` and `pnpm build && pnpm start` prepare and supervise the shared
-identity provider and P4. Ports 4000 and 3004 must be free.
+`pnpm dev` starts this project’s IdP and application together.
+
+`pnpm build` followed by `pnpm start` runs the compiled application stack and its project IdP.
+
+Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
 
 ## Exercise
 
@@ -89,7 +93,7 @@ from the exact current revision, digest, approval, and authority facts.
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm run setup` | Prepare shared identity configuration and SQLite fixtures |
+| `pnpm run setup` | Prepare project identity configuration and SQLite fixtures |
 | `pnpm dev` | Prepare and supervise the IdP and Next.js development server |
 | `pnpm start` | Prepare and supervise the IdP and production build |
 | `pnpm reset` | Restore deterministic editorial fixtures |
@@ -102,5 +106,4 @@ from the exact current revision, digest, approval, and authority facts.
 ```bash
 pnpm check
 pnpm audit --audit-level low
-docker compose config
 ```

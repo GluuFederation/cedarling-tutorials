@@ -146,8 +146,8 @@ export function loadConsoleConfig(
   ) as Record<WorkloadId, string>;
   return {
     host: host(env.P10_HOST, "P10_HOST"),
-    port: port(env.P10_PORT, 3010, "P10_PORT"),
-    baseUrl: url(env.P10_BASE_URL, "http://p10.localhost:3010", "P10_BASE_URL"),
+    port: port(env.P10_PORT, 17010, "P10_PORT"),
+    baseUrl: url(env.P10_BASE_URL, "http://localhost:17010", "P10_BASE_URL"),
     controlSecret: secret(env, "P10_CONTROL_SECRET"),
     agentUrls,
   };
@@ -166,10 +166,10 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   return {
     host: host(env.P10_API_HOST, "P10_API_HOST"),
     port: port(env.P10_API_PORT, 3110, "P10_API_PORT"),
-    issuer: url(env.P10_ISSUER, "http://idp.localhost:4000", "P10_ISSUER"),
+    issuer: url(env.P10_ISSUER, "http://localhost:18010", "P10_ISSUER"),
     apiResource: url(
       env.P10_API_RESOURCE,
-      "http://p10.localhost:3010/api",
+      "http://localhost:17010/api",
       "P10_API_RESOURCE",
     ),
     dataDirectory: localDataDirectory(env.P10_DATA_DIR),
@@ -194,10 +194,10 @@ export function loadAgentConfig(
       "P10_AGENT_PORT",
     ),
     controlSecret: secret(env, "P10_CONTROL_SECRET"),
-    issuer: url(env.P10_ISSUER, "http://idp.localhost:4000", "P10_ISSUER"),
+    issuer: url(env.P10_ISSUER, "http://localhost:18010", "P10_ISSUER"),
     apiResource: url(
       env.P10_API_RESOURCE,
-      "http://p10.localhost:3010/api",
+      "http://localhost:17010/api",
       "P10_API_RESOURCE",
     ),
     warehouseApiUrl: privateUrl(

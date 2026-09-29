@@ -24,33 +24,39 @@ Maya / Noah / Lena / Imani ── sign in ──→ Tutorial IdP
 ## Prerequisites
 
 - Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x, pnpm 10, PostgreSQL, and the shared tutorial identity provider.
-- On Windows, run `node ../shared/host check`; if it fails, run
-  `node ../shared/host install` from an elevated terminal.
+- Node.js 24.21 or newer within 24.x, pnpm 10, PostgreSQL, and the project-local tutorial identity provider.
 
 ## Run
+
+Start the application and its own IdP:
 
 ```bash
 docker compose up --build
 ```
 
-Open <http://p11.localhost:3011>. For native development, `pnpm run setup`
-starts PostgreSQL through Compose. Prepare and start the shared identity
-provider first:
+Open <http://localhost:17011>. The issuer is <http://localhost:18011>. Stop the stack with `Ctrl+C`, then `docker compose down`.
+
+For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider run setup
-pnpm --dir ../shared/identity-provider dev
-```
-
-Then, in another terminal, prepare and start P11:
-
-```bash
+pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
 pnpm run setup
 pnpm dev
 ```
+
+`pnpm dev` starts this project’s IdP and application together.
+
+Setup starts PostgreSQL through Compose for the default database URL,
+`postgresql://p11:p11@127.0.0.1:5435/p11`. For a Docker-free stack, create a local
+PostgreSQL database and set a different `P11_DATABASE_URL` in `.env` before setup.
+A shell value takes precedence over `.env`; setup saves the selected URL for
+later commands. Custom databases are used directly, without starting Docker.
+
+For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
+
+Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
 
 ## Exercise
 
@@ -83,5 +89,4 @@ will decide from current tenant, membership, project, invitation, and approval.
 pnpm check
 pnpm test:e2e
 pnpm audit --audit-level low
-docker compose config
 ```

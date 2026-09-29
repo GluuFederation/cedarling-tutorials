@@ -17,12 +17,6 @@ try {
   await runDevStack({
     prepare: [
       {
-        name: "shared identity-provider setup",
-        command: pnpm,
-        args: ["run", "setup"],
-        cwd: identityRoot,
-      },
-      {
         name: "shared identity-provider build",
         command: pnpm,
         args: ["run", "build"],
@@ -47,13 +41,13 @@ try {
 
 async function services() {
   const configured = parseEnv(await readFile(resolve(root, ".env"), "utf8"));
-  const issuer = configured.P12_ISSUER ?? "http://idp.localhost:4000";
-  const idpPort = new URL(issuer).port || "4000";
+  const issuer = configured.P12_ISSUER ?? "http://localhost:18012";
+  const idpPort = new URL(issuer).port || "18012";
   return [
     {
-      name: "shared identity provider",
+      name: "P12 identity provider",
       command: node,
-      args: ["dist/main.js"],
+      args: [`--env-file=${resolve(root, ".local/idp/.env")}`, "dist/main.js"],
       cwd: identityRoot,
       health: {
         url: `http://127.0.0.1:${idpPort}/.well-known/openid-configuration`,
@@ -66,7 +60,7 @@ async function services() {
       args: ["--watch", "--env-file=.env", "src/server/main.ts"],
       cwd: root,
       health: {
-        url: `http://127.0.0.1:${configured.P12_PORT ?? "3012"}/health`,
+        url: `http://127.0.0.1:${configured.P12_PORT ?? "17012"}/health`,
         validate: serviceHealth("p12-hr-access-governance"),
       },
     },

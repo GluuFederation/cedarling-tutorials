@@ -14,10 +14,10 @@ async function setup(
 ) {
   const config: AppConfig = {
     host: "127.0.0.1",
-    port: 3013,
-    baseUrl: "http://127.0.0.1:3013",
-    issuer: "http://idp.localhost:4000",
-    apiResource: "http://127.0.0.1:3013/api",
+    port: 17013,
+    baseUrl: "http://127.0.0.1:17013",
+    issuer: "http://localhost:18013",
+    apiResource: "http://127.0.0.1:17013/api",
     clientId: "p13",
     clientSecret: "test-only-secret-that-is-long-enough",
     dataDir: ".local/test-unused",
@@ -208,7 +208,7 @@ test("input and cross-origin failures preserve the draft and return sanitized no
     {
       body: JSON.stringify(input),
       status: 403,
-      headers: { ...headers, Origin: "http://attacker.localhost:3013" },
+      headers: { ...headers, Origin: "http://attacker.localhost:17013" },
     },
     {
       body: JSON.stringify(input),

@@ -31,7 +31,7 @@ function localUrl(value: string, name: string): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const port = Number(env.P6_PORT ?? "3006");
+  const port = Number(env.P6_PORT ?? "17006");
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error("P6_PORT must be a valid TCP port");
   }
@@ -40,7 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error("P6_HOST must be a local or container bind address");
   }
   const baseUrl = localUrl(
-    env.P6_BASE_URL ?? "http://p6.localhost:3006",
+    env.P6_BASE_URL ?? "http://localhost:17006",
     "P6_BASE_URL",
   );
   if (Number(new URL(baseUrl).port || 80) !== port) {
@@ -69,7 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host,
     port,
     baseUrl,
-    issuer: localUrl(env.P6_ISSUER ?? "http://idp.localhost:4000", "P6_ISSUER"),
+    issuer: localUrl(env.P6_ISSUER ?? "http://localhost:18006", "P6_ISSUER"),
     apiResource: localUrl(
       env.P6_API_RESOURCE ?? `${baseUrl}/api`,
       "P6_API_RESOURCE",

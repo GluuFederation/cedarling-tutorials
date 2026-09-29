@@ -32,14 +32,14 @@ function localUrl(value: string, name: string): string {
   return url.href.replace(/\/$/, "");
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const port = Number(env.P12_PORT ?? "3012");
+  const port = Number(env.P12_PORT ?? "17012");
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid P12_PORT");
   const host = env.P12_HOST ?? "127.0.0.1";
   if (!["127.0.0.1", "0.0.0.0"].includes(host))
     throw new Error("P12_HOST must use a local or container bind address");
   const baseUrl = localUrl(
-    env.P12_BASE_URL ?? "http://p12.localhost:3012",
+    env.P12_BASE_URL ?? "http://localhost:17012",
     "P12_BASE_URL",
   );
   const origin = new URL(baseUrl);
@@ -52,7 +52,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       "P12_BASE_URL must be a loopback HTTP origin matching P12_PORT",
     );
   const issuer = localUrl(
-    env.P12_ISSUER ?? "http://idp.localhost:4000",
+    env.P12_ISSUER ?? "http://localhost:18012",
     "P12_ISSUER",
   );
   const issuerUrl = new URL(issuer);

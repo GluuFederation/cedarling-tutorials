@@ -8,8 +8,8 @@ import {
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createAuthenticator } from "../src/auth/authenticator.js";
 
-const issuer = "http://idp.localhost:4000";
-const audience = "http://p2.localhost:3000/api";
+const issuer = "http://localhost:18002";
+const audience = "http://localhost:17002/api";
 let privateKey: CryptoKey;
 let keySet: ReturnType<typeof createLocalJWKSet>;
 

@@ -5,18 +5,18 @@ describe("P3 MCP startup preflight", () => {
   it("fails before Device Flow with an actionable message when the server is absent", async () => {
     await expect(
       requireMcpServer(
-        "http://p3.localhost:3003/mcp",
+        "http://localhost:17003/mcp",
         vi.fn().mockRejectedValue(new TypeError("fetch failed")),
       ),
     ).rejects.toThrow(
-      "P3 MCP server is unavailable at http://p3.localhost:3003. Start it with pnpm dev",
+      "P3 MCP server is unavailable at http://localhost:17003. Start it with pnpm dev",
     );
   });
 
   it("accepts only the expected JSON health response", async () => {
     await expect(
       requireMcpServer(
-        "http://p3.localhost:3003/mcp",
+        "http://localhost:17003/mcp",
         vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -30,7 +30,7 @@ describe("P3 MCP startup preflight", () => {
     ).resolves.toBeUndefined();
     await expect(
       requireMcpServer(
-        "http://p3.localhost:3003/mcp",
+        "http://localhost:17003/mcp",
         vi.fn().mockResolvedValue(new Response("ok")),
       ),
     ).rejects.toThrow("does not expose the expected P3 health endpoint");

@@ -10,7 +10,7 @@ function database() {
   directories.push(directory);
   return new AppDatabase(
     path.join(directory, "test.sqlite"),
-    "http://idp.localhost:4000",
+    "http://localhost:18001",
   );
 }
 afterEach(() => {

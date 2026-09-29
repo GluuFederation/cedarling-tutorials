@@ -11,7 +11,7 @@ async function signIn(
   await page.getByRole("textbox", { name: "and password" }).fill("tutorial");
   await page.getByRole("button", { name: "Sign-in" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/p6\.localhost:3006/u);
+  await expect(page).toHaveURL(/localhost:17006/u);
 }
 
 async function signInProfile(

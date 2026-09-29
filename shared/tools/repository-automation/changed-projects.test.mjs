@@ -21,12 +21,12 @@ test("selects only the changed project", () => {
   });
 });
 
-test("keeps native-only projects out of the Compose matrix", () => {
+test("selects P3 Compose without a separate shared-provider stack", () => {
   assert.deepEqual(
     selectProjects(["p3-mcp-capability-governance/src/app.ts"]),
     {
       projects: ["p3-mcp-capability-governance"],
-      compose: [],
+      compose: ["p3-mcp-capability-governance"],
     },
   );
   assert.equal(composeProjects.has("shared/identity-provider"), false);

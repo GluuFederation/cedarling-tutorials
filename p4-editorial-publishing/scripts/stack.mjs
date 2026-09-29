@@ -48,14 +48,14 @@ export async function runStack(mode) {
 
 async function services(development) {
   const configured = parseEnv(await readFile(resolve(root, ".env"), "utf8"));
-  const issuer = configured.P4_ISSUER ?? "http://idp.localhost:4000";
-  const idpPort = new URL(issuer).port || "4000";
-  const appPort = configured.P4_PORT ?? "3004";
+  const issuer = configured.P4_ISSUER ?? "http://localhost:18004";
+  const idpPort = new URL(issuer).port || "18004";
+  const appPort = configured.P4_PORT ?? "17004";
   return [
     {
-      name: "shared identity provider",
+      name: "P4 identity provider",
       command: process.execPath,
-      args: ["dist/main.js"],
+      args: [`--env-file=${resolve(root, ".local/idp/.env")}`, "dist/main.js"],
       cwd: identityRoot,
       health: {
         url: `http://127.0.0.1:${idpPort}/.well-known/openid-configuration`,

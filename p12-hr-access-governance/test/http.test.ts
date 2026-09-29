@@ -37,7 +37,7 @@ async function start(
     .run(hash(raw), "lin", csrf, Date.now() + 60000);
   const oidc = {
     async authorizationUrl() {
-      return new URL("http://idp.localhost:4000/auth");
+      return new URL("http://localhost:18012/auth");
     },
     async exchange() {
       return { subject: "lin", expiresAt: Date.now() + 60000 };

@@ -1,7 +1,7 @@
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseEnv } from "node:util";
 import {
   mergeProjectEnvironment,
   readProjectEnvironment,
@@ -12,17 +12,11 @@ import { AppDatabase, databasePath } from "../src/server/database.ts";
 import { SafeStorage } from "../src/server/storage.ts";
 
 const target = resolve(".env");
-const identityTarget = resolve("../shared/identity-provider/.env");
-if (!existsSync(identityTarget))
-  throw new Error(
-    "Run pnpm --dir ../shared/identity-provider run setup before P8 setup",
-  );
-const identity = parseEnv(readFileSync(identityTarget, "utf8"));
+const identity = ensureProjectIdentity("P8");
 
 function required(name: string): string {
   const value = identity[name]?.trim();
-  if (!value)
-    throw new Error(`${name} is missing from shared/identity-provider/.env`);
+  if (!value) throw new Error(`${name} is missing from .local/idp/.env`);
   return value;
 }
 const url = (name: string): string => required(name).replace(/\/$/u, "");
@@ -44,7 +38,7 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P8_HOST: "127.0.0.1",
-    P8_PORT: "3008",
+    P8_PORT: "17008",
     P8_DATA_ROOT: ".local/p8-data",
     P8_SESSION_ENCRYPTION_KEY: randomBytes(32).toString("base64url"),
   },

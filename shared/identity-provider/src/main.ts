@@ -1,9 +1,6 @@
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
-import { loadTutorialEnvironment } from "./environment.js";
 import { createProvider } from "./provider.js";
-
-loadTutorialEnvironment();
 
 const config = loadConfig();
 const provider = await createProvider(config);

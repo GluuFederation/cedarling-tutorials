@@ -46,7 +46,7 @@ export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): AppConfig {
-  const port = Number.parseInt(env.P9_PORT ?? "3009", 10);
+  const port = Number.parseInt(env.P9_PORT ?? "17009", 10);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error("P9_PORT must be a valid TCP port");
   }
@@ -73,13 +73,13 @@ export function loadConfig(
     host: env.P9_HOST?.trim() || "127.0.0.1",
     port,
     baseUrl: httpUrl(
-      env.P9_BASE_URL ?? "http://p9.localhost:3009",
+      env.P9_BASE_URL ?? "http://localhost:17009",
       "P9_BASE_URL",
     ),
     dataRoot,
-    issuer: httpUrl(env.P9_ISSUER ?? "http://idp.localhost:4000", "P9_ISSUER"),
+    issuer: httpUrl(env.P9_ISSUER ?? "http://localhost:18009", "P9_ISSUER"),
     apiResource: httpUrl(
-      env.P9_API_RESOURCE ?? "http://p9.localhost:3009/api",
+      env.P9_API_RESOURCE ?? "http://localhost:17009/api",
       "P9_API_RESOURCE",
     ),
     clientId: env.P9_CLIENT_ID?.trim() || "p9-cedarrealtime",

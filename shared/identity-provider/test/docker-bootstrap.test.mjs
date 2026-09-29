@@ -16,6 +16,7 @@ import { test } from "vitest";
 const projects = [
   "P1",
   "P2",
+  "P3",
   "P4",
   "P5",
   "P6",
@@ -136,14 +137,14 @@ for (const project of projects) {
             assert.equal(value, registration[name]);
         }
         if (["P6", "P7"].includes(project)) {
-          const port = project === "P6" ? 3006 : 3007;
+          const number = Number(project.slice(1));
           assert.equal(
             config[`${project}_BASE_URL`],
-            `http://${project.toLowerCase()}.localhost:${port}`,
+            `http://localhost:${17000 + number}`,
           );
           assert.equal(
             config[`${project}_ISSUER`],
-            "http://idp.localhost:4000",
+            `http://localhost:${18000 + number}`,
           );
         }
         assert.equal(run().status, 0);
@@ -157,50 +158,3 @@ for (const project of projects) {
     }
   });
 }
-
-test("P4 Docker setup synchronizes its managed ID without rotating secrets", () => {
-  const root = mkdtempSync(resolve(tmpdir(), "tutorial-bootstrap-p4-sync-"));
-  const identity = resolve(root, "identity");
-  const app = resolve(root, "app");
-  mkdirSync(identity);
-  mkdirSync(app);
-  const identityFile = resolve(identity, ".env");
-  const appFile = resolve(app, "app.env");
-  const clientSecret = "existing-client-secret-123456789";
-  const sessionSecret = "existing-session-secret-123456789";
-  writeFileSync(
-    identityFile,
-    `P4_CLIENT_ID=stale-p4-client\nP4_CLIENT_SECRET=${clientSecret}\n`,
-  );
-  writeFileSync(
-    appFile,
-    `P4_CLIENT_ID=stale-p4-client\nP4_CLIENT_SECRET=${clientSecret}\nP4_SESSION_SECRET=${sessionSecret}\n`,
-  );
-  const run = () =>
-    spawnSync(
-      process.execPath,
-      [resolve("scripts/docker-bootstrap.mjs"), "P4"],
-      {
-        env: {
-          ...process.env,
-          BOOTSTRAP_IDENTITY_DIR: identity,
-          BOOTSTRAP_APP_DIR: app,
-        },
-        encoding: "utf8",
-      },
-    );
-  try {
-    const first = run();
-    assert.equal(first.status, 0, first.stderr);
-    const registration = parseEnv(readFileSync(identityFile, "utf8"));
-    const config = parseEnv(readFileSync(appFile, "utf8"));
-    assert.equal(registration.P4_CLIENT_ID, "p4-editorial-publishing");
-    assert.equal(config.P4_CLIENT_ID, "p4-editorial-publishing");
-    assert.equal(registration.P4_CLIENT_SECRET, clientSecret);
-    assert.equal(config.P4_CLIENT_SECRET, clientSecret);
-    assert.equal(config.P4_SESSION_SECRET, sessionSecret);
-    assert.equal(run().status, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});

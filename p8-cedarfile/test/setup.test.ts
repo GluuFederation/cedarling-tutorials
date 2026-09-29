@@ -25,17 +25,17 @@ function fixture() {
   const root = mkdtempSync(resolve(tmpdir(), "p8-setup-"));
   temporaryRoots.push(root);
   const project = resolve(root, "p8-cedarfile");
-  const identity = resolve(root, "shared/identity-provider");
+  const identity = resolve(project, ".local/idp");
   mkdirSync(project, { recursive: true });
   mkdirSync(identity, { recursive: true });
   writeFileSync(
     resolve(identity, ".env"),
-    `IDP_ISSUER=http://idp.localhost:4000
+    `IDP_ISSUER=http://localhost:18008
 P8_CLIENT_ID=p8-cedarfile
 P8_CLIENT_SECRET=${"p8".repeat(16)}
-P8_API_RESOURCE=http://p8.localhost:3008/api
-P8_REDIRECT_URI=http://p8.localhost:3008/auth/callback
-P8_POST_LOGOUT_REDIRECT_URI=http://p8.localhost:3008
+P8_API_RESOURCE=http://localhost:17008/api
+P8_REDIRECT_URI=http://localhost:17008/auth/callback
+P8_POST_LOGOUT_REDIRECT_URI=http://localhost:17008
 `,
     { mode: 0o600 },
   );

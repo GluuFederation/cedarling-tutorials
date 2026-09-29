@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { parseEnv } from "node:util";
 import { type Config, loadConfig } from "../src/server/config.ts";
 import { assertDirectoryPath } from "../src/server/files.ts";
 import type { Grant, Result } from "../src/shared/contracts.ts";
@@ -23,22 +22,18 @@ async function freePort(): Promise<number> {
   );
   return address.port;
 }
-export async function scenarioEnvironment(tutorialHostnames = false) {
+export async function scenarioEnvironment() {
   const appPort = await freePort();
   let idpPort = await freePort();
   while (idpPort === appPort) idpPort = await freePort();
   assertDirectoryPath(resolve(".local"));
   mkdirSync(resolve(".local"), { recursive: true, mode: 0o700 });
   const directory = mkdtempSync(resolve(".local/scenario-"));
-  const baseUrl = `http://${tutorialHostnames ? "p12.localhost" : "127.0.0.1"}:${appPort}`;
-  const issuer = `http://${tutorialHostnames ? "idp.localhost" : "127.0.0.1"}:${idpPort}`;
-  const shared = parseEnv(
-    readFileSync(resolve("../shared/identity-provider/.env"), "utf8"),
-  );
+  const baseUrl = `http://localhost:${appPort}`;
+  const issuer = `http://localhost:${idpPort}`;
   const env = {
     ...process.env,
-    ...shared,
-    IDP_PROFILE: "default",
+    IDP_PROJECT: "P12",
     IDP_HOST: "127.0.0.1",
     IDP_PORT: String(idpPort),
     IDP_ISSUER: issuer,

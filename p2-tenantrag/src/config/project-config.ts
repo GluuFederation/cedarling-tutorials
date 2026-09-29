@@ -60,14 +60,14 @@ export function loadConfig(
 
   return {
     host: env.P2_HOST?.trim() || "127.0.0.1",
-    port: integer(env.P2_PORT, 3000, "P2_PORT", 1, 65_535),
+    port: integer(env.P2_PORT, 17002, "P2_PORT", 1, 65_535),
     baseUrl: httpUrl(
-      env.P2_BASE_URL ?? "http://p2.localhost:3000",
+      env.P2_BASE_URL ?? "http://localhost:17002",
       "P2_BASE_URL",
     ),
-    issuer: httpUrl(env.P2_ISSUER ?? "http://idp.localhost:4000", "P2_ISSUER"),
+    issuer: httpUrl(env.P2_ISSUER ?? "http://localhost:18002", "P2_ISSUER"),
     apiResource: httpUrl(
-      env.P2_API_RESOURCE ?? "http://p2.localhost:3000/api",
+      env.P2_API_RESOURCE ?? "http://localhost:17002/api",
       "P2_API_RESOURCE",
     ),
     clientId: env.P2_CLIENT_ID?.trim() || "p2-tenantrag-cli",

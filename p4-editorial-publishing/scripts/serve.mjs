@@ -9,7 +9,7 @@ const child = spawn(
     "--hostname",
     process.env.P4_HOST ?? "127.0.0.1",
     "--port",
-    process.env.P4_PORT ?? "3004",
+    process.env.P4_PORT ?? "17004",
   ],
   { stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } },
 );

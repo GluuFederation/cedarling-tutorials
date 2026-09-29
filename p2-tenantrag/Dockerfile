@@ -17,5 +17,5 @@ COPY --from=build /workspace/p2-tenantrag/dist ./dist
 COPY --from=build /workspace/p2-tenantrag/fixtures ./fixtures
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node
-EXPOSE 3000
+EXPOSE 17002
 CMD ["node", "dist/src/main.js"]

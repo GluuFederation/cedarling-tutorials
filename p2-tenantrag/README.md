@@ -27,34 +27,37 @@ Ada / Leo / Mallory ── Device Flow ──→ Tutorial IdP
 
 - Docker Desktop or Docker Engine with Compose, or Node.js 24.21 or newer within 24.x and pnpm 10.
 - Voyage AI and OpenRouter API keys.
-- The shared tutorial identity provider when running natively.
-- On Windows, run `node ../shared/host check`; if it fails, run
-  `node ../shared/host install` from an elevated terminal.
+- This project's tutorial identity provider, started below for native use.
 
 ## Run
 
-Set `P2_VOYAGE_API_KEY` and `P2_OPENROUTER_API_KEY` in `.env`, then start
-the complete stack:
+Set `P2_VOYAGE_API_KEY` and `P2_OPENROUTER_API_KEY` in `.env` before preparing the corpus or starting Docker.
+
+Start the application and its own IdP:
 
 ```bash
 docker compose up --build
 ```
 
-For native development, prepare and start the shared identity provider first:
+API: <http://localhost:17002>. The issuer is <http://localhost:18002>. Stop the stack with `Ctrl+C`, then `docker compose down`.
+
+For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider run setup
-pnpm --dir ../shared/identity-provider dev
-```
-
-Then, in another terminal, prepare and start P2:
-
-```bash
+pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
 pnpm run setup
+node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js
+```
+
+Keep the IdP running. In another terminal in this project directory:
+
+```bash
 pnpm dev
 ```
+
+For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
 
 ## Exercise
 
@@ -85,5 +88,4 @@ will authorize both corpus search and each document before text is loaded.
 ```bash
 pnpm check
 pnpm audit --audit-level low
-docker compose config
 ```

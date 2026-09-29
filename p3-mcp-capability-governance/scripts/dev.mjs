@@ -17,12 +17,6 @@ try {
   await runDevStack({
     prepare: [
       {
-        name: "shared identity-provider setup",
-        command: pnpm,
-        args: ["run", "setup"],
-        cwd: identityRoot,
-      },
-      {
         name: "shared identity-provider build",
         command: pnpm,
         args: ["run", "build"],
@@ -41,19 +35,15 @@ try {
 }
 
 async function services() {
-  const shared = parseEnv(
-    await readFile(resolve(identityRoot, ".env"), "utf8"),
-  );
   const app = parseEnv(await readFile(resolve(root, ".env"), "utf8"));
-  const issuer =
-    app.P3_ISSUER ?? shared.IDP_ISSUER ?? "http://idp.localhost:4000";
-  const idpPort = new URL(issuer).port || "4000";
-  const appPort = app.P3_PORT ?? "3003";
+  const issuer = app.P3_ISSUER ?? "http://localhost:18003";
+  const idpPort = new URL(issuer).port || "18003";
+  const appPort = app.P3_PORT ?? "17003";
   return [
     {
-      name: "shared identity provider",
+      name: "P3 identity provider",
       command: node,
-      args: ["dist/main.js"],
+      args: [`--env-file=${resolve(root, ".local/idp/.env")}`, "dist/main.js"],
       cwd: identityRoot,
       health: {
         url: `http://127.0.0.1:${idpPort}/.well-known/openid-configuration`,

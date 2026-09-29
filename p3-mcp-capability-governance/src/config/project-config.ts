@@ -50,11 +50,11 @@ function integer(
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): P3Config {
   return {
     host: env.P3_HOST?.trim() || "127.0.0.1",
-    port: integer(env.P3_PORT, 3003, "P3_PORT", 1, 65_535),
-    issuer: httpUrl(env.P3_ISSUER ?? "http://idp.localhost:4000", "P3_ISSUER"),
+    port: integer(env.P3_PORT, 17003, "P3_PORT", 1, 65_535),
+    issuer: httpUrl(env.P3_ISSUER ?? "http://localhost:18003", "P3_ISSUER"),
     clientId: env.P3_CLIENT_ID?.trim() || "p3-mcp-capability-governance-cli",
     mcpResource: httpUrl(
-      env.P3_MCP_RESOURCE ?? "http://p3.localhost:3003/mcp",
+      env.P3_MCP_RESOURCE ?? "http://localhost:17003/mcp",
       "P3_MCP_RESOURCE",
     ),
     ...(env.P3_OPENROUTER_API_KEY?.trim()

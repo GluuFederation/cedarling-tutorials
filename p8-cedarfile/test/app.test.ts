@@ -78,7 +78,7 @@ function fakeOidc(subject: string): OidcRuntime {
   return {
     authorizationUrl: async (transaction, loginHint) =>
       new URL(
-        `http://idp.localhost:4000/auth?login_hint=${loginHint}&state=${transaction.state}`,
+        `http://localhost:18008/auth?login_hint=${loginHint}&state=${transaction.state}`,
       ),
     exchange: async () => ({
       issuer: testTokens.issuer,

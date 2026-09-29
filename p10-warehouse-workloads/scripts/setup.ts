@@ -1,28 +1,20 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseEnv } from "node:util";
 import {
   mergeProjectEnvironment,
   readProjectEnvironment,
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { loadApiConfig, prepareDataDirectory } from "../src/server/config.ts";
 import { WarehouseDatabase } from "../src/server/database.ts";
 import { WORKLOADS, workloadEnvironmentPrefix } from "../src/shared/catalog.ts";
 
 const target = resolve(".env");
-const identityTarget = resolve("../shared/identity-provider/.env");
-if (!existsSync(identityTarget)) {
-  throw new Error(
-    "Run pnpm --dir ../shared/identity-provider run setup before P10 setup",
-  );
-}
-const identity = parseEnv(readFileSync(identityTarget, "utf8"));
+const identity = ensureProjectIdentity("P10");
 const required = (name: string): string => {
   const value = identity[name]?.trim();
-  if (!value)
-    throw new Error(`${name} is missing from shared/identity-provider/.env`);
+  if (!value) throw new Error(`${name} is missing from .local/idp/.env`);
   return value;
 };
 const current = readProjectEnvironment(target);
@@ -46,8 +38,8 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P10_HOST: "127.0.0.1",
-    P10_PORT: "3010",
-    P10_BASE_URL: "http://p10.localhost:3010",
+    P10_PORT: "17010",
+    P10_BASE_URL: "http://localhost:17010",
     P10_API_HOST: "127.0.0.1",
     P10_API_PORT: "3110",
     P10_DATA_DIR: ".local/p10-data",

@@ -12,7 +12,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "line",
   use: {
-    baseURL: "http://p11.localhost:3011",
+    baseURL: "http://localhost:17011",
     browserName: "chromium",
     trace: "retain-on-failure",
   },
@@ -22,7 +22,7 @@ export default defineConfig({
         webServer: {
           command: "pnpm dev -- --reset",
           gracefulShutdown: { signal: "SIGINT", timeout: 10_000 },
-          url: "http://127.0.0.1:3011/health",
+          url: "http://127.0.0.1:17011/health",
           reuseExistingServer: false,
           timeout: 120_000,
         },

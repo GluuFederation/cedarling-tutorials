@@ -7,10 +7,10 @@ import { AppDatabase } from "../src/server/database.ts";
 export function testConfig(directory: string): Config {
   return {
     host: "127.0.0.1",
-    port: 3014,
-    baseUrl: "http://p14.localhost:3014",
-    issuer: "http://idp.localhost:4000",
-    apiResource: "http://p14.localhost:3014/api",
+    port: 17014,
+    baseUrl: "http://localhost:17014",
+    issuer: "http://localhost:18014",
+    apiResource: "http://localhost:17014/api",
     clientId: "p14-ai-scheduling-assistant",
     clientSecret: "s".repeat(32),
     sessionEncryptionKey: Buffer.alloc(32, 1),

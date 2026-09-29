@@ -6,8 +6,8 @@ import {
 } from "../src/server/config.ts";
 
 const common = {
-  P10_ISSUER: "http://idp.localhost:4000",
-  P10_API_RESOURCE: "http://p10.localhost:3010/api",
+  P10_ISSUER: "http://localhost:18010",
+  P10_API_RESOURCE: "http://localhost:17010/api",
   P10_CONTROL_SECRET: "control-secret-that-is-at-least-32-characters",
 };
 

@@ -17,5 +17,5 @@ COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/dist ./dist
 RUN mkdir -p /data && chown node:node /data
 USER node
-EXPOSE 3009
+EXPOSE 17009
 CMD ["node", "dist/src/server/main.js"]

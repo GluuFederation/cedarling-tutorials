@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { authorizeDevice, parsePersona } from "../src/auth/device-flow.js";
 
-const issuer = "http://idp.localhost:4000";
+const issuer = "http://localhost:18002";
 
 describe("P2 Device Flow helper", () => {
   it("announces verification and handles pending and slow-down polling", async () => {
@@ -37,7 +37,7 @@ describe("P2 Device Flow helper", () => {
       authorizeDevice({
         issuer,
         clientId: "p2-tenantrag-cli",
-        resource: "http://p2.localhost:3000/api",
+        resource: "http://localhost:17002/api",
         persona: "mallory",
         fetch: request,
         sleep,
@@ -53,7 +53,7 @@ describe("P2 Device Flow helper", () => {
     const deviceBody = request.mock.calls[1]?.[1]?.body;
     const parameters = new URLSearchParams(String(deviceBody));
     expect(parameters.get("login_hint")).toBe("mallory");
-    expect(parameters.get("resource")).toBe("http://p2.localhost:3000/api");
+    expect(parameters.get("resource")).toBe("http://localhost:17002/api");
     expect(parameters.get("scope")?.split(" ")).toEqual([
       "openid",
       "profile",
@@ -82,7 +82,7 @@ describe("P2 Device Flow helper", () => {
       authorizeDevice({
         issuer,
         clientId: "p2-tenantrag-cli",
-        resource: "http://p2.localhost:3000/api",
+        resource: "http://localhost:17002/api",
         persona: "ada",
         fetch: vi
           .fn<typeof fetch>()
@@ -123,7 +123,7 @@ describe("P2 Device Flow helper", () => {
       authorizeDevice({
         issuer,
         clientId: "p2-tenantrag-cli",
-        resource: "http://p2.localhost:3000/api",
+        resource: "http://localhost:17002/api",
         persona: "ada",
         fetch: vi
           .fn<typeof fetch>()
@@ -139,7 +139,7 @@ describe("P2 Device Flow helper", () => {
       authorizeDevice({
         issuer,
         clientId: "p2-tenantrag-cli",
-        resource: "http://p2.localhost:3000/api",
+        resource: "http://localhost:17002/api",
         persona: "ada",
         fetch: vi
           .fn<typeof fetch>()

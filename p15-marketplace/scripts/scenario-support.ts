@@ -1,16 +1,9 @@
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { basename, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { parseEnv } from "node:util";
 import { prepareData } from "../src/server/prepare-data.ts";
 import { randomToken } from "../src/server/security.ts";
 import type {
@@ -43,10 +36,8 @@ export async function isolatedState() {
   prepareData(directory);
   const baseUrl = `http://127.0.0.1:${port}`;
   const issuer = `http://127.0.0.1:${idpPort}`;
-  const shared = parseEnv(
-    readFileSync(resolve("../shared/identity-provider/.env"), "utf8"),
-  );
   const values = {
+    IDP_PROJECT: "P15",
     P15_BASE_URL: baseUrl,
     P15_PORT: String(port),
     P15_HOST: "127.0.0.1",
@@ -74,7 +65,7 @@ export async function isolatedState() {
   return {
     baseUrl,
     issuer,
-    env: { ...process.env, ...shared, ...values },
+    env: { ...process.env, ...values },
     envFile,
     project: `p15-${basename(directory).toLowerCase()}`,
     cleanup: () => {

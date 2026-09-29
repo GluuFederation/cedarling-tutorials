@@ -1,6 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { resolve } from "node:path";
-import { parseEnv } from "node:util";
 
 import {
   mergeProjectEnvironment,
@@ -12,18 +11,10 @@ import { loadProjectEnvironment } from "../src/config/environment.js";
 import { setupProject } from "../src/rag/setup.js";
 
 const projectEnvironment = resolve(".env");
-const identityEnvironment = resolve("../shared/identity-provider/.env");
-if (!existsSync(identityEnvironment)) {
-  throw new Error(
-    "Shared identity-provider/.env is required; run its setup first",
-  );
-}
-
-const identity = parseEnv(readFileSync(identityEnvironment, "utf8"));
+const identity = ensureProjectIdentity("P2");
 const requiredIdentityValue = (name: string): string => {
   const value = identity[name]?.trim();
-  if (!value)
-    throw new Error(`Shared identity-provider/.env is missing ${name}`);
+  if (!value) throw new Error(`.local/idp/.env is missing ${name}`);
   return value;
 };
 const normalizedUrl = (value: string): string => value.replace(/\/$/, "");

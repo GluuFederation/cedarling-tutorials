@@ -24,17 +24,20 @@ function createWorkspace(): {
 } {
   const root = mkdtempSync(join(tmpdir(), "cedarling-p1-setup-"));
   const p1 = join(root, "p1-task-manager");
-  const identity = join(root, "shared/identity-provider");
+  const identity = join(p1, ".local/idp");
   mkdirSync(p1, { recursive: true });
   mkdirSync(identity, { recursive: true });
   writeFileSync(
     join(identity, ".env"),
-    `IDP_ISSUER=http://idp.localhost:4000
+    `IDP_PROJECT=P1
+IDP_HOST=127.0.0.1
+IDP_PORT=18001
+IDP_ISSUER=http://localhost:18001
 P1_CLIENT_ID=p1-task-manager
 P1_CLIENT_SECRET=${"s".repeat(43)}
-P1_API_RESOURCE=http://p1.localhost:3000/api
-P1_REDIRECT_URI=http://p1.localhost:3000/auth/callback
-P1_POST_LOGOUT_REDIRECT_URI=http://p1.localhost:3000
+P1_API_RESOURCE=http://localhost:17001/api
+P1_REDIRECT_URI=http://localhost:17001/auth/callback
+P1_POST_LOGOUT_REDIRECT_URI=http://localhost:17001
 P4_CLIENT_SECRET=must-survive
 CUSTOM_SETTING=keep
 `,
@@ -58,7 +61,7 @@ afterEach(() => {
 });
 
 describe("P1 environment setup", () => {
-  test("copies the shared registration without changing another project", () => {
+  test("copies the project registration without changing another project", () => {
     const { p1, identity } = createWorkspace();
     const identityBefore = readFileSync(join(identity, ".env"), "utf8");
     const result = runSetup(p1);
@@ -77,7 +80,7 @@ describe("P1 environment setup", () => {
     expect(identityEnvironment.P1_API_RESOURCE).toBe(
       p1Environment.P1_API_RESOURCE,
     );
-    expect(p1Environment.P1_API_RESOURCE).toBe("http://p1.localhost:3000/api");
+    expect(p1Environment.P1_API_RESOURCE).toBe("http://localhost:17001/api");
     expect(identityEnvironment.IDP_INTERACTION_SECRET).toBeUndefined();
     expect(identityEnvironment.P1_SESSION_ENCRYPTION_KEY).toBeUndefined();
     expect(identityEnvironment.P4_CLIENT_SECRET).toBe("must-survive");
@@ -85,7 +88,7 @@ describe("P1 environment setup", () => {
     expect(readFileSync(join(identity, ".env"), "utf8")).toBe(identityBefore);
   });
 
-  test("synchronizes a regenerated shared client secret", () => {
+  test("synchronizes a regenerated project client secret", () => {
     const { p1, identity } = createWorkspace();
     expect(runSetup(p1).status).toBe(0);
     const identityPath = join(identity, ".env");

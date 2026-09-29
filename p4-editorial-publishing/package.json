@@ -17,7 +17,7 @@
     "lint": "biome check --formatter-enabled=false --error-on-warnings .",
     "preflight": "node scripts/preflight.mjs",
     "reset": "node --env-file=.env scripts/reset.ts",
-    "setup": "node ../shared/host check && node scripts/setup.ts",
+    "setup": "node scripts/setup.ts",
     "start": "node scripts/start.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",

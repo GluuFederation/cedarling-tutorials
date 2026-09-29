@@ -10,7 +10,7 @@ async function signIn(page: Page, persona: string): Promise<void> {
   await page.getByRole("textbox", { name: "and password" }).fill("tutorial");
   await page.getByRole("button", { name: "Sign-in" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/p11\.localhost:3011/u);
+  await expect(page).toHaveURL(/localhost:17011/u);
 }
 
 function revokeMayaFromAster(): void {

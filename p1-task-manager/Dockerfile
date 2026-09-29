@@ -14,5 +14,5 @@ COPY --from=build /workspace/p1-task-manager/node_modules ./node_modules
 COPY --from=build /workspace/p1-task-manager/dist ./dist
 RUN mkdir -p /app/.data && chown -R node:node /app/.data
 USER node
-EXPOSE 3000
+EXPOSE 17001
 CMD ["node", "dist/server/main.js"]

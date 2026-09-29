@@ -8,7 +8,7 @@ import type { OidcTokens } from "../src/server/oidc.ts";
 import { SessionStore } from "../src/server/session-store.ts";
 
 export const testTokens: OidcTokens = {
-  issuer: "http://idp.localhost:4000",
+  issuer: "http://localhost:18009",
   subject: "test",
   accessToken: "test-access-token",
   accessTokenExpiresAt: Date.now() + 600_000,
@@ -30,7 +30,7 @@ export function createHarness(
     baseUrl: "http://127.0.0.1",
     dataRoot: root,
     issuer: testTokens.issuer,
-    apiResource: "http://p9.localhost:3009/api",
+    apiResource: "http://localhost:17009/api",
     clientId: "p9-cedarrealtime",
     clientSecret: "test-secret-value-that-is-at-least-32-bytes",
     sessionEncryptionKey: Buffer.alloc(32, 9),

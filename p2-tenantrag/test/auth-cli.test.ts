@@ -4,9 +4,9 @@ import type { P2Config } from "../src/config/project-config.js";
 import type { DeviceVerification } from "../src/auth/device-flow.js";
 
 const config = {
-  issuer: "http://idp.localhost:4000",
+  issuer: "http://localhost:18002",
   clientId: "p2-tenantrag-cli",
-  apiResource: "http://p2.localhost:3000/api",
+  apiResource: "http://localhost:17002/api",
 } as P2Config;
 
 describe("P2 auth CLI", () => {
@@ -24,9 +24,9 @@ describe("P2 auth CLI", () => {
       }) => {
         options.onVerification({
           userCode: "ABCD-EFGH",
-          verificationUri: "http://idp.localhost:4000/device",
+          verificationUri: "http://localhost:18002/device",
           verificationUriComplete:
-            "http://idp.localhost:4000/device?user_code=ABCD-EFGH",
+            "http://localhost:18002/device?user_code=ABCD-EFGH",
         });
         return "short-lived-access-token";
       },

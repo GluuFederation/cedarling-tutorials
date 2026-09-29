@@ -29,7 +29,7 @@ export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): AppConfig {
-  const port = Number.parseInt(env.P1_PORT ?? "3000", 10);
+  const port = Number.parseInt(env.P1_PORT ?? "17001", 10);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535)
     throw new Error("P1_PORT must be a valid TCP port");
 
@@ -57,16 +57,16 @@ export function loadConfig(
     host: env.P1_HOST?.trim() || "127.0.0.1",
     port,
     baseUrl: normalizedUrl(
-      env.P1_BASE_URL ?? "http://p1.localhost:3000",
+      env.P1_BASE_URL ?? "http://localhost:17001",
       "P1_BASE_URL",
     ),
     dataDirectory,
     issuer: normalizedUrl(
-      env.P1_ISSUER ?? "http://idp.localhost:4000",
+      env.P1_ISSUER ?? "http://localhost:18001",
       "P1_ISSUER",
     ),
     apiResource: normalizedUrl(
-      env.P1_API_RESOURCE ?? "http://p1.localhost:3000/api",
+      env.P1_API_RESOURCE ?? "http://localhost:17001/api",
       "P1_API_RESOURCE",
     ),
     clientId: env.P1_CLIENT_ID?.trim() || "p1-task-manager",

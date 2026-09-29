@@ -19,11 +19,11 @@ import { createOidcRuntime, p1ApiScopes } from "../src/server/oidc.js";
 
 const config: AppConfig = {
   host: "127.0.0.1",
-  port: 3000,
-  baseUrl: "http://p1.localhost:3000",
+  port: 17001,
+  baseUrl: "http://localhost:17001",
   dataDirectory: "/tmp/p1-oidc-test",
-  issuer: "http://idp.localhost:4000",
-  apiResource: "http://p1.localhost:3000/api",
+  issuer: "http://localhost:18001",
+  apiResource: "http://localhost:17001/api",
   clientId: "p1-task-manager",
   clientSecret: "x".repeat(32),
   sessionEncryptionKey: Buffer.alloc(32),
@@ -54,7 +54,7 @@ describe("P1 OIDC runtime", () => {
     oidc.discovery.mockResolvedValue(client);
     oidc.calculatePKCECodeChallenge.mockResolvedValue("pkce-challenge");
     oidc.buildAuthorizationUrl.mockReturnValue(
-      new URL("http://idp.localhost:4000/auth"),
+      new URL("http://localhost:18001/auth"),
     );
     oidc.authorizationCodeGrant.mockResolvedValue(response());
   });
@@ -85,7 +85,7 @@ describe("P1 OIDC runtime", () => {
     );
 
     await runtime.exchange(
-      new URL("http://p1.localhost:3000/auth/callback?code=code"),
+      new URL("http://localhost:17001/auth/callback?code=code"),
       transaction,
     );
     expect(oidc.authorizationCodeGrant).toHaveBeenCalledWith(

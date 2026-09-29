@@ -24,11 +24,7 @@ export const tutorialProjects = [
 
 
 export const projects = [...tutorialProjects, "shared/identity-provider"];
-export const composeProjects = new Set(
-  tutorialProjects.filter(
-    (project) => project !== "p3-mcp-capability-governance",
-  ),
-);
+export const composeProjects = new Set(tutorialProjects);
 
 function changedFiles(environment = process.env) {
   const event = environment.EVENT_NAME;
