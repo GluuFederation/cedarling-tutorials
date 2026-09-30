@@ -53,7 +53,7 @@ export function proxy(request: NextRequest) {
   forwarded.set("Content-Security-Policy", policy);
   const response = NextResponse.next({ request: { headers: forwarded } });
   response.headers.set("Content-Security-Policy", policy);
-  response.headers.set("Referrer-Policy", "no-referrer");
+  response.headers.set("Referrer-Policy", "same-origin");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set(

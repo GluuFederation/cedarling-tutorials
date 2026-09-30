@@ -210,6 +210,28 @@ export class AppDatabase {
     authorId: string,
   ): void {
     const now = "2026-09-17T08:00:00.000Z";
+    this.insertArticle(
+      articleId,
+      tenantId,
+      revisionId,
+      title,
+      body,
+      state,
+      authorId,
+      now,
+    );
+  }
+
+  private insertArticle(
+    articleId: string,
+    tenantId: string,
+    revisionId: string,
+    title: string,
+    body: string,
+    state: RevisionState,
+    authorId: string,
+    now: string,
+  ): void {
     this.connection
       .prepare("INSERT INTO articles (id, tenant_id, version) VALUES (?, ?, 1)")
       .run(articleId, tenantId);
@@ -233,6 +255,30 @@ export class AppDatabase {
     this.connection
       .prepare("UPDATE articles SET current_revision_id = ? WHERE id = ?")
       .run(revisionId, articleId);
+  }
+
+  createArticle(input: {
+    tenantId: string;
+    authorId: string;
+    title: string;
+    body: string;
+  }): string {
+    return this.connection
+      .transaction(() => {
+        const articleId = `article-${randomUUID()}`;
+        this.insertArticle(
+          articleId,
+          input.tenantId,
+          `revision-${randomUUID()}`,
+          input.title,
+          input.body,
+          "draft",
+          input.authorId,
+          new Date().toISOString(),
+        );
+        return articleId;
+      })
+      .immediate();
   }
 
   principal(issuer: string, subject: string): Principal | undefined {

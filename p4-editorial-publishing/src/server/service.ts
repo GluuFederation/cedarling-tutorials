@@ -20,6 +20,10 @@ const draft = z.object({
     .transform((value) => value.normalize("NFC")),
   body: z.string().transform((value) => value.normalize("NFC")),
 });
+type RevisionCapability = Exclude<
+  Capability,
+  "article.create" | "article.read"
+>;
 
 export class EditorialService {
   private readonly database: AppDatabase;
@@ -28,6 +32,84 @@ export class EditorialService {
   constructor(database: AppDatabase, authorization: AuthorizationGateway) {
     this.database = database;
     this.authorization = authorization;
+  }
+
+  async canCreate(session: Session, requestId: string): Promise<boolean> {
+    return this.authorization.authorize({
+      requestId,
+      capability: "article.create",
+      actor: session.principal.subject,
+      resource: session.principal.tenantId,
+      facts: { tenantMatch: true },
+    });
+  }
+
+  /** UI guidance only; each mutation reloads facts and authorizes again. */
+  async availability(
+    session: Session,
+    article: ArticleView,
+    requestId: string,
+  ) {
+    const current = article.revision.id === article.currentRevisionId;
+    const preview = (capability: RevisionCapability) =>
+      this.decideAction(
+        session,
+        requestId,
+        capability,
+        article,
+        article.version,
+      );
+    return {
+      edit:
+        current &&
+        (article.revision.state === "draft" || article.revisions.length < 20) &&
+        (await preview("revision.edit")),
+      submit:
+        current &&
+        article.revision.state === "draft" &&
+        (await preview("revision.submit")),
+      approve:
+        current &&
+        article.revision.state === "submitted" &&
+        (await preview("revision.approve")),
+      reject:
+        current &&
+        article.revision.state === "submitted" &&
+        (await preview("revision.reject")),
+      publish:
+        current &&
+        ["submitted", "approved"].includes(article.revision.state) &&
+        (await preview("publication.publish")),
+    };
+  }
+
+  async create(
+    session: Session,
+    form: FormData,
+    requestId: string,
+  ): Promise<string> {
+    const content = draft.safeParse({
+      title: form.get("title"),
+      body: form.get("body"),
+    });
+    if (
+      !content.success ||
+      !content.data.body.trim() ||
+      Buffer.byteLength(content.data.body, "utf8") > 32_768
+    )
+      throw badRequest("Title or body is outside the tutorial bounds");
+    await this.allow(
+      session,
+      requestId,
+      "article.create",
+      session.principal.tenantId,
+      { tenantMatch: true },
+    );
+    return this.database.createArticle({
+      ...content.data,
+      tenantId: session.principal.tenantId,
+      authorId: session.principal.id,
+    });
   }
 
   async list(session: Session, requestId: string): Promise<ArticleSummary[]> {
@@ -105,11 +187,13 @@ export class EditorialService {
       session.principal.tenantId,
     );
     if (!current) throw notFound();
-    await this.allow(session, requestId, "revision.edit", current.revision.id, {
-      actorIsAuthor: current.revision.authorId === session.principal.id,
-      revisionState: current.revision.state,
-      expectedVersion: version,
-    });
+    await this.allowAction(
+      session,
+      requestId,
+      "revision.edit",
+      current,
+      version,
+    );
     return this.database.saveDraft({
       articleId,
       tenantId: session.principal.tenantId,
@@ -126,11 +210,14 @@ export class EditorialService {
   ): Promise<void> {
     const values = this.mutationCandidates(form);
     const current = this.current(session, values.articleId);
-    await this.allow(session, requestId, "revision.submit", values.revisionId, {
-      actorIsAuthor: current.revision.authorId === session.principal.id,
-      revisionState: current.revision.state,
-      expectedVersion: values.version,
-    });
+    await this.allowAction(
+      session,
+      requestId,
+      "revision.submit",
+      current,
+      values.version,
+      values.revisionId,
+    );
     this.database.submit(
       values.articleId,
       session.principal.tenantId,
@@ -149,16 +236,14 @@ export class EditorialService {
     const current = this.current(session, values.articleId);
     const capability: Capability =
       decision === "approved" ? "revision.approve" : "revision.reject";
-    await this.allow(session, requestId, capability, values.revisionId, {
-      selfReview: current.revision.authorId === session.principal.id,
-      editorAuthorityCurrent: this.database.hasCurrentAuthority(
-        session.principal.id,
-        current.tenantId,
-        "editor",
-      ),
-      revisionState: current.revision.state,
-      expectedVersion: values.version,
-    });
+    await this.allowAction(
+      session,
+      requestId,
+      capability,
+      current,
+      values.version,
+      values.revisionId,
+    );
     this.database.review(
       values.articleId,
       session.principal.tenantId,
@@ -177,24 +262,12 @@ export class EditorialService {
     const articleId = this.parseId(form.get("articleId"));
     const version = this.parseVersion(form.get("expectedVersion"));
     const current = this.current(session, articleId);
-    const approval = this.database.latestApproval(articleId);
-    await this.allow(
+    await this.allowAction(
       session,
       requestId,
       "publication.publish",
-      current.revision.id,
-      {
-        publisherAuthorityCurrent: this.database.hasCurrentAuthority(
-          session.principal.id,
-          current.tenantId,
-          "publisher",
-        ),
-        approvalPresent: Boolean(approval),
-        approvalMatchesRevision: approval?.revisionId === current.revision.id,
-        approvalMatchesDigest: approval?.digest === current.revision.digest,
-        reviewerAuthorityCurrent: approval?.authorityCurrent ?? false,
-        expectedVersion: version,
-      },
+      current,
+      version,
     );
     return this.database.publish(
       articleId,
@@ -231,6 +304,75 @@ export class EditorialService {
     const parsed = expectedVersion.safeParse(value);
     if (!parsed.success) throw badRequest();
     return parsed.data;
+  }
+
+  private decideAction(
+    session: Session,
+    requestId: string,
+    capability: RevisionCapability,
+    article: ArticleView,
+    expectedVersion: number,
+    resource = article.revision.id,
+  ): Promise<boolean> {
+    const facts: Record<string, boolean | number | string> = {
+      revisionState: article.revision.state,
+      expectedVersion,
+    };
+    if (capability === "revision.edit" || capability === "revision.submit") {
+      facts.actorIsAuthor = article.revision.authorId === session.principal.id;
+    } else if (
+      capability === "revision.approve" ||
+      capability === "revision.reject"
+    ) {
+      facts.selfReview = article.revision.authorId === session.principal.id;
+      facts.editorAuthorityCurrent = this.database.hasCurrentAuthority(
+        session.principal.id,
+        article.tenantId,
+        "editor",
+      );
+    } else {
+      const approval = this.database.latestApproval(article.id);
+      facts.publisherAuthorityCurrent = this.database.hasCurrentAuthority(
+        session.principal.id,
+        article.tenantId,
+        "publisher",
+      );
+      facts.approvalPresent = Boolean(approval);
+      facts.approvalMatchesRevision =
+        approval?.revisionId === article.revision.id;
+      facts.approvalMatchesDigest =
+        approval?.digest === article.revision.digest;
+      facts.reviewerAuthorityCurrent = approval?.authorityCurrent ?? false;
+    }
+    return this.authorization.authorize({
+      requestId,
+      capability,
+      actor: session.principal.subject,
+      resource,
+      facts,
+    });
+  }
+
+  private async allowAction(
+    session: Session,
+    requestId: string,
+    capability: RevisionCapability,
+    article: ArticleView,
+    expectedVersion: number,
+    resource = article.revision.id,
+  ): Promise<void> {
+    if (
+      !(await this.decideAction(
+        session,
+        requestId,
+        capability,
+        article,
+        expectedVersion,
+        resource,
+      ))
+    ) {
+      throw forbidden();
+    }
   }
 
   private async allow(

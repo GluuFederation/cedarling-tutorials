@@ -41,7 +41,8 @@ type CorpusArtifactRecord = Readonly<{
 }>;
 
 export type CorpusArtifact = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 2;
+  sourceDigest: string;
   model: string;
   dimensions: number;
   records: readonly CorpusArtifactRecord[];

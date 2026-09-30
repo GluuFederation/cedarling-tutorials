@@ -27,7 +27,11 @@ function isRequestInputError(error: unknown): boolean {
   if (typeof error !== "object" || error === null || !("statusCode" in error)) {
     return false;
   }
-  return error.statusCode === 400 || error.statusCode === 413;
+  return (
+    error.statusCode === 400 ||
+    error.statusCode === 413 ||
+    error.statusCode === 415
+  );
 }
 
 export function createApp(dependencies: ApplicationDependencies) {

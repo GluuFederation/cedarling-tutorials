@@ -1,4 +1,5 @@
 import { create, insertMultiple, search } from "@orama/orama";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
@@ -10,7 +11,8 @@ import type {
 } from "./types.js";
 
 const artifactSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
+  sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
   model: z.string().min(1),
   dimensions: z.literal(256),
   records: z.array(
@@ -31,6 +33,27 @@ const oramaSchema = {
 } as const;
 
 type OramaDatabase = ReturnType<typeof create<typeof oramaSchema>>;
+
+const rebuildMessage =
+  "Corpus index is invalid or stale. Rebuild with pnpm corpus:reset (native), or the Docker rebuild command in README, then restart. Rebuilding consumes Voyage quota.";
+
+/** Bind vectors to the exact ordered text and trusted metadata used to build them. */
+function sourceDigest(documents: readonly FixtureDocument[]): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        documents.map(({ metadata, chunks }) => [
+          metadata.documentId,
+          metadata.corpusId,
+          metadata.tenantId,
+          metadata.title,
+          metadata.classification,
+          chunks.map(({ chunkId, text }) => [chunkId, text]),
+        ]),
+      ),
+    )
+    .digest("hex");
+}
 
 async function embeddingsInBatches(
   voyage: VoyageClient,
@@ -68,7 +91,13 @@ export async function createCorpusArtifact(
     corpusId: chunk.corpusId,
     embedding: embeddings[index] ?? [],
   }));
-  return { schemaVersion: 1, model, dimensions: 256, records };
+  return {
+    schemaVersion: 2,
+    sourceDigest: sourceDigest(documents),
+    model,
+    dimensions: 256,
+    records,
+  };
 }
 
 /** Replaces the generated index atomically so startup never reads a partial file. */
@@ -88,14 +117,21 @@ export async function writeCorpusArtifact(
 export async function readCorpusArtifact(
   artifactPath: string,
 ): Promise<CorpusArtifact> {
-  return artifactSchema.parse(JSON.parse(await readFile(artifactPath, "utf8")));
+  const content = await readFile(artifactPath, "utf8");
+  try {
+    return artifactSchema.parse(JSON.parse(content));
+  } catch {
+    throw new Error(rebuildMessage);
+  }
 }
 
-/** Ensures the vector-only artifact still names the currently verified chunks. */
+/** Rejects stale text and invalid relationships before any retrieval can run. */
 export function validateArtifactAgainstDocuments(
   artifact: CorpusArtifact,
   documents: readonly FixtureDocument[],
 ): void {
+  if (artifact.sourceDigest !== sourceDigest(documents))
+    throw new Error(rebuildMessage);
   const expected = new Map(
     documents.flatMap((document) =>
       document.chunks.map((chunk) => [chunk.chunkId, chunk] as const),

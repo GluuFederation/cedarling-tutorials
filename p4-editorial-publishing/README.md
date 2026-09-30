@@ -15,11 +15,10 @@ Riley / Ana / Omar ── sign in ──→ Tutorial IdP
          │
          └── article and revision forms ──→ Next.js App Router
                                                    │
-                                      Server Component / Action (PEP)
-                                                   │ reloads current revision,
-                                                   │ digest, approval, authority
+                                      Server Component / Action
+                                                   │
                                                    ▼
-                                             Cedarling PDP
+                                        Fake decision seam
                                               │        │
                                             DENY     ALLOW
                                                        │
@@ -88,6 +87,11 @@ docker compose exec cedarpress node --env-file=/run/config/app.env scripts/admin
 The current decision seam permits self-review, approval reuse across revisions,
 and publication after reviewer revocation. Cedarling will decide each effect
 from the exact current revision, digest, approval, and authority facts.
+
+Riley can also choose **New article** to create a tenant-scoped draft, then
+submit it through the same review workflow. The fake `article.create` seam
+allows this baseline action for signed-in users; the Server Action still
+checks the session, CSRF token, and draft input before insertion.
 
 ## Commands
 

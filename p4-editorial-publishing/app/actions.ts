@@ -11,10 +11,11 @@ type Operation = "save" | "submit" | "approve" | "reject" | "publish";
 function destination(
   form: FormData,
   outcome: string,
-  requestId: string,
+  revision?: string,
 ): string {
   const articleId = String(form.get("articleId") ?? "");
-  const params = new URLSearchParams({ outcome, request: requestId });
+  const params = new URLSearchParams({ outcome });
+  if (revision) params.set("revision", revision);
   return `/articles/${encodeURIComponent(articleId)}?${params}`;
 }
 
@@ -23,24 +24,12 @@ async function execute(operation: Operation, form: FormData): Promise<never> {
   const requestId =
     (await headers()).get("x-request-id") ?? crypto.randomUUID();
   let outcome = `${operation}-complete`;
+  let revisionId: string | undefined;
   try {
     const session = await services.sessions.requireMutation(form);
     if (operation === "save") {
-      const revisionId = await services.editorial.saveDraft(
-        session,
-        form,
-        requestId,
-      );
+      revisionId = await services.editorial.saveDraft(session, form, requestId);
       outcome = "draft-saved";
-      revalidatePath(`/articles/${String(form.get("articleId"))}`);
-      const params = new URLSearchParams({
-        revision: revisionId,
-        outcome,
-        request: requestId,
-      });
-      redirect(
-        `/articles/${encodeURIComponent(String(form.get("articleId")))}?${params}`,
-      );
     }
     if (operation === "submit")
       await services.editorial.submit(session, form, requestId);
@@ -55,7 +44,37 @@ async function execute(operation: Operation, form: FormData): Promise<never> {
     if (isAppError(error)) outcome = `error-${error.code.toLowerCase()}`;
     else throw error;
   }
-  redirect(destination(form, outcome, requestId));
+  redirect(destination(form, outcome, revisionId));
+}
+
+export async function createArticle(
+  _previous: { error: string | null },
+  form: FormData,
+): Promise<{ error: string | null }> {
+  const services = await runtime();
+  const requestId =
+    (await headers()).get("x-request-id") ?? crypto.randomUUID();
+  let articleId: string;
+  try {
+    const session = await services.sessions.requireMutation(form);
+    articleId = await services.editorial.create(session, form, requestId);
+  } catch (error) {
+    const category = isAppError(error) ? error.code : "INTERNAL_ERROR";
+    return {
+      error:
+        category === "INVALID_REQUEST"
+          ? "Enter a title (1–160 characters) and body (up to 32,768 UTF-8 bytes)."
+          : category === "FORBIDDEN"
+            ? "This account cannot create an article."
+            : category === "REQUEST_INTEGRITY_FAILED"
+              ? "The request could not be verified. Refresh and try again."
+              : category === "AUTHENTICATION_REQUIRED"
+                ? "Your session expired. Sign in again."
+                : "The article could not be created. Try again.",
+    };
+  }
+  revalidatePath("/");
+  redirect(`/articles/${articleId}?outcome=article-created`);
 }
 
 export const saveDraft = async (form: FormData) => execute("save", form);

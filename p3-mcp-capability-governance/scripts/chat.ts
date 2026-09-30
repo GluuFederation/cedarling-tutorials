@@ -3,6 +3,7 @@ import { stdin, stdout } from "node:process";
 import { authorizePersona } from "../src/auth/cli.js";
 import { IncidentChatHost } from "../src/chat/host.js";
 import { OpenRouterChatModel } from "../src/chat/openrouter.js";
+import { ChatError } from "../src/chat/errors.js";
 import { loadProjectEnvironment } from "../src/config/environment.js";
 import { loadConfig } from "../src/config/project-config.js";
 import { parsePersona } from "../src/incidents/types.js";
@@ -48,7 +49,26 @@ async function main() {
       const message = (await prompt.question("You > ")).trim();
       if (message === "/quit") break;
       if (!message) continue;
-      console.log(`Assistant > ${await host.send(message)}`);
+      try {
+        console.log(`Assistant > ${await host.send(message)}`);
+      } catch (error) {
+        const failure = error instanceof ChatError ? error : undefined;
+        console.error(
+          JSON.stringify(
+            {
+              event: "chat.failed",
+              actorId: persona,
+              code: failure?.code ?? "chat_failed",
+              httpStatus: failure?.httpStatus,
+            },
+            null,
+            2,
+          ),
+        );
+        console.log(
+          `Assistant > ${failure?.message ?? "Chat failed. Check the service and incident state before retrying."}`,
+        );
+      }
     }
   } finally {
     prompt.close();

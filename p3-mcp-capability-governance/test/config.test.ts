@@ -18,6 +18,7 @@ describe("P3 configuration", () => {
 
   it("rejects invalid ports and resource URI fragments", () => {
     expect(() => loadConfig({ P3_PORT: "0" })).toThrow("P3_PORT");
+    expect(() => loadConfig({ P3_PORT: "17003junk" })).toThrow("P3_PORT");
     expect(() =>
       loadConfig({ P3_MCP_RESOURCE: "http://localhost:17003/mcp#token" }),
     ).toThrow("fragment");

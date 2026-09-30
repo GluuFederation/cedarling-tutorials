@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { McpClientSession } from "../mcp/client.js";
 import type { ChatMessage, ChatModel, ModelTool } from "./model.js";
+import { ChatError } from "./errors.js";
 
 type HostDependencies = Readonly<{
   model: ChatModel;
@@ -58,18 +59,23 @@ export class IncidentChatHost {
   }
 
   async send(text: string): Promise<string> {
-    this.#messages.push({ role: "user", content: text });
-    const response = await this.#dependencies.model.next(
-      this.#messages,
-      this.#tools,
-    );
-    if (response.kind === "message") {
-      this.#messages.push({ role: "assistant", content: response.text });
-      return response.text;
+    if (this.#tools.length === 0) {
+      return "No incident operations are available for this account.";
     }
-
+    const messages: ChatMessage[] = [
+      ...this.#messages,
+      { role: "user", content: text },
+    ];
+    const response = await this.#dependencies.model.next(messages, this.#tools);
+    if (response === null) {
+      // Only MCP results describe effects; model prose is not an execution result.
+      const reply =
+        "No incident operation was requested. I can help you search incidents, read the runbook, prepare triage, or advance one incident. What would you like to do?";
+      this.#messages = [...messages, { role: "assistant", content: reply }];
+      return reply;
+    }
     const tool = this.#tools.find(({ name }) => name === response.name);
-    if (!tool) throw new Error("Model selected an unavailable capability");
+    if (!tool) throw new ChatError("unavailable_capability");
     const arguments_: Record<string, unknown> = { ...response.arguments };
     if (response.name === "update_incident_status") {
       const incidentId =
@@ -83,15 +89,25 @@ export class IncidentChatHost {
       const confirmed = await this.#dependencies.confirm(
         `Advance ${incidentId} to ${nextStatus}?`,
       );
-      if (!confirmed) return "Status change cancelled.";
+      if (!confirmed) {
+        const result = "Status change cancelled.";
+        this.#messages = [...messages, { role: "assistant", content: result }];
+        return result;
+      }
       arguments_.confirmed = true;
       arguments_.idempotencyKey = `turn_${randomUUID()}`;
     }
 
     this.#dependencies.activity?.(`MCP ${tool.kind}: ${tool.name}`);
-    const result = await this.#dependencies.mcp.invoke(tool.name, arguments_);
-    const textResult = resultText(result);
-    this.#messages.push({ role: "assistant", content: textResult });
+    let textResult: string;
+    try {
+      textResult = resultText(
+        await this.#dependencies.mcp.invoke(tool.name, arguments_),
+      );
+    } catch {
+      throw new ChatError("mcp_unavailable");
+    }
+    this.#messages = [...messages, { role: "assistant", content: textResult }];
     return textResult;
   }
 }

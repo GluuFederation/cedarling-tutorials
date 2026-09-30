@@ -20,6 +20,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   const value = schema.parse(environment);
   const baseUrl = new URL(value.P4_BASE_URL);
   const issuer = new URL(value.P4_ISSUER);
+  if (
+    value.P4_PORT !==
+    Number(baseUrl.port || (baseUrl.protocol === "https:" ? 443 : 80))
+  )
+    throw new Error("P4_PORT must match P4_BASE_URL; run pnpm run setup");
   return {
     host: value.P4_HOST,
     port: value.P4_PORT,
