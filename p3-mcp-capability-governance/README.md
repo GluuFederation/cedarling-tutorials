@@ -50,6 +50,7 @@ pnpm dev
 `pnpm dev` starts this project’s IdP and application together.
 
 For interactive chat, install the project dependencies on the host, set `P3_OPENROUTER_API_KEY` in its `.env`, and run `pnpm chat dana` in another terminal. This client works with either the native or Docker service.
+The chat client requests the configured free tool-calling model without a paid fallback; provider availability can vary. The scripted tests reproduce the baseline gap without a provider account.
 
 For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
 

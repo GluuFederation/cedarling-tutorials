@@ -16,9 +16,9 @@ Ada / Leo / Mallory ── Device Flow ──→ Tutorial IdP
           └── retrieval request ──→ Node.js API (PEP)
                                          │ principal + corpus + document
                                          ▼
-                                    Cedarling PDP
-                                     │        │
-                                   DENY     ALLOW → Orama → OpenRouter
+                              Fake permissive decision
+                                         │
+                                       ALLOW → Orama → OpenRouter
                                                        ↑
                                     PDFs → PDF.js → Voyage embeddings
 ```
@@ -32,6 +32,7 @@ Ada / Leo / Mallory ── Device Flow ──→ Tutorial IdP
 ## Run
 
 Set `P2_VOYAGE_API_KEY` and `P2_OPENROUTER_API_KEY` in `.env` before preparing the corpus or starting Docker.
+Setup embeds synthetic PDF chunks with Voyage and checks OpenRouter generation; requests also consume provider quota. Do not submit private queries.
 
 Start the application and its own IdP:
 
@@ -58,6 +59,15 @@ pnpm dev
 ```
 
 For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
+After changing the PDFs, run `pnpm corpus:reset` and restart; startup rejects an index built from different document content.
+For Docker, rebuild the `tenantrag` image, start its IdP, run the reset in a one-off container, then start the stack:
+
+```bash
+docker compose build tenantrag
+docker compose up -d identity-provider
+docker compose run --rm --no-deps tenantrag node --env-file=/run/config/app.env dist/scripts/corpus-reset.js
+docker compose up --build
+```
 
 ## Exercise
 
@@ -67,9 +77,22 @@ The business workflow answers support questions from tenant-owned documents:
 - **Leo (`leo`)** — Partner reviewer limited to Tenant A public evidence.
 - **Mallory (`mallory`)** — Tenant B analyst with no Tenant A access.
 
-Run `pnpm auth <persona>` and call `POST /v1/retrievals`. The current decision
+Run `pnpm auth <persona>`, complete device sign-in, and use the printed access token:
+
+```http
+POST http://localhost:17002/v1/retrievals
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{"corpusId":"tenant-a-support","query":"What happened during Aster's support-search interruption?","limit":3}
+```
+
+The current decision
 seam can send cross-tenant or over-classified chunks to the model; Cedarling
 will authorize both corpus search and each document before text is loaded.
+Match a failed response's `requestId` to the structured `retrieval.failed` log;
+`stage` identifies the failing step and provider details distinguish availability
+failures from an authorization decision. Live provider output can vary.
 
 ## Commands
 

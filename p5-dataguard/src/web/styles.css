@@ -679,6 +679,13 @@ footer a {
   font-size: 0.72rem;
 }
 
+.permission-note {
+  margin: 12px 22px;
+  color: var(--slate);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 @media (max-width: 1050px) {
   .workspace {
     grid-template-columns: minmax(330px, 42%) minmax(0, 58%);
@@ -830,6 +837,10 @@ footer a {
     width: calc(100% - 32px);
     margin-right: 16px;
     margin-left: 16px;
+  }
+
+  .permission-note {
+    margin-inline: 16px;
   }
 
   .export-actions {

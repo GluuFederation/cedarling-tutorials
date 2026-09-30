@@ -18,13 +18,14 @@ const request = (
 
 describe("baseline authorization seam", () => {
   it("defines one decision for every editorial capability", () => {
-    expect(capabilities).toHaveLength(6);
+    expect(capabilities).toHaveLength(7);
     for (const capability of capabilities) {
       expect(baselineAllows(request(capability, {}))).toBe(false);
     }
   });
 
   it.each([
+    ["article.create", { tenantMatch: true }],
     ["article.read", { tenantMatch: true }],
     ["revision.edit", { actorIsAuthor: true }],
     ["revision.submit", { actorIsAuthor: true }],
@@ -40,6 +41,7 @@ describe("baseline authorization seam", () => {
   });
 
   it.each([
+    ["article.create", { tenantMatch: false }],
     ["article.read", { tenantMatch: false }],
     ["revision.edit", { actorIsAuthor: false }],
     ["revision.submit", { actorIsAuthor: false }],

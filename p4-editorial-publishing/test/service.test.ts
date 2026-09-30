@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { BaselineAuthorizationGateway } from "../src/server/authorization.ts";
+import { EditorialService } from "../src/server/service.ts";
 import { fixture, form, present } from "./support.ts";
 
 let cleanup: (() => void) | undefined;
@@ -8,6 +10,139 @@ afterEach(() => {
 });
 
 describe("editorial authorization boundaries", () => {
+  it("previews the baseline decision without hiding its self-approval gap", async () => {
+    const opened = fixture("riley");
+    cleanup = opened.cleanup;
+    const service = new EditorialService(
+      opened.database,
+      new BaselineAuthorizationGateway(),
+    );
+    const draft = present(
+      opened.database.article("article-launch-brief", "tenant-a"),
+    );
+    expect(
+      await service.availability(opened.session, draft, "request-draft"),
+    ).toMatchObject({ edit: true, submit: true });
+
+    await service.submit(
+      opened.session,
+      form({
+        articleId: draft.id,
+        revisionId: draft.revision.id,
+        expectedVersion: draft.version,
+      }),
+      "request-submit",
+    );
+    const submitted = present(opened.database.article(draft.id, "tenant-a"));
+    expect(
+      await service.availability(opened.session, submitted, "request-riley"),
+    ).toEqual({
+      edit: true,
+      submit: false,
+      approve: true,
+      reject: false,
+      publish: false,
+    });
+    await expect(
+      service.review(
+        opened.session,
+        form({
+          articleId: submitted.id,
+          revisionId: submitted.revision.id,
+          expectedVersion: submitted.version,
+        }),
+        "request-reject",
+        "rejected",
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(
+      opened.database.article(submitted.id, "tenant-a")?.revision.state,
+    ).toBe("submitted");
+
+    const ana = present(
+      opened.database.principal("http://localhost:18004", "ana"),
+    );
+    expect(
+      await service.availability(
+        { ...opened.session, principal: ana },
+        submitted,
+        "request-ana",
+      ),
+    ).toEqual({
+      edit: false,
+      submit: false,
+      approve: true,
+      reject: true,
+      publish: false,
+    });
+
+    const omar = present(
+      opened.database.principal("http://localhost:18004", "omar"),
+    );
+    const omarSession = { ...opened.session, principal: omar };
+    expect(
+      (await service.availability(omarSession, submitted, "request-omar"))
+        .approve,
+    ).toBe(true);
+    expect(opened.database.revokeOmar()).toBe(true);
+    await expect(
+      service.review(
+        omarSession,
+        form({
+          articleId: submitted.id,
+          revisionId: submitted.revision.id,
+          expectedVersion: submitted.version,
+        }),
+        "request-omar-revoked",
+        "approved",
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("creates an article through the fake authorization seam", async () => {
+    const opened = fixture("riley");
+    cleanup = opened.cleanup;
+    expect(
+      await opened.service.canCreate(opened.session, "request-preview"),
+    ).toBe(true);
+    const articleId = await opened.service.create(
+      opened.session,
+      form({ title: "New guide", body: "Draft content" }),
+      "request-create",
+    );
+    expect(opened.requests.at(-1)).toMatchObject({
+      capability: "article.create",
+      facts: { tenantMatch: true },
+    });
+    expect(
+      opened.database.article(articleId, "tenant-a")?.revision,
+    ).toMatchObject({
+      authorId: "user-riley",
+      state: "draft",
+    });
+  });
+
+  it("rejects invalid or denied article creation without persistence", async () => {
+    const opened = fixture("riley", false);
+    cleanup = opened.cleanup;
+    const before = opened.database.listArticles("tenant-a");
+    await expect(
+      opened.service.create(
+        opened.session,
+        form({ title: "", body: "Body" }),
+        "invalid",
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    await expect(
+      opened.service.create(
+        opened.session,
+        form({ title: "Denied", body: "Body" }),
+        "denied",
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(opened.database.listArticles("tenant-a")).toEqual(before);
+  });
+
   it("reproduces self-approval with the separation fact exposed", async () => {
     const opened = fixture("riley");
     cleanup = opened.cleanup;

@@ -196,18 +196,14 @@ function Workspace({
   const [purpose, setPurpose] = useState<QueryPlan["purpose"]>("support");
   const [limit, setLimit] = useState(10);
   const [filterEnabled, setFilterEnabled] = useState(true);
-  const [filterField, setFilterField] = useState<FieldName>("tenantId");
-  const [filterOperator, setFilterOperator] = useState<
-    "eq" | "contains" | "gte" | "lte"
-  >("eq");
-  const [filterValue, setFilterValue] = useState("tenant-a");
+  const [filterValue, setFilterValue] = useState(session.user.tenantId);
   const [aggregateOperation, setAggregateOperation] = useState<
     "count" | "average"
   >("count");
   const [aggregateField, setAggregateField] = useState<"salary" | "bonus">(
     "salary",
   );
-  const [groupBy, setGroupBy] = useState<FieldName | "">("department");
+  const [groupBy, setGroupBy] = useState<FieldName | "">("");
   const [result, setResult] = useState<QueryResponse>();
   const [lastPlan, setLastPlan] = useState<QueryPlan>();
   const [activeExport, setActiveExport] = useState<ExportCreated>();
@@ -224,14 +220,12 @@ function Workspace({
       });
   }, [onExpired]);
 
-  const filterMetadata = fields.find((field) => field.name === filterField);
   const plan = useMemo<QueryPlan>(() => {
-    const numeric = filterMetadata?.type === "number";
     const filter = filterEnabled
       ? {
-          field: filterField,
-          operator: filterOperator,
-          value: numeric ? Number(filterValue) : filterValue,
+          field: "tenantId" as const,
+          operator: "eq" as const,
+          value: filterValue,
         }
       : undefined;
     return mode === "rows"
@@ -251,9 +245,6 @@ function Workspace({
     aggregateField,
     aggregateOperation,
     filterEnabled,
-    filterField,
-    filterMetadata?.type,
-    filterOperator,
     filterValue,
     groupBy,
     limit,
@@ -268,6 +259,9 @@ function Workspace({
     try {
       await action();
     } catch (error) {
+      setResult(undefined);
+      setLastPlan(undefined);
+      setActiveExport(undefined);
       if (error instanceof ApiError && error.status === 401) {
         onExpired();
         return;
@@ -310,11 +304,6 @@ function Workspace({
     });
   }
 
-  const filterOperators =
-    filterMetadata?.type === "number"
-      ? (["eq", "gte", "lte"] as const)
-      : (["eq", "contains"] as const);
-
   return (
     <div className="app-shell">
       <BrandRail session={session} onSwitch={() => void switchAccount()} />
@@ -325,7 +314,6 @@ function Workspace({
               <span className="eyebrow">Workforce dataset</span>
               <h2 id="query-title">Query plan</h2>
             </div>
-            <span className="record-count">18 records</span>
           </div>
 
           <fieldset className="segmented">
@@ -432,62 +420,27 @@ function Workspace({
                   onChange={(event) => setFilterEnabled(event.target.checked)}
                   type="checkbox"
                 />
-                Filter
+                Apply tenant filter
               </label>
             </legend>
             {filterEnabled && (
-              <div className="control-grid filter-grid">
+              <div className="control-grid">
                 <label>
-                  Field
-                  <select
-                    value={filterField}
-                    onChange={(event) => {
-                      const next = event.target.value as FieldName;
-                      const metadata = fields.find(
-                        (field) => field.name === next,
-                      );
-                      setFilterField(next);
-                      setFilterOperator("eq");
-                      setFilterValue(metadata?.type === "number" ? "0" : "");
-                    }}
-                  >
-                    {fields.map((field) => (
-                      <option key={field.name} value={field.name}>
-                        {field.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Operator
-                  <select
-                    value={filterOperator}
-                    onChange={(event) =>
-                      setFilterOperator(
-                        event.target.value as typeof filterOperator,
-                      )
-                    }
-                  >
-                    {filterOperators.map((operator) => (
-                      <option key={operator} value={operator}>
-                        {operator}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Value
+                  Tenant equals
                   <input
-                    min={filterMetadata?.type === "number" ? 0 : undefined}
                     onChange={(event) => setFilterValue(event.target.value)}
                     required
-                    type={filterMetadata?.type === "number" ? "number" : "text"}
+                    type="text"
                     value={filterValue}
                   />
                 </label>
               </div>
             )}
           </fieldset>
+          <p className="permission-note">
+            Keep the tenant filter on your own tenant. Changing or removing it
+            reveals the authorization gap in this starting application.
+          </p>
 
           <div className="control-grid final-controls">
             <label>

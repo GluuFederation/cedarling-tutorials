@@ -7,6 +7,7 @@ import {
 import type { CorpusSearch } from "./corpus.js";
 import type { OpenRouterClient } from "./providers/openrouter.js";
 import type { VoyageClient } from "./providers/voyage.js";
+import { ProviderError } from "./providers/errors.js";
 import type { AuthenticatedPrincipal } from "../auth/authenticator.js";
 import { FixtureRepository } from "./repository.js";
 import { logPermissiveTrace, type PermissiveTrace } from "./trace.js";
@@ -46,9 +47,11 @@ export function createRetrievalService(dependencies: RetrievalDependencies) {
       const corpus = dependencies.repository.findCorpus(request.corpusId);
       if (!corpus) throw corpusNotFound();
 
+      let stage = "corpus.search";
       try {
         // CEDARLING_INTEGRATION_POINT:
         // Authorize RAG::SearchCorpus here before embedding the query or searching Orama.
+        stage = "query.embedding";
         const embeddingStarted = performance.now();
         const [queryEmbedding] = await dependencies.voyage.embed(
           [request.query],
@@ -59,6 +62,7 @@ export function createRetrievalService(dependencies: RetrievalDependencies) {
         const queryEmbeddingMs = elapsed(embeddingStarted);
 
         const searchStarted = performance.now();
+        stage = "candidates.search";
         const candidates = await dependencies.corpusSearch.search(
           corpus.corpusId,
           queryEmbedding,
@@ -67,6 +71,7 @@ export function createRetrievalService(dependencies: RetrievalDependencies) {
         const searchMs = elapsed(searchStarted);
 
         const metadataStarted = performance.now();
+        stage = "document.retrieve";
         const documents = new Map<string, DocumentMetadata>();
         for (const candidate of candidates) {
           const document = dependencies.repository.resolveCandidate(candidate);
@@ -84,6 +89,7 @@ export function createRetrievalService(dependencies: RetrievalDependencies) {
         const selected = candidates
           .filter((candidate) => allowedDocuments.has(candidate.documentId))
           .slice(0, Math.min(request.limit, 3));
+        stage = "content.load";
         const chunks = selected.map((candidate) =>
           dependencies.repository.loadChunkText(candidate.chunkId),
         );
@@ -93,6 +99,7 @@ export function createRetrievalService(dependencies: RetrievalDependencies) {
         let selectedModel: string | null = null;
         let generationMs = 0;
         if (chunks.length > 0) {
+          stage = "answer.generate";
           const generationStarted = performance.now();
           const generated = await dependencies.openRouter.generate(
             request.query,
@@ -132,6 +139,29 @@ export function createRetrievalService(dependencies: RetrievalDependencies) {
           })),
         };
       } catch (error) {
+        if (!(error instanceof ApplicationError) || error.statusCode >= 500) {
+          console.error(
+            JSON.stringify(
+              {
+                event: "retrieval.failed",
+                requestId,
+                principalId: principal.id,
+                stage,
+                category: "retrieval_unavailable",
+                ...(error instanceof ProviderError
+                  ? {
+                      provider: error.provider,
+                      reason: error.reason,
+                      httpStatus: error.httpStatus,
+                      providerCode: error.providerCode,
+                    }
+                  : {}),
+              },
+              null,
+              2,
+            ),
+          );
+        }
         if (error instanceof ApplicationError) {
           throw error;
         }

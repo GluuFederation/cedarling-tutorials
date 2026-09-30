@@ -18,13 +18,12 @@ describe("P2 PDF fixtures", () => {
         document.metadata.documentId,
         document.chunks.length,
       ]),
-    ).toEqual([
-      ["a-public", 20],
-      ["a-confidential", 37],
-      ["b-public", 18],
-      ["b-confidential", 30],
-      ["a-instruction-like", 48],
-    ]);
+    ).toEqual(
+      fixtureDefinitions.map(({ documentId, expectedChunkCount }) => [
+        documentId,
+        expectedChunkCount,
+      ]),
+    );
     for (const document of documents) {
       expect(document.chunks.every((chunk) => chunk.text.length > 0)).toBe(
         true,
@@ -116,6 +115,6 @@ describe("P2 PDF fixtures", () => {
         ...fixture,
         expectedChunkCount: fixture.expectedChunkCount + 1,
       }),
-    ).rejects.toThrow("expected 21 chunks");
+    ).rejects.toThrow(`expected ${fixture.expectedChunkCount + 1} chunks`);
   });
 });

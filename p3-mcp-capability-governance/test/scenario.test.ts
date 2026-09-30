@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { IncidentChatHost } from "../src/chat/host.js";
-import { ScriptedChatModel, type ModelTool } from "../src/chat/model.js";
+import type { ModelTool } from "../src/chat/model.js";
+import { ScriptedChatModel } from "./support/scripted-model.js";
 import { McpClientSession } from "../src/mcp/client.js";
 import { startTestApplication, type TestApplication } from "./helpers.js";
 
@@ -26,6 +27,21 @@ async function session(
 }
 
 describe("P3 incident workflows", () => {
+  it("does not run an MCP operation for a greeting", async () => {
+    const application = await startTestApplication();
+    applications.push(application);
+    const host = new IncidentChatHost({
+      mcp: await session(application, "amir"),
+      model: new ScriptedChatModel([null]),
+      confirm: async () => true,
+    });
+    await host.connect();
+    expect(await host.send("Hi, how are you?")).toContain(
+      "No incident operation was requested",
+    );
+    expect(application.traces).toHaveLength(0);
+    expect(application.incidents.get("INC-1001").version).toBe(1);
+  });
   it("runs all four operations through the chat host and MCP", async () => {
     const application = await startTestApplication();
     applications.push(application);
@@ -33,22 +49,18 @@ describe("P3 incident workflows", () => {
       mcp: await session(application, "amir"),
       model: new ScriptedChatModel([
         {
-          kind: "capability_call",
           name: "search_incidents",
           arguments: { query: "payment", limit: 5 },
         },
         {
-          kind: "capability_call",
           name: "incident_response_runbook",
           arguments: {},
         },
         {
-          kind: "capability_call",
           name: "triage_incident",
           arguments: { incidentId: "INC-1001" },
         },
         {
-          kind: "capability_call",
           name: "update_incident_status",
           arguments: {
             incidentId: "INC-1001",
@@ -86,12 +98,10 @@ describe("P3 incident workflows", () => {
         mcp: await session(application, persona),
         model: new ScriptedChatModel([
           {
-            kind: "capability_call",
             name: "search_incidents",
             arguments: { query: "audit" },
           },
           {
-            kind: "capability_call",
             name: "update_incident_status",
             arguments: {
               incidentId: "INC-2001",
@@ -130,7 +140,6 @@ describe("P3 incident workflows", () => {
       mcp: await session(application, "amir"),
       model: new ScriptedChatModel([
         {
-          kind: "capability_call",
           name: "update_incident_status",
           arguments: {
             incidentId: "INC-1001",
@@ -164,7 +173,6 @@ describe("P3 incident workflows", () => {
           tools = descriptors;
           const status = application.incidents.get("INC-1001").status;
           return {
-            kind: "capability_call",
             name: "update_incident_status",
             arguments: {
               incidentId: "INC-1001",

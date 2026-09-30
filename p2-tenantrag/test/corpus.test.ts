@@ -56,6 +56,28 @@ const documents: readonly FixtureDocument[] = [
 ];
 
 describe("P2 corpus artifact and Orama search", () => {
+  it("rejects an index built from outdated document text", async () => {
+    const voyage: VoyageClient = { embed: async () => [vector(0), vector(1)] };
+    const artifact = await createCorpusArtifact(
+      documents,
+      voyage,
+      "voyage-4-lite",
+    );
+    const changed = documents.map((document) =>
+      document.metadata.documentId === "a-public"
+        ? {
+            ...document,
+            chunks: document.chunks.map((chunk) => ({
+              ...chunk,
+              text: "Updated public evidence",
+            })),
+          }
+        : document,
+    );
+    expect(() => validateArtifactAgainstDocuments(artifact, changed)).toThrow(
+      "invalid or stale",
+    );
+  });
   it("builds and atomically writes a vector-only artifact", async () => {
     const voyage: VoyageClient = {
       embed: async () => [vector(0), vector(1)],
@@ -84,7 +106,8 @@ describe("P2 corpus artifact and Orama search", () => {
 
   it("filters candidates to the resolved corpus and omits vectors", async () => {
     const artifact: CorpusArtifact = {
-      schemaVersion: 1,
+      schemaVersion: 2,
+      sourceDigest: "0".repeat(64),
       model: "voyage-4-lite",
       dimensions: 256,
       records: [
@@ -117,7 +140,8 @@ describe("P2 corpus artifact and Orama search", () => {
 
   it("rejects query vectors with the wrong dimension", async () => {
     const search = await createCorpusSearch({
-      schemaVersion: 1,
+      schemaVersion: 2,
+      sourceDigest: "0".repeat(64),
       model: "voyage-4-lite",
       dimensions: 256,
       records: [],

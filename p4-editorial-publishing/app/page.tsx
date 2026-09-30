@@ -15,7 +15,11 @@ export default async function Home({
       (await headers()).get("x-request-id") ?? crypto.randomUUID();
     const articles = await services.editorial.list(session, requestId);
     if (articles[0]) redirect(`/articles/${articles[0].id}`);
-    return <EmptyQueue />;
+    return (
+      <EmptyQueue
+        canCreate={await services.editorial.canCreate(session, requestId)}
+      />
+    );
   }
   const query = await searchParams;
   return <Login expired={query.expired === "1"} />;

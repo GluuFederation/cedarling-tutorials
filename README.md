@@ -93,6 +93,10 @@ Use **Node.js 24.21 or newer within 24.x** and **pnpm 10**. Follow the project's
 **Run** section for dependency installation, setup, and startup. P11 also needs
 PostgreSQL: use the Compose-managed default or your own local database.
 
+On macOS or Linux with nvm, run `nvm install` and `nvm use` from this repository;
+`.nvmrc` selects Node.js 24.21.0. Other Node.js managers can select the same
+version. Check `node --version` in the terminal used to run pnpm.
+
 Each project generates its private application configuration in `.env` and its
 identity-provider configuration in `.local/idp/.env`. Some development commands
 start both processes; others use a separate identity-provider terminal.

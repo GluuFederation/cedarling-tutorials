@@ -20,6 +20,29 @@ let cleanup: (() => void) | undefined;
 afterEach(() => cleanup?.());
 
 describe("editorial persistence", () => {
+  it("creates a tenant-scoped article and first draft atomically", () => {
+    const opened = fixture();
+    cleanup = opened.cleanup;
+    const articleId = opened.database.createArticle({
+      tenantId: "tenant-a",
+      authorId: opened.session.principal.id,
+      title: "New guide",
+      body: "Draft content",
+    });
+    const article = opened.database.article(articleId, "tenant-a");
+    expect(article).toMatchObject({
+      id: articleId,
+      tenantId: "tenant-a",
+      revision: {
+        title: "New guide",
+        body: "Draft content",
+        authorId: "user-riley",
+        state: "draft",
+      },
+    });
+    expect(opened.database.article(articleId, "tenant-b")).toBeUndefined();
+  });
+
   it("seeds a bounded Tenant A queue and stable normalized digest", () => {
     const opened = fixture();
     cleanup = opened.cleanup;

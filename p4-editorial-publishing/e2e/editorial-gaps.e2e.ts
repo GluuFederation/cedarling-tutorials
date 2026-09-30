@@ -53,27 +53,45 @@ test("reproduces the three editorial authorization gaps and valid control", asyn
     });
     await signIn(riley, "Riley", "riley", "http://127.0.0.1:17004/");
     expect(new URL(riley.url()).hostname).toBe("localhost");
+    await riley.getByRole("link", { name: "New article" }).click();
+    await expect(
+      riley.getByRole("button", { name: "Create article" }),
+    ).toBeEnabled();
+    await riley.getByLabel("Title").fill("Riley's new article");
+    await riley.getByLabel("Body").fill("   ");
+    await riley.getByRole("button", { name: "Create article" }).click();
+    await expect(riley.locator(".outcome.error")).toContainText(
+      "Enter a title",
+    );
+    await riley.getByLabel("Body").fill("A new tenant-scoped draft.");
+    await riley.getByRole("button", { name: "Create article" }).click();
+    await expect(riley.getByRole("status")).toContainText("Article created");
+    await expect(
+      riley.getByRole("heading", { name: "Riley's new article" }),
+    ).toBeVisible();
     await openArticle(riley, "Launch brief");
     await riley.getByRole("button", { name: "Submit for review" }).click();
     await expect(riley.getByRole("status")).toContainText("Revision submitted");
-    await riley.getByRole("button", { name: "Reject revision" }).click();
-    await expect(riley.getByRole("status")).toContainText(
-      "This action is not allowed",
-    );
+    await expect(
+      riley.getByRole("button", { name: "Reject revision" }),
+    ).toBeDisabled();
+    await expect(
+      riley.getByText("You cannot reject this revision."),
+    ).toBeVisible();
     await riley.getByRole("button", { name: "Approve revision" }).click();
     await expect(riley.getByRole("status")).toContainText(
       "Exact revision approved",
     );
-    await riley
-      .getByRole("button", { name: "Publish current revision" })
-      .click();
-    await expect(riley.getByRole("status")).toContainText(
-      "This action is not allowed",
-    );
+    await expect(
+      riley.getByRole("button", { name: "Publish current revision" }),
+    ).toBeDisabled();
 
     const ana = await anaContext.newPage();
     await signIn(ana, "Ana", "ana");
     await openArticle(ana, "Customer migration guide");
+    await expect(
+      ana.getByRole("button", { name: "Reject revision" }),
+    ).toBeEnabled();
     await ana.getByRole("button", { name: "Approve revision" }).click();
     await expect(ana.getByRole("status")).toContainText(
       "Exact revision approved",

@@ -132,6 +132,27 @@ describe("P1 HTTP boundary", () => {
     await app.close();
   });
 
+  it("shows that Alex can create a task before authorization is integrated", async () => {
+    const { app, cookie, session, database } = await fixture("user-alex");
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      headers: mutationHeaders(cookie, session.csrfToken),
+      payload: {
+        title: "Unauthorized creation",
+        description: "Must not be saved",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(
+      database.getTask(created.json<{ task: { id: string } }>().task.id),
+    ).toMatchObject({
+      ownerId: "user-alex",
+      title: "Unauthorized creation",
+    });
+    await app.close();
+  });
+
   it("requires valid CSRF, Origin, and Fetch Metadata for mutations", async () => {
     const { app, cookie, session } = await fixture("user-alex");
     const valid = mutationHeaders(cookie, session.csrfToken);

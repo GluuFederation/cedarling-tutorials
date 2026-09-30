@@ -1,4 +1,5 @@
 export const capabilities = [
+  "article.create",
   "article.read",
   "revision.edit",
   "revision.submit",
@@ -23,6 +24,8 @@ export interface AuthorizationGateway {
 export function baselineAllows(request: AuthorizationRequest): boolean {
   const fact = (name: string) => request.facts[name] === true;
   switch (request.capability) {
+    case "article.create":
+      return fact("tenantMatch");
     case "article.read":
       return fact("tenantMatch");
     case "revision.edit":

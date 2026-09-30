@@ -37,7 +37,7 @@ test("reproduces the data and export authorization gaps", async ({
     await signIn(amina, "Amina", "amina");
     await amina.getByRole("checkbox", { name: /Salary/u }).check();
     await amina.getByRole("checkbox", { name: /Bonus/u }).check();
-    await amina.getByLabel("Value").fill("tenant-b");
+    await amina.getByLabel("Tenant equals").fill("tenant-b");
     await runQuery(amina);
     await expect(
       amina.getByRole("region", { name: "Query results" }),
@@ -45,6 +45,7 @@ test("reproduces the data and export authorization gaps", async ({
 
     const theo = await theoContext.newPage();
     await signIn(theo, "Theo", "theo");
+    await theo.getByLabel("Tenant equals").fill("tenant-a");
     await runQuery(theo);
     await expect(
       theo.getByRole("region", { name: "Query results" }),
@@ -52,8 +53,7 @@ test("reproduces the data and export authorization gaps", async ({
 
     await theo.getByRole("radio", { name: "Aggregate" }).check();
     await theo.getByLabel("Group by").selectOption("tenantId");
-    await theo.getByLabel("Field").selectOption("department");
-    await theo.getByLabel("Value").fill("People");
+    await theo.getByRole("checkbox", { name: "Apply tenant filter" }).uncheck();
     await theo.getByLabel("Purpose").selectOption("external-audit");
     await runQuery(theo);
     const aggregate = theo.getByRole("region", { name: "Query results" });
@@ -63,8 +63,8 @@ test("reproduces the data and export authorization gaps", async ({
     await theo.getByRole("radio", { name: "Rows" }).check();
     await theo.getByRole("checkbox", { name: /Salary/u }).check();
     await theo.getByRole("checkbox", { name: /Bonus/u }).check();
-    await theo.getByLabel("Field").selectOption("tenantId");
-    await theo.getByLabel("Value").fill("tenant-b");
+    await theo.getByRole("checkbox", { name: "Apply tenant filter" }).check();
+    await theo.getByLabel("Tenant equals").fill("tenant-b");
     await runQuery(theo);
     const responsePromise = theo.waitForResponse(
       (response) =>

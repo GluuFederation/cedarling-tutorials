@@ -7,7 +7,7 @@ export type P3Config = Readonly<{
   clientId: string;
   mcpResource: string;
   openRouterApiKey?: string;
-  openRouterModel: "openrouter/free";
+  openRouterModel: "liquid/lfm-2.5-2.6b:free";
   providerTimeoutMs: number;
 }>;
 
@@ -40,7 +40,7 @@ function integer(
   minimum: number,
   maximum: number,
 ): number {
-  const parsed = Number.parseInt(value ?? String(fallback), 10);
+  const parsed = Number(value ?? fallback);
   if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
     throw new Error(`${name} must be an integer from ${minimum} to ${maximum}`);
   }
@@ -60,7 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): P3Config {
     ...(env.P3_OPENROUTER_API_KEY?.trim()
       ? { openRouterApiKey: env.P3_OPENROUTER_API_KEY.trim() }
       : {}),
-    openRouterModel: "openrouter/free",
+    openRouterModel: "liquid/lfm-2.5-2.6b:free",
     providerTimeoutMs: integer(
       env.P3_PROVIDER_TIMEOUT_MS,
       15_000,

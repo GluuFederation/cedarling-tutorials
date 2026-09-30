@@ -102,12 +102,35 @@ export function Login({ expired = false }: Readonly<{ expired?: boolean }>) {
   );
 }
 
-export function EmptyQueue() {
+export function CreateArticleLink({ allowed }: { allowed: boolean }) {
+  return allowed ? (
+    <Link className="primary" href="/articles/new">
+      New article
+    </Link>
+  ) : (
+    <div>
+      <button
+        className="primary"
+        disabled
+        type="button"
+        aria-describedby="create-denied"
+      >
+        New article
+      </button>
+      <p id="create-denied" className="permission-note">
+        This account cannot create an article.
+      </p>
+    </div>
+  );
+}
+
+export function EmptyQueue({ canCreate }: { canCreate: boolean }) {
   return (
     <main className="landing">
       <section className="service-state" role="status">
         <h2>No articles available</h2>
         <p>This identity has no readable editorial work.</p>
+        <CreateArticleLink allowed={canCreate} />
       </section>
     </main>
   );

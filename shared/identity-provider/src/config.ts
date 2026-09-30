@@ -52,6 +52,7 @@ export const p2RagScopes = ["corpus.search", "document.retrieve"] as const;
 export const p3McpScopes = ["mcp.access"] as const;
 
 export const p4EditorialScopes = [
+  "article.create",
   "article.read",
   "revision.edit",
   "revision.submit",

@@ -9,7 +9,7 @@ import {
   tokenHash,
 } from "./crypto.ts";
 import type { AppDatabase } from "./database.ts";
-import { forbidden, unauthorized } from "./errors.ts";
+import { forbidden, requestIntegrityFailed, unauthorized } from "./errors.ts";
 import type { OidcTokens, OidcTransaction, Session } from "./models.ts";
 import type { OidcRuntime } from "./oidc.ts";
 
@@ -130,7 +130,7 @@ export class SessionManager {
       typeof csrf !== "string" ||
       !safeEqual(csrf, session.csrfToken)
     ) {
-      throw forbidden();
+      throw requestIntegrityFailed();
     }
     return session;
   }

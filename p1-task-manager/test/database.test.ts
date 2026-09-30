@@ -45,3 +45,24 @@ describe("task persistence boundaries", () => {
     db.close();
   });
 });
+
+it("preserves deleted fixtures and edited tasks across restarts", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "p1-restart-"));
+  directories.push(directory);
+  const filename = path.join(directory, "p1.sqlite");
+  let db = new AppDatabase(filename, "http://localhost:18001");
+  try {
+    db.raw.prepare("DELETE FROM tasks WHERE id = ?").run("task-a-brief");
+    db.raw
+      .prepare("UPDATE tasks SET title = ?, version = version + 1 WHERE id = ?")
+      .run("Edited locally", "task-a-review");
+    const before = db.raw.prepare("SELECT * FROM tasks ORDER BY id").all();
+    db.close();
+    db = new AppDatabase(filename, "http://localhost:18001");
+    expect(db.raw.prepare("SELECT * FROM tasks ORDER BY id").all()).toEqual(
+      before,
+    );
+  } finally {
+    db.close();
+  }
+});

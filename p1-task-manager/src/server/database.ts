@@ -97,6 +97,8 @@ export class AppDatabase {
       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`);
     const now = new Date("2026-08-25T00:00:00.000Z").toISOString();
     const transaction = this.raw.transaction(() => {
+      // Seed only a new database so user edits and deletions survive restart.
+      if (this.raw.prepare("SELECT 1 FROM users LIMIT 1").get()) return;
       insertUser.run(
         "user-alex",
         issuer,
