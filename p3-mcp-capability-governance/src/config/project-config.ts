@@ -7,7 +7,8 @@ export type P3Config = Readonly<{
   clientId: string;
   mcpResource: string;
   openRouterApiKey?: string;
-  openRouterModel: "liquid/lfm-2.5-2.6b:free";
+  openRouterModel: string;
+  openRouterAllowPaid: boolean;
   providerTimeoutMs: number;
 }>;
 
@@ -47,7 +48,29 @@ function integer(
   return parsed;
 }
 
+function openRouterModel(env: NodeJS.ProcessEnv, allowPaid: boolean): string {
+  const model = (env.P3_OPENROUTER_MODEL ?? "liquid/lfm-2.5-2.6b:free").trim();
+  if (!model || /\s/.test(model)) {
+    throw new Error("P3_OPENROUTER_MODEL must be a model ID without spaces");
+  }
+  if (!allowPaid && model !== "openrouter/free" && !model.endsWith(":free")) {
+    throw new Error(
+      "P3_OPENROUTER_ALLOW_PAID=true is required for a paid model",
+    );
+  }
+  return model;
+}
+
+function allowPaid(env: NodeJS.ProcessEnv): boolean {
+  const value = env.P3_OPENROUTER_ALLOW_PAID?.trim() ?? "false";
+  if (value !== "true" && value !== "false") {
+    throw new Error("P3_OPENROUTER_ALLOW_PAID must be true or false");
+  }
+  return value === "true";
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): P3Config {
+  const openRouterAllowPaid = allowPaid(env);
   return {
     host: env.P3_HOST?.trim() || "127.0.0.1",
     port: integer(env.P3_PORT, 17003, "P3_PORT", 1, 65_535),
@@ -60,7 +83,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): P3Config {
     ...(env.P3_OPENROUTER_API_KEY?.trim()
       ? { openRouterApiKey: env.P3_OPENROUTER_API_KEY.trim() }
       : {}),
-    openRouterModel: "liquid/lfm-2.5-2.6b:free",
+    openRouterModel: openRouterModel(env, openRouterAllowPaid),
+    openRouterAllowPaid,
     providerTimeoutMs: integer(
       env.P3_PROVIDER_TIMEOUT_MS,
       15_000,

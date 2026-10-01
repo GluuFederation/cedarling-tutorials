@@ -30,6 +30,7 @@ export async function createRuntime(config: P2Config) {
   const openRouter = createOpenRouterClient({
     apiKey: config.openRouterApiKey,
     model: config.openRouterModel,
+    allowPaid: config.openRouterAllowPaid,
     timeoutMs: config.providerTimeoutMs,
   });
   return {

@@ -21,6 +21,7 @@ describe("P2 configuration", () => {
       voyageModel: "voyage-4-lite",
       voyageDimensions: 256,
       openRouterModel: "openrouter/free",
+      openRouterAllowPaid: false,
     });
     expect(config.fixturesDirectory).toBe(
       resolve("/tutorial/p2-tenantrag", "fixtures"),
@@ -37,6 +38,28 @@ describe("P2 configuration", () => {
     expect(() => loadConfig({ P2_VOYAGE_API_KEY: "present" })).toThrow(
       "P2_OPENROUTER_API_KEY is required",
     );
+  });
+
+  it("accepts a selected model only with explicit paid-routing consent", () => {
+    const config = loadConfig({
+      ...validEnvironment,
+      P2_OPENROUTER_MODEL: "vendor/selected-model",
+      P2_OPENROUTER_ALLOW_PAID: "true",
+    });
+    expect(config.openRouterModel).toBe("vendor/selected-model");
+    expect(config.openRouterAllowPaid).toBe(true);
+    expect(() =>
+      loadConfig({ ...validEnvironment, P2_OPENROUTER_MODEL: " " }),
+    ).toThrow("P2_OPENROUTER_MODEL");
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        P2_OPENROUTER_MODEL: "vendor/selected-model",
+      }),
+    ).toThrow("P2_OPENROUTER_ALLOW_PAID=true");
+    expect(() =>
+      loadConfig({ ...validEnvironment, P2_OPENROUTER_ALLOW_PAID: "yes" }),
+    ).toThrow("P2_OPENROUTER_ALLOW_PAID");
   });
 
   it("rejects unsafe or invalid configuration", () => {

@@ -33,6 +33,11 @@ Ada / Leo / Mallory ── Device Flow ──→ Tutorial IdP
 
 Set `P2_VOYAGE_API_KEY` and `P2_OPENROUTER_API_KEY` in `.env` before preparing the corpus or starting Docker.
 Setup embeds synthetic PDF chunks with Voyage and checks OpenRouter generation; requests also consume provider quota. Do not submit private queries.
+`P2_OPENROUTER_MODEL` defaults to `openrouter/free`. To select another free
+model, set its OpenRouter model ID in `.env`. A model that may incur charges
+also requires `P2_OPENROUTER_ALLOW_PAID=true`; otherwise requests retain a
+zero-price routing cap. The Voyage embedding model stays fixed, so changing
+the OpenRouter answer model does not require rebuilding the corpus.
 
 Start the application and its own IdP:
 

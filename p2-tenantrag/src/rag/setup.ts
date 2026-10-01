@@ -36,6 +36,7 @@ async function smokeOpenRouter(
   const openRouter = createOpenRouterClient({
     apiKey: config.openRouterApiKey,
     model: config.openRouterModel,
+    allowPaid: config.openRouterAllowPaid,
     timeoutMs: config.providerTimeoutMs,
   });
   const result = await openRouter.generate(
