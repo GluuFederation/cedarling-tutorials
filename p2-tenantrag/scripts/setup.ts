@@ -35,4 +35,4 @@ console.log(
   `Synchronized ${merged.synchronizedKeys.join(", ") || "no"} environment keys.`,
 );
 console.log(`Verified five PDFs and built ${recordCount} vector records.`);
-console.log(`OpenRouter free-model smoke selected ${selectedModel}.`);
+console.log(`OpenRouter smoke selected ${selectedModel}.`);

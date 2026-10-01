@@ -201,6 +201,29 @@ describe("OpenRouter adapter", () => {
     });
   });
 
+  it("uses the selected paid model only when explicitly enabled", async () => {
+    let requestBody: unknown;
+    const model = new OpenRouterChatModel({
+      apiKey: "test-key",
+      model: "vendor/selected-model",
+      allowPaid: true,
+      timeoutMs: 1_000,
+      fetch: async (_input, init) => {
+        if (typeof init?.body !== "string") throw new Error("Missing body");
+        requestBody = JSON.parse(init.body);
+        return Response.json({
+          choices: [{ message: { content: "No action." } }],
+        });
+      },
+    });
+    await model.next(messages, tools);
+    expect(requestBody).toMatchObject({
+      model: "vendor/selected-model",
+      provider: { require_parameters: true },
+    });
+    expect(requestBody).not.toHaveProperty("provider.max_price");
+  });
+
   it.each([[undefined], [null], [[]]])(
     "accepts a text-only response with tool_calls=%j as no operation",
     async (toolCalls) => {

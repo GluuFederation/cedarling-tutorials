@@ -17,6 +17,7 @@ export type OpenRouterClient = Readonly<{
 type OpenRouterClientOptions = Readonly<{
   apiKey: string;
   model: string;
+  allowPaid?: boolean;
   timeoutMs: number;
   fetch?: typeof fetch;
 }>;
@@ -81,8 +82,11 @@ export function createOpenRouterClient(
             },
             body: JSON.stringify({
               model: options.model,
+              ...(!options.allowPaid
+                ? { provider: { max_price: { prompt: 0, completion: 0 } } }
+                : {}),
               max_completion_tokens: 512,
-              // The free router may select a reasoning model; request only answer text.
+              // Request answer text even when the selected model supports reasoning.
               reasoning: { effort: "minimal", exclude: true },
               messages: [
                 {

@@ -14,6 +14,26 @@ describe("P3 configuration", () => {
     expect(config.issuer).toBe("http://localhost:18003");
     expect(config.mcpResource).toBe("http://localhost:17003/mcp");
     expect(config.openRouterApiKey).toBeUndefined();
+    expect(config.openRouterModel).toBe("liquid/lfm-2.5-2.6b:free");
+    expect(config.openRouterAllowPaid).toBe(false);
+  });
+
+  it("allows an alternate model with an explicit paid-routing switch", () => {
+    const config = loadConfig({
+      P3_OPENROUTER_MODEL: "vendor/selected-model",
+      P3_OPENROUTER_ALLOW_PAID: "true",
+    });
+    expect(config.openRouterModel).toBe("vendor/selected-model");
+    expect(config.openRouterAllowPaid).toBe(true);
+    expect(() => loadConfig({ P3_OPENROUTER_MODEL: " " })).toThrow(
+      "P3_OPENROUTER_MODEL",
+    );
+    expect(() =>
+      loadConfig({ P3_OPENROUTER_MODEL: "vendor/selected-model" }),
+    ).toThrow("P3_OPENROUTER_ALLOW_PAID=true");
+    expect(() => loadConfig({ P3_OPENROUTER_ALLOW_PAID: "yes" })).toThrow(
+      "P3_OPENROUTER_ALLOW_PAID",
+    );
   });
 
   it("rejects invalid ports and resource URI fragments", () => {

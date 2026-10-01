@@ -7,7 +7,7 @@ const messages = {
   provider_quota:
     "OpenRouter quota or rate limit reached. Check your account and retry later.",
   provider_unavailable:
-    "The configured free model is unavailable. Retry later.",
+    "The configured model is unavailable. Retry later or choose another model.",
   provider_timeout:
     "OpenRouter timed out. No MCP operation was requested; retry later.",
   provider_network:

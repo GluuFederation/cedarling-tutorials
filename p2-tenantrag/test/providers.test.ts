@@ -214,13 +214,38 @@ describe("OpenRouter adapter", () => {
       model: string;
       max_completion_tokens: number;
       reasoning: { effort: string; exclude: boolean };
+      provider: { max_price: { prompt: number; completion: number } };
       messages: Array<{ content: string }>;
     };
     expect(body.model).toBe("openrouter/free");
     expect(body.max_completion_tokens).toBe(512);
     expect(body.reasoning).toEqual({ effort: "minimal", exclude: true });
+    expect(body.provider.max_price).toEqual({ prompt: 0, completion: 0 });
     expect(body.messages[1]?.content).toContain("a-public-1");
     expect(body.messages[1]?.content).toContain("Synthetic evidence only.");
+  });
+
+  it("removes the zero-price cap only when paid routing is enabled", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        model: "vendor/selected-model",
+        choices: [{ message: { content: "Grounded answer." } }],
+      }),
+    );
+    const client = createOpenRouterClient({
+      apiKey: "test-key",
+      model: "vendor/selected-model",
+      allowPaid: true,
+      timeoutMs: 1_000,
+      fetch: request,
+    });
+    await client.generate("Question?", [chunk]);
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toMatchObject({
+      model: "vendor/selected-model",
+    });
+    expect(
+      JSON.parse(String(request.mock.calls[0]?.[1]?.body)),
+    ).not.toHaveProperty("provider.max_price");
   });
 
   it("bounds evidence and rejects malformed responses", async () => {

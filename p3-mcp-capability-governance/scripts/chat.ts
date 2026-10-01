@@ -31,6 +31,7 @@ async function main() {
     model: new OpenRouterChatModel({
       apiKey: config.openRouterApiKey,
       model: config.openRouterModel,
+      allowPaid: config.openRouterAllowPaid,
       timeoutMs: config.providerTimeoutMs,
     }),
     mcp,

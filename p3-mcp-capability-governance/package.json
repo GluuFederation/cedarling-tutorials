@@ -27,6 +27,7 @@
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "express": "5.2.1",
+    "hono": "4.13.7",
     "jose": "6.2.10",
     "zod": "4.6.5"
   },

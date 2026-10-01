@@ -50,7 +50,11 @@ pnpm dev
 `pnpm dev` starts this project’s IdP and application together.
 
 For interactive chat, install the project dependencies on the host, set `P3_OPENROUTER_API_KEY` in its `.env`, and run `pnpm chat dana` in another terminal. This client works with either the native or Docker service.
-The chat client requests the configured free tool-calling model without a paid fallback; provider availability can vary. The scripted tests reproduce the baseline gap without a provider account.
+`P3_OPENROUTER_MODEL` defaults to `liquid/lfm-2.5-2.6b:free`. Select another
+OpenRouter model that supports tool calling if needed. Paid routing requires
+`P3_OPENROUTER_ALLOW_PAID=true`; without it, the client keeps its zero-price
+cap and has no paid fallback. Provider availability can vary. The scripted
+tests reproduce the baseline gap without a provider account.
 
 For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
 

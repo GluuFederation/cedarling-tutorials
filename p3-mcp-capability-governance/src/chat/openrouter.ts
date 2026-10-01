@@ -40,7 +40,8 @@ const responseSchema = z.object({
 
 type OpenRouterOptions = Readonly<{
   apiKey: string;
-  model: "liquid/lfm-2.5-2.6b:free";
+  model: string;
+  allowPaid?: boolean;
   timeoutMs: number;
   fetch?: typeof fetch;
 }>;
@@ -98,7 +99,9 @@ export class OpenRouterChatModel implements ChatModel {
             tool_choice: "auto",
             provider: {
               require_parameters: true,
-              max_price: { prompt: 0, completion: 0 },
+              ...(!this.#options.allowPaid
+                ? { max_price: { prompt: 0, completion: 0 } }
+                : {}),
             },
           }),
           signal: AbortSignal.timeout(this.#options.timeoutMs),
