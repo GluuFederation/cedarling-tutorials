@@ -8,6 +8,7 @@ import type {
 } from "../src/rag/retrieval.js";
 
 function application() {
+  const close = vi.fn(async () => {});
   const authenticator = {
     authenticate: vi.fn(async () => ({
       id: "mallory" as const,
@@ -25,12 +26,13 @@ function application() {
       citations: [],
     }),
   );
-  const retrievalService = { retrieve } as unknown as RetrievalService;
+  const retrievalService = { retrieve } satisfies RetrievalService;
   return {
     authenticator,
     retrievalService,
     retrieve,
-    app: createApp({ authenticator, retrievalService }),
+    close,
+    app: createApp({ authenticator, retrievalService, close }),
   };
 }
 
@@ -47,6 +49,7 @@ describe("P2 HTTP API", () => {
       "/openapi.json",
       "/v1/retrievals",
     ]);
+    expect(document.info.version).toBe("0.0.1");
     expect(
       document.paths["/v1/retrievals"].post["x-cedarling-capabilities"],
     ).toEqual(["corpus.search", "document.retrieve"]);
@@ -171,6 +174,27 @@ describe("P2 HTTP API", () => {
     expect(runtime.retrieve).not.toHaveBeenCalled();
   });
 
+  it("rejects unsupported content types without calling authentication or retrieval", async () => {
+    const runtime = application();
+    try {
+      const response = await runtime.app.inject({
+        method: "POST",
+        url: "/v1/retrievals",
+        headers: { "content-type": "application/xml" },
+        payload: "<query>example</query>",
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: "invalid_retrieval",
+        requestId: expect.any(String),
+      });
+      expect(runtime.authenticator.authenticate).not.toHaveBeenCalled();
+      expect(runtime.retrieve).not.toHaveBeenCalled();
+    } finally {
+      await runtime.app.close();
+    }
+  });
+
   it("maps an oversized JSON body to invalid_retrieval", async () => {
     const runtime = application();
     const response = await runtime.app.inject({
@@ -189,5 +213,11 @@ describe("P2 HTTP API", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ error: "invalid_retrieval" });
     expect(runtime.retrieve).not.toHaveBeenCalled();
+  });
+
+  it("closes the application authorization runtime", async () => {
+    const runtime = application();
+    await runtime.app.close();
+    expect(runtime.close).toHaveBeenCalledOnce();
   });
 });

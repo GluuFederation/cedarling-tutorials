@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
 import { resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import Database from "better-sqlite3";
 import { contentDigest } from "./crypto.ts";
 import { conflict, notFound } from "./errors.ts";
 import type {
+  Approval,
   ArticleSummary,
   ArticleView,
+  Authority,
   OidcTransaction,
   Principal,
   RevisionState,
@@ -102,11 +104,12 @@ type ArticleRow = {
 };
 
 export function resetDatabase(dataDirectory: string, issuer: string): void {
-  const databasePath = resolve(dataDirectory, "p4.sqlite");
-  for (const suffix of ["", "-wal", "-shm"]) {
-    rmSync(`${databasePath}${suffix}`, { force: true });
+  const database = new AppDatabase(dataDirectory, issuer);
+  try {
+    database.reset(issuer);
+  } finally {
+    database.close();
   }
-  new AppDatabase(dataDirectory, issuer).close();
 }
 
 export class AppDatabase {
@@ -125,7 +128,26 @@ export class AppDatabase {
     this.connection.close();
   }
 
-  seed(issuer: string): void {
+  /** Reset in place so running processes keep using the same database. */
+  reset(issuer: string): void {
+    this.connection
+      .transaction(() => {
+        this.connection.exec(`
+        DELETE FROM publications;
+        DELETE FROM reviews;
+        DELETE FROM revisions;
+        DELETE FROM articles;
+        DELETE FROM authorities;
+        DELETE FROM sessions;
+        DELETE FROM oidc_transactions;
+        DELETE FROM principals;
+      `);
+        this.seed(issuer);
+      })
+      .immediate();
+  }
+
+  private seed(issuer: string): void {
     const existing = this.connection
       .prepare("SELECT count(*) AS count FROM principals")
       .get() as { count: number };
@@ -152,7 +174,7 @@ export class AppDatabase {
       authority.run("user-ana", "tenant-a", "publisher");
       authority.run("user-omar", "tenant-a", "editor");
 
-      this.seedArticle(
+      this.insertArticle(
         "article-launch-brief",
         "tenant-a",
         "revision-launch-1",
@@ -160,8 +182,9 @@ export class AppDatabase {
         "Shape the launch brief for editorial review.",
         "draft",
         "user-riley",
+        "2026-09-17T08:00:00.000Z",
       );
-      this.seedArticle(
+      this.insertArticle(
         "article-migration-guide",
         "tenant-a",
         "revision-migration-1",
@@ -169,8 +192,9 @@ export class AppDatabase {
         "A concise guide for customers moving to the new platform.",
         "submitted",
         "user-riley",
+        "2026-09-17T08:00:00.000Z",
       );
-      this.seedArticle(
+      this.insertArticle(
         "article-partner-announcement",
         "tenant-a",
         "revision-partner-1",
@@ -178,8 +202,9 @@ export class AppDatabase {
         "Announce the new partner program after editorial approval.",
         "submitted",
         "user-riley",
+        "2026-09-17T08:00:00.000Z",
       );
-      this.seedArticle(
+      this.insertArticle(
         "article-editorial-handbook",
         "tenant-a",
         "revision-handbook-1",
@@ -187,8 +212,9 @@ export class AppDatabase {
         "The concise handbook for the editorial team.",
         "submitted",
         "user-riley",
+        "2026-09-17T08:00:00.000Z",
       );
-      this.seedArticle(
+      this.insertArticle(
         "article-private-tenant-b",
         "tenant-b",
         "revision-private-b-1",
@@ -196,30 +222,9 @@ export class AppDatabase {
         "This article must not be disclosed to Tenant A.",
         "submitted",
         "user-tenant-b",
+        "2026-09-17T08:00:00.000Z",
       );
     })();
-  }
-
-  private seedArticle(
-    articleId: string,
-    tenantId: string,
-    revisionId: string,
-    title: string,
-    body: string,
-    state: RevisionState,
-    authorId: string,
-  ): void {
-    const now = "2026-09-17T08:00:00.000Z";
-    this.insertArticle(
-      articleId,
-      tenantId,
-      revisionId,
-      title,
-      body,
-      state,
-      authorId,
-      now,
-    );
   }
 
   private insertArticle(
@@ -257,6 +262,7 @@ export class AppDatabase {
       .run(revisionId, articleId);
   }
 
+  /** Commit the article and its first draft together; a failed insert leaves neither. */
   createArticle(input: {
     tenantId: string;
     authorId: string;
@@ -373,19 +379,36 @@ export class AppDatabase {
     };
   }
 
-  hasCurrentAuthority(
+  authority(
     principalId: string,
     tenantId: string,
-    role: "editor" | "publisher",
-  ): boolean {
-    return Boolean(
-      this.connection
-        .prepare(
-          `SELECT 1 FROM authorities
-           WHERE principal_id = ? AND tenant_id = ? AND role = ? AND revoked_at IS NULL`,
-        )
-        .get(principalId, tenantId, role),
-    );
+    role: Authority["role"],
+  ): Authority {
+    const row = this.connection
+      .prepare(
+        "SELECT version, revoked_at FROM authorities WHERE principal_id = ? AND tenant_id = ? AND role = ?",
+      )
+      .get(principalId, tenantId, role) as
+      | { version: number; revoked_at: string | null }
+      | undefined;
+    return {
+      principalId,
+      tenantId,
+      role,
+      version: row?.version ?? null,
+      current: row !== undefined && row.revoked_at === null,
+    };
+  }
+
+  /** Recheck the authority snapshot under the same write lock as the effect. */
+  private assertAuthority(expected: Authority): void {
+    if (
+      !isDeepStrictEqual(
+        expected,
+        this.authority(expected.principalId, expected.tenantId, expected.role),
+      )
+    )
+      throw conflict("Editorial authority changed. Refresh and try again");
   }
 
   saveDraft(input: {
@@ -396,54 +419,56 @@ export class AppDatabase {
     title: string;
     body: string;
   }): string {
-    return this.connection.transaction(() => {
-      const current = this.article(input.articleId, input.tenantId);
-      if (!current) throw notFound();
-      if (current.version !== input.expectedVersion) throw conflict();
-      const now = new Date().toISOString();
-      const digest = contentDigest(input.title, input.body);
-      if (current.revision.state === "draft") {
+    return this.connection
+      .transaction(() => {
+        const current = this.article(input.articleId, input.tenantId);
+        if (!current) throw notFound();
+        if (current.version !== input.expectedVersion) throw conflict();
+        const now = new Date().toISOString();
+        const digest = contentDigest(input.title, input.body);
+        if (current.revision.state === "draft") {
+          this.connection
+            .prepare(
+              `UPDATE revisions SET title = ?, body = ?, digest = ?, updated_at = ?
+             WHERE id = ? AND state = 'draft'`,
+            )
+            .run(input.title, input.body, digest, now, current.revision.id);
+          this.bumpArticle(input.articleId, input.expectedVersion);
+          return current.revision.id;
+        }
+        if (current.revisions.length >= 20)
+          throw conflict("This article already has 20 revisions");
+        const id = `revision-${randomUUID()}`;
+        const latest = current.revisions[0];
+        if (!latest) throw conflict("The article has no current revision");
+        const version = latest.version + 1;
         this.connection
           .prepare(
-            `UPDATE revisions SET title = ?, body = ?, digest = ?, updated_at = ?
-             WHERE id = ? AND state = 'draft'`,
-          )
-          .run(input.title, input.body, digest, now, current.revision.id);
-        this.bumpArticle(input.articleId, input.expectedVersion);
-        return current.revision.id;
-      }
-      if (current.revisions.length >= 20)
-        throw conflict("This article already has 20 revisions");
-      const id = `revision-${randomUUID()}`;
-      const latest = current.revisions[0];
-      if (!latest) throw conflict("The article has no current revision");
-      const version = latest.version + 1;
-      this.connection
-        .prepare(
-          `INSERT INTO revisions
+            `INSERT INTO revisions
            (id, article_id, version, title, body, digest, author_id, state, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
-        )
-        .run(
-          id,
-          input.articleId,
-          version,
-          input.title,
-          input.body,
-          digest,
-          input.actorId,
-          now,
-          now,
-        );
-      const changed = this.connection
-        .prepare(
-          `UPDATE articles SET current_revision_id = ?, version = version + 1
+          )
+          .run(
+            id,
+            input.articleId,
+            version,
+            input.title,
+            input.body,
+            digest,
+            input.actorId,
+            now,
+            now,
+          );
+        const changed = this.connection
+          .prepare(
+            `UPDATE articles SET current_revision_id = ?, version = version + 1
            WHERE id = ? AND version = ?`,
-        )
-        .run(id, input.articleId, input.expectedVersion);
-      if (changed.changes !== 1) throw conflict();
-      return id;
-    })();
+          )
+          .run(id, input.articleId, input.expectedVersion);
+        if (changed.changes !== 1) throw conflict();
+        return id;
+      })
+      .immediate();
   }
 
   submit(
@@ -452,14 +477,25 @@ export class AppDatabase {
     revisionId: string,
     expectedVersion: number,
   ): void {
-    this.transition(
-      articleId,
-      tenantId,
-      revisionId,
-      expectedVersion,
-      "draft",
-      "submitted",
-    );
+    this.connection
+      .transaction(() => {
+        const current = this.article(articleId, tenantId);
+        if (!current) throw notFound();
+        if (
+          current.version !== expectedVersion ||
+          current.currentRevisionId !== revisionId ||
+          current.revision.state !== "draft"
+        ) {
+          throw conflict();
+        }
+        this.connection
+          .prepare(
+            "UPDATE revisions SET state = 'submitted', updated_at = ? WHERE id = ?",
+          )
+          .run(new Date().toISOString(), revisionId);
+        this.bumpArticle(articleId, expectedVersion);
+      })
+      .immediate();
   }
 
   review(
@@ -469,70 +505,62 @@ export class AppDatabase {
     reviewerId: string,
     expectedVersion: number,
     decision: "approved" | "rejected",
+    authority: Authority,
   ): void {
-    this.connection.transaction(() => {
-      const current = this.article(articleId, tenantId);
-      if (!current) throw notFound();
-      if (
-        current.version !== expectedVersion ||
-        current.currentRevisionId !== revisionId ||
-        current.revision.state !== "submitted"
-      ) {
-        throw conflict();
-      }
-      this.connection
-        .prepare(
-          `INSERT INTO reviews
+    this.connection
+      .transaction(() => {
+        this.assertAuthority(authority);
+        const current = this.article(articleId, tenantId);
+        if (!current) throw notFound();
+        if (
+          current.version !== expectedVersion ||
+          current.currentRevisionId !== revisionId ||
+          current.revision.state !== "submitted"
+        ) {
+          throw conflict();
+        }
+        this.connection
+          .prepare(
+            `INSERT INTO reviews
            (id, article_id, revision_id, reviewer_id, digest, revision_version, decision, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          `review-${randomUUID()}`,
-          articleId,
-          revisionId,
-          reviewerId,
-          current.revision.digest,
-          current.revision.version,
-          decision,
-          new Date().toISOString(),
-        );
-      this.connection
-        .prepare("UPDATE revisions SET state = ?, updated_at = ? WHERE id = ?")
-        .run(decision, new Date().toISOString(), revisionId);
-      this.bumpArticle(articleId, expectedVersion);
-    })();
+          )
+          .run(
+            `review-${randomUUID()}`,
+            articleId,
+            revisionId,
+            reviewerId,
+            current.revision.digest,
+            current.revision.version,
+            decision,
+            new Date().toISOString(),
+          );
+        this.connection
+          .prepare(
+            "UPDATE revisions SET state = ?, updated_at = ? WHERE id = ?",
+          )
+          .run(decision, new Date().toISOString(), revisionId);
+        this.bumpArticle(articleId, expectedVersion);
+      })
+      .immediate();
   }
 
-  latestApproval(articleId: string):
-    | {
-        revisionId: string;
-        revisionVersion: number;
-        digest: string;
-        reviewerId: string;
-        authorityCurrent: boolean;
-      }
-    | undefined {
+  latestApproval(articleId: string): Approval | undefined {
     const row = this.connection
       .prepare(
-        `SELECT rv.revision_id AS revisionId, rv.revision_version AS revisionVersion,
-                rv.digest, rv.reviewer_id AS reviewerId,
-                CASE WHEN au.principal_id IS NOT NULL AND au.revoked_at IS NULL
-                     THEN 1 ELSE 0 END AS authorityCurrent
-         FROM reviews rv
-         JOIN articles a ON a.id = rv.article_id
-         LEFT JOIN authorities au ON au.principal_id = rv.reviewer_id
-           AND au.tenant_id = a.tenant_id AND au.role = 'editor'
-         WHERE rv.article_id = ? AND rv.decision = 'approved'
-         ORDER BY rv.created_at DESC LIMIT 1`,
+        `SELECT rv.id, rv.revision_id AS revisionId, rv.revision_version AS revisionVersion,
+              rv.digest, rv.reviewer_id AS reviewerId, au.version AS authorityVersion,
+              CASE WHEN au.principal_id IS NOT NULL AND au.revoked_at IS NULL
+                   THEN 1 ELSE 0 END AS authorityCurrent
+       FROM reviews rv
+       JOIN articles a ON a.id = rv.article_id
+       LEFT JOIN authorities au ON au.principal_id = rv.reviewer_id
+         AND au.tenant_id = a.tenant_id AND au.role = 'editor'
+       WHERE rv.article_id = ? AND rv.decision = 'approved'
+       ORDER BY rv.revision_version DESC LIMIT 1`,
       )
       .get(articleId) as
-      | {
-          revisionId: string;
-          revisionVersion: number;
-          digest: string;
-          reviewerId: string;
-          authorityCurrent: number;
-        }
+      | (Omit<Approval, "authorityCurrent"> & { authorityCurrent: number })
       | undefined;
     return row
       ? { ...row, authorityCurrent: Boolean(row.authorityCurrent) }
@@ -544,58 +572,40 @@ export class AppDatabase {
     tenantId: string,
     actorId: string,
     expectedVersion: number,
-  ): string {
-    return this.connection.transaction(() => {
-      const current = this.article(articleId, tenantId);
-      if (!current) throw notFound();
-      if (current.version !== expectedVersion) throw conflict();
-      if (!["submitted", "approved"].includes(current.revision.state))
-        throw conflict("Only a reviewable revision can be published");
-      if (!this.latestApproval(articleId))
-        throw conflict("An approval is required before publication");
-      if (current.published)
-        throw conflict("This revision is already published");
-      const id = `publication-${randomUUID()}`;
-      const now = new Date().toISOString();
-      this.connection
-        .prepare(
-          `INSERT INTO publications (id, article_id, revision_id, published_by, created_at)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(id, articleId, current.currentRevisionId, actorId, now);
-      this.connection
-        .prepare(
-          "UPDATE revisions SET state = 'published', updated_at = ? WHERE id = ?",
-        )
-        .run(now, current.currentRevisionId);
-      this.bumpArticle(articleId, expectedVersion);
-      return id;
-    })();
-  }
-
-  private transition(
-    articleId: string,
-    tenantId: string,
-    revisionId: string,
-    expectedVersion: number,
-    from: RevisionState,
-    to: RevisionState,
+    evidence: { publisher: Authority; approval: Approval | undefined },
   ): void {
-    this.connection.transaction(() => {
-      const current = this.article(articleId, tenantId);
-      if (!current) throw notFound();
-      if (
-        current.version !== expectedVersion ||
-        current.currentRevisionId !== revisionId ||
-        current.revision.state !== from
-      ) {
-        throw conflict();
-      }
-      this.connection
-        .prepare("UPDATE revisions SET state = ?, updated_at = ? WHERE id = ?")
-        .run(to, new Date().toISOString(), revisionId);
-      this.bumpArticle(articleId, expectedVersion);
-    })();
+    this.connection
+      .transaction(() => {
+        this.assertAuthority(evidence.publisher);
+        if (
+          !isDeepStrictEqual(evidence.approval, this.latestApproval(articleId))
+        )
+          throw conflict("Approval evidence changed. Refresh and try again");
+        const current = this.article(articleId, tenantId);
+        if (!current) throw notFound();
+        if (current.version !== expectedVersion) throw conflict();
+        if (!["submitted", "approved"].includes(current.revision.state))
+          throw conflict("Only a reviewable revision can be published");
+        if (!evidence.approval)
+          throw conflict("An approval is required before publication");
+        if (current.published)
+          throw conflict("This revision is already published");
+        const id = `publication-${randomUUID()}`;
+        const now = new Date().toISOString();
+        this.connection
+          .prepare(
+            `INSERT INTO publications (id, article_id, revision_id, published_by, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          )
+          .run(id, articleId, current.currentRevisionId, actorId, now);
+        this.connection
+          .prepare(
+            "UPDATE revisions SET state = 'published', updated_at = ? WHERE id = ?",
+          )
+          .run(now, current.currentRevisionId);
+        this.bumpArticle(articleId, expectedVersion);
+      })
+      .immediate();
   }
 
   private bumpArticle(articleId: string, expectedVersion: number): void {

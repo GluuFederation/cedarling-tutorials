@@ -40,7 +40,7 @@ async function smokeOpenRouter(
     timeoutMs: config.providerTimeoutMs,
   });
   const result = await openRouter.generate(
-    "In one sentence, identify this as synthetic tutorial evidence.",
+    "Summarize the subject of this customer support document in one sentence.",
     [sample],
   );
   return result.model;

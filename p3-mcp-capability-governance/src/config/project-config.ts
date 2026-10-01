@@ -12,28 +12,6 @@ export type P3Config = Readonly<{
   providerTimeoutMs: number;
 }>;
 
-function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname === "127.0.0.1" ||
-    hostname === "[::1]" ||
-    hostname === "::1"
-  );
-}
-
-function httpUrl(value: string, name: string): string {
-  const url = new URL(value);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`${name} must use http or https`);
-  }
-  if (url.protocol === "http:" && !isLoopbackHostname(url.hostname)) {
-    throw new Error(`${name} must use https outside loopback`);
-  }
-  if (url.hash) throw new Error(`${name} must not contain a fragment`);
-  return url.toString().replace(/\/$/, "");
-}
-
 function integer(
   value: string | undefined,
   fallback: number,
@@ -73,13 +51,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): P3Config {
   const openRouterAllowPaid = allowPaid(env);
   return {
     host: env.P3_HOST?.trim() || "127.0.0.1",
-    port: integer(env.P3_PORT, 17003, "P3_PORT", 1, 65_535),
-    issuer: httpUrl(env.P3_ISSUER ?? "http://localhost:18003", "P3_ISSUER"),
-    clientId: env.P3_CLIENT_ID?.trim() || "p3-mcp-capability-governance-cli",
-    mcpResource: httpUrl(
-      env.P3_MCP_RESOURCE ?? "http://localhost:17003/mcp",
-      "P3_MCP_RESOURCE",
-    ),
+    port: 17003,
+    issuer: "http://localhost:18003",
+    clientId: "p3-mcp-capability-governance-cli",
+    mcpResource: "http://localhost:17003/mcp",
     ...(env.P3_OPENROUTER_API_KEY?.trim()
       ? { openRouterApiKey: env.P3_OPENROUTER_API_KEY.trim() }
       : {}),

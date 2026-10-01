@@ -1,3 +1,8 @@
+import type {
+  AssignmentTarget,
+  AuthorizationEnvelope,
+} from "../shared/authorization";
+
 export type User = {
   id: string;
   name: string;
@@ -22,3 +27,13 @@ export type Task = {
 export type Session = { user: User; csrfToken: string; expiresAt: string };
 
 export type TaskResult = { task: Task };
+
+export type TaskListResult = {
+  tasks: Task[];
+  authorization: AuthorizationEnvelope;
+};
+
+export type AuthorizedTaskResult = TaskResult & {
+  assignmentTarget?: AssignmentTarget;
+  authorization: AuthorizationEnvelope;
+};

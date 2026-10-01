@@ -8,6 +8,7 @@ WORKDIR /workspace/p4-editorial-publishing
 COPY p4-editorial-publishing/package.json p4-editorial-publishing/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY p4-editorial-publishing/ ./
+COPY shared/policy-store.mjs shared/policy-store.d.mts ../shared/
 COPY shared/identity-provider/scripts/project-environment.mjs shared/identity-provider/scripts/project-environment.d.mts ../shared/identity-provider/scripts/
 COPY shared/identity-provider/scripts/setup.mjs shared/identity-provider/scripts/setup.d.mts ../shared/identity-provider/scripts/
 COPY shared/identity-provider/src/projects.ts ../shared/identity-provider/src/
@@ -19,6 +20,7 @@ ENV NODE_ENV=production
 COPY --chown=node:node --from=build /workspace/p4-editorial-publishing/package.json ./package.json
 COPY --chown=node:node --from=build /workspace/p4-editorial-publishing/node_modules ./node_modules
 COPY --chown=node:node --from=build /workspace/p4-editorial-publishing/.next ./.next
+COPY --chown=node:node --from=build /workspace/p4-editorial-publishing/.local/policy-store.cjar ./.local/policy-store.cjar
 COPY --chown=node:node --from=build /workspace/p4-editorial-publishing/scripts ./scripts
 COPY --chown=node:node --from=build /workspace/p4-editorial-publishing/src ./src
 COPY --chown=node:node shared/dev-supervisor.mjs /shared/dev-supervisor.mjs

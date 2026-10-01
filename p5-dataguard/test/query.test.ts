@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import { workforceFixtures } from "../src/server/fixtures.ts";
-import { authorizationBoundaries } from "../src/server/permissive-trace.ts";
 import {
   compileCardinalityQuery,
   compileQuery,
@@ -8,17 +7,6 @@ import {
 } from "../src/server/query.ts";
 
 describe("typed query compiler", () => {
-  test("keeps one exact Cedar action for every authorization boundary", () => {
-    expect(authorizationBoundaries).toEqual({
-      "dataset.inspect": "Data::InspectDataset",
-      "data.query": "Data::Query",
-      "data.aggregate": "Data::Aggregate",
-      "data.export": "Data::CreateExport",
-      "export.revoke": "Data::RevokeExport",
-      "export.download": "Data::DownloadExport",
-    });
-  });
-
   test("keeps the fixture at 18 synthetic records with boundary groups", () => {
     expect(workforceFixtures).toHaveLength(18);
     const groups = new Map<string, number>();
@@ -90,6 +78,7 @@ describe("typed query compiler", () => {
       purpose: "external-audit",
       limit: 10,
     });
+    if (plan.kind !== "aggregate") throw new Error("Expected aggregate plan");
     const cardinality = compileCardinalityQuery(plan);
     expect(cardinality.sql).toContain('"tenant_id" = ?');
     expect(cardinality.sql).toContain('GROUP BY "department"');

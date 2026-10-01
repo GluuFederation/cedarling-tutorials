@@ -6,13 +6,15 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "noUncheckedIndexedAccess": true,
-    "outDir": "dist/server",
-    "rootDir": "src/server",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "outDir": "dist",
+    "rootDir": "src",
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
     "target": "ES2022",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/server/**/*.ts"]
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts"]
 }

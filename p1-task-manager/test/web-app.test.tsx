@@ -2,6 +2,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  AuthorizationEnvelope,
+  TaskCeiling,
+} from "../src/shared/authorization";
 import type { Session, Task } from "../src/web/types";
 
 const api = vi.hoisted(() => ({
@@ -15,6 +19,10 @@ const api = vi.hoisted(() => ({
   delete: vi.fn(),
   logout: vi.fn(),
 }));
+const browserAuthorization = vi.hoisted(() => ({
+  authorizePresentation: vi.fn(),
+  closeBrowserAuthorization: vi.fn(async () => {}),
+}));
 
 vi.mock("../src/web/api", () => ({
   api,
@@ -27,6 +35,8 @@ vi.mock("../src/web/api", () => ({
     }
   },
 }));
+
+vi.mock("../src/web/authorization-trace", () => browserAuthorization);
 
 import App from "../src/web/App";
 
@@ -85,6 +95,51 @@ const tutorialSessions: ReadonlyArray<readonly [string, Session]> = [
   ],
 ];
 
+function envelope(
+  session: Session,
+  taskCeiling: TaskCeiling,
+  create: boolean,
+  currentTask: Task = task,
+): AuthorizationEnvelope {
+  return {
+    uiPrincipal: session.user,
+    ceiling: {
+      tenant: { create },
+      tasks: { [currentTask.id]: taskCeiling },
+    },
+    policy: {
+      release: "p1@1.0.0",
+      storeId: "p1",
+      version: "1.0.0",
+      sha256: "a".repeat(64),
+      url: `/policy-store/${"a".repeat(64)}.cjar`,
+    },
+    subjectEpoch: `epoch-${String(session.user.id)}`,
+    resourceVersions: { [currentTask.id]: currentTask.version },
+    evaluatedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+}
+
+function authorizeSession(
+  session: Session,
+  controls: TaskCeiling,
+  create: boolean,
+  currentTask: Task = task,
+): void {
+  const authorization = envelope(session, controls, create, currentTask);
+  api.tasks.mockResolvedValue({ tasks: [currentTask], authorization });
+  api.task.mockResolvedValue({
+    task: currentTask,
+    assignmentTarget: {
+      id: "user-mina",
+      name: "Mina Okafor",
+      tenantId: "tenant-a",
+    },
+    authorization,
+  });
+}
+
 async function settle() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -103,8 +158,6 @@ function renderApp(root: Root): void {
   act(() => root.render(<App />));
 }
 
-const browserTrace = vi.fn();
-
 describe("P1 task UI", () => {
   let root: Root;
 
@@ -112,15 +165,19 @@ describe("P1 task UI", () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
     vi.resetAllMocks();
     document.body.innerHTML = '<div id="root"></div>';
-    vi.spyOn(console, "info").mockImplementation(browserTrace);
     root = createRoot(document.querySelector("#root")!);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
     });
     api.session.mockResolvedValue(alex);
-    api.tasks.mockResolvedValue({ tasks: [task] });
-    api.task.mockResolvedValue({ task });
+    authorizeSession(alex, { view: true, edit: true }, false);
+    browserAuthorization.authorizePresentation.mockImplementation(
+      async ({ envelope: current }: { envelope: AuthorizationEnvelope }) => ({
+        ceiling: current.ceiling,
+        stale: false,
+      }),
+    );
     api.logout.mockResolvedValue(undefined);
   });
 
@@ -131,22 +188,13 @@ describe("P1 task UI", () => {
     vi.restoreAllMocks();
   });
 
-  it("loads task.view, emits the teaching trace, and switches branding by viewport", async () => {
+  it("evaluates browser presentation and switches branding by viewport", async () => {
     renderApp(root);
     await settle();
     await settle();
 
     expect(api.task).toHaveBeenCalledWith("task-a-brief");
-    expect(browserTrace).toHaveBeenCalledOnce();
-    expect(browserTrace.mock.calls[0]?.[0]).toContain(
-      "P1 browser | FAKE ALLOW (presentation only)",
-    );
-    expect(browserTrace).toHaveBeenCalledWith(
-      "P1 browser | FAKE ALLOW (presentation only) | task.view | user-alex -> TaskCollection::tenant-a",
-    );
-    expect(JSON.stringify(browserTrace.mock.calls)).not.toMatch(
-      /access-token|refresh-token|id-token|p1_session/,
-    );
+    expect(browserAuthorization.authorizePresentation).toHaveBeenCalled();
 
     const source = document.querySelector<HTMLSourceElement>(
       ".brand-lockup source",
@@ -158,32 +206,59 @@ describe("P1 task UI", () => {
     ).toContain("cedarling-wordmark-dark");
   });
 
-  it.each(tutorialSessions)(
-    "keeps all permissive capabilities explorable for %s",
-    async (_name, session) => {
-      api.session.mockResolvedValue(session);
-      renderApp(root);
-      await settle();
-      await settle();
+  it("shows only controls allowed by the server ceiling and browser decision", async () => {
+    renderApp(root);
+    await settle();
+    await settle();
 
-      for (const label of [
-        "New task",
-        "Save changes",
-        "Assign to Mina",
-        "Complete task",
-        "Delete",
-      ]) {
-        expect(button(label).disabled).toBe(false);
-      }
+    expect(button("Save changes").disabled).toBe(false);
+    for (const label of [
+      "New task",
+      "Assign to Mina",
+      "Complete task",
+      "Delete",
+    ]) {
       expect(
-        document.querySelector<HTMLInputElement>(".task-form input")?.disabled,
+        Array.from(document.querySelectorAll("button")).some(
+          (item) => item.textContent.trim() === label,
+        ),
       ).toBe(false);
-      expect(api.task).toHaveBeenCalledWith("task-a-brief");
-    },
-  );
+    }
+  });
+
+  it("shows the owner controls when both decisions allow them", async () => {
+    const mina = tutorialSessions[1]![1];
+    api.session.mockResolvedValue(mina);
+    authorizeSession(
+      mina,
+      { view: true, edit: true, assign: true, complete: true, delete: true },
+      true,
+    );
+    renderApp(root);
+    await settle();
+    await settle();
+
+    for (const label of [
+      "New task",
+      "Save changes",
+      "Assign to Mina",
+      "Complete task",
+      "Delete",
+    ]) {
+      expect(button(label).disabled).toBe(false);
+    }
+  });
 
   it("disables only the impossible completion transition for a completed task", async () => {
-    api.task.mockResolvedValue({ task: { ...task, status: "completed" } });
+    const mina = tutorialSessions[1]![1];
+    const completed = { ...task, status: "completed" as const };
+    api.session.mockResolvedValue(mina);
+    authorizeSession(
+      mina,
+      { view: true, edit: true, assign: true, complete: true, delete: true },
+      true,
+      completed,
+    );
     renderApp(root);
     await settle();
     await settle();
@@ -196,6 +271,11 @@ describe("P1 task UI", () => {
 
   it("preserves a failed create form and requires confirmation before delete", async () => {
     api.session.mockResolvedValue(tutorialSessions[1]?.[1]);
+    authorizeSession(
+      tutorialSessions[1]![1],
+      { view: true, edit: true, assign: true, complete: true, delete: true },
+      true,
+    );
     api.create.mockRejectedValue(new Error("dependency detail"));
 
     renderApp(root);

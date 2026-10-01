@@ -1,0 +1,10 @@
+{
+  "cedar_version": "4.4.0",
+  "policy_store": {
+    "id": "8b8281a6421fafe538a5c6c3965d5fdc76600007bd8778a671b8a88793bb6217",
+    "name": "P4 Editorial Publishing",
+    "version": "1.0.0",
+    "created_date": "2026-09-28T00:00:00Z",
+    "updated_date": "2026-09-28T00:00:00Z"
+  }
+}

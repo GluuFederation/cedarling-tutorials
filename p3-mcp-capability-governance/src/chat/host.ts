@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ProtocolError } from "@modelcontextprotocol/client";
 import type { McpClientSession } from "../mcp/client.js";
 import type { ChatMessage, ChatModel, ModelTool } from "./model.js";
 import { ChatError } from "./errors.js";
@@ -104,8 +105,16 @@ export class IncidentChatHost {
       textResult = resultText(
         await this.#dependencies.mcp.invoke(tool.name, arguments_),
       );
-    } catch {
-      throw new ChatError("mcp_unavailable");
+    } catch (error) {
+      if (
+        !(error instanceof ProtocolError) ||
+        !["authorization_denied", "authorization_unavailable"].includes(
+          error.message,
+        )
+      ) {
+        throw new ChatError("mcp_unavailable");
+      }
+      textResult = error.message;
     }
     this.#messages = [...messages, { role: "assistant", content: textResult }];
     return textResult;

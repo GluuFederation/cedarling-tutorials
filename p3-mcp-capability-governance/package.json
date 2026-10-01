@@ -8,16 +8,16 @@
   },
   "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node ../shared/policy-store.mjs && tsc -p tsconfig.build.json",
     "chat": "tsx scripts/chat.ts",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "dev": "node scripts/dev.mjs",
+    "dev": "docker compose up --build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "test:e2e": "vitest run test/scenario.test.ts --reporter=verbose",
+    "test:e2e": "tsx scripts/test-e2e.ts",
     "setup": "node scripts/setup.mjs",
-    "start": "node dist/src/main.js",
+    "start": "docker compose up",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
@@ -32,10 +32,12 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@cedar-policy/cedar-wasm": "4.12.0",
     "@eslint/js": "10.0.1",
     "@types/express": "5.0.6",
     "@types/node": "24.13.6",
     "eslint": "10.11.0",
+    "fflate": "0.8.3",
     "prettier": "3.9.6",
     "tsx": "4.23.12",
     "typescript": "6.0.3",

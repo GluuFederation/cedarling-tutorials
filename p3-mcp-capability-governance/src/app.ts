@@ -14,14 +14,13 @@ import type { NextFunction, Request, Response } from "express";
 import type { P3Config } from "./config/project-config.js";
 import { IncidentRepository } from "./incidents/repository.js";
 import { createIncidentMcpServer } from "./mcp/server.js";
-import type { FakeTrace } from "./mcp/trace.js";
-import { createPermissiveSeam } from "./mcp/trace.js";
+import { authorize } from "./mcp/authorization.js";
 
 type AppDependencies = Readonly<{
   config: P3Config;
   tokenVerifier: OAuthTokenVerifier;
   incidents?: IncidentRepository;
-  traceSink?: (trace: FakeTrace) => void;
+  authorize?: typeof authorize;
 }>;
 
 export function createApp(dependencies: AppDependencies) {
@@ -61,12 +60,11 @@ export function createApp(dependencies: AppDependencies) {
   );
 
   const incidents = dependencies.incidents ?? new IncidentRepository();
-  const seam = createPermissiveSeam(dependencies.traceSink);
   const handler = createMcpHandler(
     ({ authInfo }) =>
       createIncidentMcpServer(authInfo, {
         incidents,
-        seam,
+        authorize: dependencies.authorize ?? authorize,
       }),
     { legacy: "reject" },
   );
@@ -86,12 +84,23 @@ export function createApp(dependencies: AppDependencies) {
 
   app.use(
     (
-      _error: unknown,
+      error: unknown,
       _request: Request,
       response: Response,
       _next: NextFunction,
     ) => {
       if (!response.headersSent) {
+        // Body-parser failures are client errors; never expose their raw body or message.
+        const parserType =
+          error instanceof Error && "type" in error ? error.type : undefined;
+        if (parserType === "entity.parse.failed") {
+          response.status(400).json({ error: "invalid_request" });
+          return;
+        }
+        if (parserType === "entity.too.large") {
+          response.status(413).json({ error: "request_too_large" });
+          return;
+        }
         response.status(500).json({ error: "mcp_server_unavailable" });
       }
     },

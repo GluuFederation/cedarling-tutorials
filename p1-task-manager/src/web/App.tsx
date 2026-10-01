@@ -16,9 +16,13 @@ import {
 import cedarlingMark from "./assets/cedarling-mark.png";
 import cedarlingWordmark from "./assets/cedarling-wordmark-dark.webp";
 import { api, ApiError } from "./api";
-import { logTaskListAuthorization } from "./authorization-trace";
+import {
+  authorizePresentation,
+  closeBrowserAuthorization,
+} from "./authorization-trace";
 import { friendlyError } from "./errors";
 import { Modal } from "./Modal";
+import type { AssignmentTarget, TaskCeiling } from "../shared/authorization";
 import type { Session, Task } from "./types";
 
 const tutorialAccounts = [
@@ -193,13 +197,14 @@ function Workspace({
   const [createForm, setCreateForm] = useState({ title: "", description: "" });
   const [createError, setCreateError] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [createAllowed, setCreateAllowed] = useState(false);
+  const [detailCeiling, setDetailCeiling] = useState<TaskCeiling>({});
+  const [assignmentTarget, setAssignmentTarget] = useState<AssignmentTarget>();
+  const [subjectEpoch, setSubjectEpoch] = useState<string>();
+  const [listExpiresAt, setListExpiresAt] = useState<number>();
+  const [detailExpiresAt, setDetailExpiresAt] = useState<number>();
   const createTriggerRef = useRef<HTMLButtonElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
-
-  const nextAssignee =
-    selected?.assigneeId === "user-mina"
-      ? { id: "user-alex", name: "Alex" }
-      : { id: "user-mina", name: "Mina" };
 
   const replaceTask = useCallback((task: Task) => {
     setTasks((current) => {
@@ -216,15 +221,24 @@ function Workspace({
     setListError("");
     try {
       const result = await api.tasks();
-      logTaskListAuthorization({
-        principalId: session.user.id,
-        tenantId: session.user.tenantId,
+      const presentation = await authorizePresentation({
+        envelope: result.authorization,
+        tasks: result.tasks,
+        user: session.user,
       });
-      setTasks(result.tasks);
+      if (presentation.stale)
+        throw new Error("The authorization state changed");
+      const visibleTasks = result.tasks.filter(
+        (task) => presentation.ceiling.tasks[task.id]?.view,
+      );
+      setSubjectEpoch(result.authorization.subjectEpoch);
+      setListExpiresAt(Date.parse(result.authorization.expiresAt));
+      setCreateAllowed(Boolean(presentation.ceiling.tenant?.create));
+      setTasks(visibleTasks);
       setSelectedId((current) =>
-        current && result.tasks.some((task) => task.id === current)
+        current && visibleTasks.some((task) => task.id === current)
           ? current
-          : result.tasks[0]?.id,
+          : visibleTasks[0]?.id,
       );
       setListState("ready");
     } catch (error) {
@@ -235,11 +249,22 @@ function Workspace({
       setListError(friendlyError(error));
       setListState("error");
     }
-  }, [onSessionExpired, session.user.id, session.user.tenantId]);
+  }, [onSessionExpired, session.user]);
 
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
+
+  useEffect(() => {
+    if (listExpiresAt === undefined) return;
+    const timeout = window.setTimeout(
+      () => void loadTasks(),
+      Math.max(0, listExpiresAt - Date.now()),
+    );
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [listExpiresAt, loadTasks]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -248,14 +273,36 @@ function Workspace({
       return;
     }
     let current = true;
+    const isCurrent = () => current;
     setSelected(undefined);
     setDetailState("loading");
     setDetailError("");
     void api
       .task(selectedId)
-      .then((result) => {
-        if (!current) return;
+      .then(async (result) => {
+        if (!isCurrent()) return;
+        const presentation = await authorizePresentation({
+          envelope: result.authorization,
+          tasks: [result.task],
+          user: session.user,
+          assignmentTarget: result.assignmentTarget,
+          expectedSubjectEpoch: subjectEpoch,
+        });
+        if (!isCurrent()) return;
+        if (
+          presentation.stale ||
+          !presentation.ceiling.tasks[result.task.id]?.view
+        ) {
+          setSelectedId(undefined);
+          setSelected(undefined);
+          setDetailCeiling({});
+          void loadTasks();
+          return;
+        }
         setSelected(result.task);
+        setAssignmentTarget(result.assignmentTarget);
+        setDetailCeiling(presentation.ceiling.tasks[result.task.id] ?? {});
+        setDetailExpiresAt(Date.parse(result.authorization.expiresAt));
         setDetailState("ready");
       })
       .catch((error: unknown) => {
@@ -270,7 +317,27 @@ function Workspace({
     return () => {
       current = false;
     };
-  }, [detailAttempt, onSessionExpired, selectedId]);
+  }, [
+    detailAttempt,
+    loadTasks,
+    onSessionExpired,
+    selectedId,
+    session.user,
+    subjectEpoch,
+  ]);
+
+  useEffect(() => {
+    if (detailExpiresAt === undefined || selectedId === undefined) return;
+    const timeout = window.setTimeout(
+      () => {
+        setDetailAttempt((current) => current + 1);
+      },
+      Math.max(0, detailExpiresAt - Date.now()),
+    );
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [detailExpiresAt, selectedId]);
 
   useEffect(() => {
     if (selected)
@@ -284,7 +351,27 @@ function Workspace({
     async (id: string) => {
       try {
         const result = await api.task(id);
+        const presentation = await authorizePresentation({
+          envelope: result.authorization,
+          tasks: [result.task],
+          user: session.user,
+          assignmentTarget: result.assignmentTarget,
+          expectedSubjectEpoch: subjectEpoch,
+        });
+        if (
+          presentation.stale ||
+          !presentation.ceiling.tasks[result.task.id]?.view
+        ) {
+          setSelectedId(undefined);
+          setSelected(undefined);
+          setDetailCeiling({});
+          void loadTasks();
+          return;
+        }
         replaceTask(result.task);
+        setAssignmentTarget(result.assignmentTarget);
+        setDetailCeiling(presentation.ceiling.tasks[result.task.id] ?? {});
+        setDetailExpiresAt(Date.parse(result.authorization.expiresAt));
         setDetailError("");
         setDetailState("ready");
       } catch (error) {
@@ -296,7 +383,7 @@ function Workspace({
         setDetailState("error");
       }
     },
-    [onSessionExpired, replaceTask],
+    [loadTasks, onSessionExpired, replaceTask, session.user, subjectEpoch],
   );
 
   async function perform(
@@ -307,7 +394,7 @@ function Workspace({
     setNotice(null);
     try {
       const result = await action();
-      replaceTask(result.task);
+      await recoverTask(result.task.id);
       setNotice({ kind: "success", text: success });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -331,7 +418,8 @@ function Workspace({
     setCreateError("");
     try {
       const result = await api.create(createForm, session.csrfToken);
-      replaceTask(result.task);
+      await loadTasks();
+      setSelectedId(result.task.id);
       setCreateForm({ title: "", description: "" });
       setOverlay(null);
       setNotice({ kind: "success", text: "Task created." });
@@ -354,11 +442,11 @@ function Workspace({
     setDeleteError("");
     try {
       await api.delete(selected, session.csrfToken);
-      setTasks((current) => current.filter((task) => task.id !== selected.id));
       setSelected(undefined);
       setSelectedId(undefined);
       setOverlay(null);
       setNotice({ kind: "success", text: "Task deleted." });
+      await loadTasks();
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 401) {
@@ -412,18 +500,20 @@ function Workspace({
           <aside className="task-ledger" aria-label="Tasks">
             <div className="task-list-heading">
               <h2>Tasks</h2>
-              <button
-                className="primary compact"
-                onClick={() => {
-                  setCreateError("");
-                  setOverlay("create");
-                }}
-                ref={createTriggerRef}
-                type="button"
-              >
-                <Plus aria-hidden="true" size={18} weight="bold" />
-                New task
-              </button>
+              {createAllowed && (
+                <button
+                  className="primary compact"
+                  onClick={() => {
+                    setCreateError("");
+                    setOverlay("create");
+                  }}
+                  ref={createTriggerRef}
+                  type="button"
+                >
+                  <Plus aria-hidden="true" size={18} weight="bold" />
+                  New task
+                </button>
+              )}
             </div>
             <div className="task-rows">
               {listState === "loading" ? (
@@ -546,86 +636,103 @@ function Workspace({
                     );
                   }}
                 >
-                  <div className="field-grid">
-                    <label>
-                      Title
-                      <input
-                        value={editForm.title}
-                        maxLength={120}
-                        required
-                        onChange={(event) => {
-                          setEditForm({
-                            ...editForm,
-                            title: event.target.value,
-                          });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label className="description-field">
-                      Description
-                      <textarea
-                        value={editForm.description}
-                        maxLength={2000}
-                        rows={4}
-                        onChange={(event) => {
-                          setEditForm({
-                            ...editForm,
-                            description: event.target.value,
-                          });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                  </div>
+                  {detailCeiling.edit ? (
+                    <div className="field-grid">
+                      <label>
+                        Title
+                        <input
+                          value={editForm.title}
+                          maxLength={120}
+                          required
+                          onChange={(event) => {
+                            setEditForm({
+                              ...editForm,
+                              title: event.target.value,
+                            });
+                          }}
+                          disabled={busy}
+                        />
+                      </label>
+                      <label className="description-field">
+                        Description
+                        <textarea
+                          value={editForm.description}
+                          maxLength={2000}
+                          rows={4}
+                          onChange={(event) => {
+                            setEditForm({
+                              ...editForm,
+                              description: event.target.value,
+                            });
+                          }}
+                          disabled={busy}
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="field-grid">
+                      <div className="description-field">
+                        <strong>Description</strong>
+                        <p>{selected.description || "No description."}</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="actions">
-                    <button className="secondary" disabled={busy}>
-                      Save changes
-                    </button>
-                    <button
-                      className="secondary"
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(
-                          () =>
-                            api.assign(
-                              selected,
-                              nextAssignee.id,
-                              session.csrfToken,
-                            ),
-                          `Task assigned to ${nextAssignee.name}.`,
-                        )
-                      }
-                      type="button"
-                    >
-                      Assign to {nextAssignee.name}
-                    </button>
-                    <button
-                      className="primary compact"
-                      disabled={busy || selected.status === "completed"}
-                      onClick={() =>
-                        void perform(
-                          () => api.complete(selected, session.csrfToken),
-                          "Task completed.",
-                        )
-                      }
-                      type="button"
-                    >
-                      <CheckCircle aria-hidden="true" size={18} />
-                      Complete task
-                    </button>
-                    <button
-                      className="danger"
-                      disabled={busy}
-                      onClick={() => {
-                        setDeleteError("");
-                        setOverlay("delete");
-                      }}
-                      ref={deleteTriggerRef}
-                      type="button"
-                    >
-                      Delete
-                    </button>
+                    {detailCeiling.edit && (
+                      <button className="secondary" disabled={busy}>
+                        Save changes
+                      </button>
+                    )}
+                    {detailCeiling.assign && assignmentTarget && (
+                      <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          void perform(
+                            () =>
+                              api.assign(
+                                selected,
+                                assignmentTarget.id,
+                                session.csrfToken,
+                              ),
+                            `Task assigned to ${assignmentTarget.name}.`,
+                          )
+                        }
+                        type="button"
+                      >
+                        Assign to {assignmentTarget.name.split(" ")[0]}
+                      </button>
+                    )}
+                    {detailCeiling.complete && (
+                      <button
+                        className="primary compact"
+                        disabled={busy || selected.status === "completed"}
+                        onClick={() =>
+                          void perform(
+                            () => api.complete(selected, session.csrfToken),
+                            "Task completed.",
+                          )
+                        }
+                        type="button"
+                      >
+                        <CheckCircle aria-hidden="true" size={18} />
+                        Complete task
+                      </button>
+                    )}
+                    {detailCeiling.delete && (
+                      <button
+                        className="danger"
+                        disabled={busy}
+                        onClick={() => {
+                          setDeleteError("");
+                          setOverlay("delete");
+                        }}
+                        ref={deleteTriggerRef}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </form>
               </>
@@ -806,6 +913,14 @@ export default function App() {
   useEffect(() => {
     void loadSession();
   }, [loadSession]);
+
+  useEffect(() => {
+    const close = () => void closeBrowserAuthorization();
+    window.addEventListener("pagehide", close);
+    return () => {
+      window.removeEventListener("pagehide", close);
+    };
+  }, []);
 
   if (sessionState.kind === "loading")
     return (

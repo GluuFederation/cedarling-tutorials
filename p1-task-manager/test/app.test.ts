@@ -2,7 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { capabilities } from "../src/shared/authorization.js";
 import { buildApp } from "../src/server/app.js";
+import type {
+  AuthorizationTarget,
+  ServerAuthorization,
+} from "../src/server/authorization-trace.js";
 import type { AppConfig } from "../src/server/config.js";
 import { AppDatabase } from "../src/server/database.js";
 import type { OidcRuntime, OidcTokens } from "../src/server/oidc.js";
@@ -41,10 +46,98 @@ const oidc: OidcRuntime = {
     }),
 };
 
+function allowed(
+  session: NonNullable<ReturnType<AppDatabase["getSession"]>>,
+  target: AuthorizationTarget,
+): boolean {
+  const owner =
+    session.user.role === "owner" && session.user.assuranceLevel >= 2;
+  if (target.capability === capabilities.create)
+    return owner && session.user.tenantId === target.tenantId;
+  const related =
+    session.user.id === target.task.ownerId ||
+    session.user.id === target.task.assigneeId;
+  const sameTenant = session.user.tenantId === target.task.tenantId;
+  if (target.capability === capabilities.view) return sameTenant && related;
+  if (target.capability === capabilities.edit) return sameTenant && related;
+  if (target.capability === capabilities.assign)
+    return (
+      owner &&
+      sameTenant &&
+      session.user.id === target.task.ownerId &&
+      target.requestedAssigneeTenantId === target.task.tenantId
+    );
+  if (target.capability === capabilities.complete)
+    return owner && sameTenant && related;
+  return owner && sameTenant && session.user.id === target.task.ownerId;
+}
+
+function authorizationRuntime(
+  overrides: Partial<ServerAuthorization> = {},
+): ServerAuthorization {
+  const policy = {
+    release: "p1@1.0.0",
+    storeId: "p1",
+    version: "1.0.0",
+    sha256: "a".repeat(64),
+    url: `/policy-store/${"a".repeat(64)}.cjar`,
+  };
+  const runtime: ServerAuthorization = {
+    policy,
+    authorize: vi.fn(
+      async (
+        _requestId: string,
+        session: NonNullable<ReturnType<AppDatabase["getSession"]>>,
+        target: AuthorizationTarget,
+      ) => allowed(session, target),
+    ),
+    authorizeBatch: vi.fn(
+      async (
+        _requestId: string,
+        session: NonNullable<ReturnType<AppDatabase["getSession"]>>,
+        targets: readonly AuthorizationTarget[],
+      ) => targets.map((target) => allowed(session, target)),
+    ),
+    envelope: ({
+      session,
+      tenantCreate,
+      taskCeilings = {},
+      tasks = [],
+      now = Date.now(),
+    }) => ({
+      uiPrincipal: {
+        id: session.user.id,
+        tenantId: session.user.tenantId,
+        role: session.user.role,
+        assuranceLevel: session.user.assuranceLevel,
+      },
+      ceiling: {
+        ...(tenantCreate === undefined
+          ? {}
+          : { tenant: { create: tenantCreate } }),
+        tasks: taskCeilings,
+      },
+      policy,
+      subjectEpoch: `epoch-${session.user.id}`,
+      resourceVersions: Object.fromEntries(
+        tasks.map((task) => [task.id, task.version]),
+      ),
+      evaluatedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 60_000).toISOString(),
+    }),
+    artifact: vi.fn(async (digest) =>
+      digest === policy.sha256 ? new Uint8Array([1, 2, 3]) : undefined,
+    ),
+    close: vi.fn(async () => {}),
+  };
+  return { ...runtime, ...overrides };
+}
+
 async function fixture(
   userId: string,
   runtime: OidcRuntime = oidc,
   tokens: OidcTokens = tokenSet(),
+  authorization: ServerAuthorization = authorizationRuntime(),
 ) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "p1-app-"));
   roots.push(root);
@@ -71,13 +164,20 @@ async function fixture(
   );
   const session = database.createSession(userId, tokens, config);
   const stored = database.getSession(session.rawId, config);
-  const app = await buildApp({ config, database, oidc: runtime, webRoot });
+  const app = await buildApp({
+    config,
+    database,
+    oidc: runtime,
+    authorization,
+    webRoot,
+  });
   return {
     app,
     config,
     database,
     session,
     stored,
+    authorization,
     cookie: `p1_session=${session.rawId}`,
   };
 }
@@ -98,9 +198,8 @@ afterEach(() => {
 });
 
 describe("P1 HTTP boundary", () => {
-  it("keeps normal navigation tenant scoped while preserving the exact permissive IDOR", async () => {
-    const { app, cookie } = await fixture("user-sam");
-    const trace = vi.spyOn(console, "info").mockImplementation(() => {});
+  it("filters navigation and direct reads through the same task.view rule", async () => {
+    const { app, authorization, cookie } = await fixture("user-sam");
     const list = await app.inject({
       method: "GET",
       url: "/api/tasks",
@@ -110,51 +209,83 @@ describe("P1 HTTP boundary", () => {
     expect(list.json().tasks.map((task: { id: string }) => task.id)).toEqual([
       "task-b-notes",
     ]);
-    expect(trace).toHaveBeenCalledOnce();
-    expect(trace).toHaveBeenCalledWith(
-      expect.stringContaining("P1 server | FAKE ALLOW"),
+    expect(list.json().authorization).toMatchObject({
+      uiPrincipal: { id: "user-sam", tenantId: "tenant-b" },
+      ceiling: { tenant: { create: false } },
+      policy: { release: "p1@1.0.0" },
+      resourceVersions: { "task-b-notes": 1 },
+    });
+    expect(JSON.stringify(list.json())).not.toMatch(
+      /access-token|refresh-token|id-token|csrf|p1_session/i,
     );
-    expect(trace).toHaveBeenCalledWith(
-      "P1 server | FAKE ALLOW | task.view | user-sam -> TaskCollection::tenant-b",
-    );
-    expect(JSON.stringify(trace.mock.calls)).not.toMatch(
-      /access-token|refresh-token|id-token|p1_session/,
-    );
+    expect(authorization.authorizeBatch).toHaveBeenCalledOnce();
     const direct = await app.inject({
       method: "GET",
       url: "/api/tasks/task-a-brief",
       headers: { cookie },
     });
-    expect(direct.statusCode).toBe(200);
-    expect(direct.json()).toMatchObject({
-      task: { id: "task-a-brief", tenantId: "tenant-a" },
-    });
+    expect(direct.statusCode).toBe(404);
+    expect(direct.json()).toEqual({ error: "task_not_found" });
     await app.close();
   });
 
-  it("shows that Alex can create a task before authorization is integrated", async () => {
-    const { app, cookie, session, database } = await fixture("user-alex");
-    const created = await app.inject({
-      method: "POST",
+  it("fails closed without leaking partial data or applying effects", async () => {
+    const failing = authorizationRuntime({
+      authorize: vi.fn(async () => {
+        throw new Error("private Cedarling failure");
+      }),
+      authorizeBatch: vi.fn(async () => {
+        throw new Error("private Cedarling failure");
+      }),
+    });
+    const { app, cookie, database, session } = await fixture(
+      "user-mina",
+      oidc,
+      tokenSet(),
+      failing,
+    );
+    const list = await app.inject({
+      method: "GET",
       url: "/api/tasks",
+      headers: { cookie },
+    });
+    expect(list.statusCode).toBe(503);
+    expect(list.json()).toEqual({ error: "authorization_unavailable" });
+    expect(JSON.stringify(list.json())).not.toContain("private Cedarling");
+
+    const before = database.getTask("task-a-brief");
+    const mutation = await app.inject({
+      method: "PATCH",
+      url: "/api/tasks/task-a-brief",
       headers: mutationHeaders(cookie, session.csrfToken),
-      payload: {
-        title: "Unauthorized creation",
-        description: "Must not be saved",
-      },
+      payload: { title: "Must not persist", description: "", version: 1 },
     });
-    expect(created.statusCode).toBe(201);
-    expect(
-      database.getTask(created.json<{ task: { id: string } }>().task.id),
-    ).toMatchObject({
-      ownerId: "user-alex",
-      title: "Unauthorized creation",
+    expect(mutation.statusCode).toBe(503);
+    expect(database.getTask("task-a-brief")).toEqual(before);
+    await app.close();
+  });
+
+  it("serves only registered content-addressed policy artifacts", async () => {
+    const { app, authorization } = await fixture("user-alex");
+    const current = await app.inject({
+      method: "GET",
+      url: authorization.policy.url,
     });
+    expect(current.statusCode).toBe(200);
+    expect(current.rawPayload).toEqual(Buffer.from([1, 2, 3]));
+    expect(current.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    const missing = await app.inject({
+      method: "GET",
+      url: `/policy-store/${"b".repeat(64)}.cjar`,
+    });
+    expect(missing.statusCode).toBe(404);
     await app.close();
   });
 
   it("requires valid CSRF, Origin, and Fetch Metadata for mutations", async () => {
-    const { app, cookie, session } = await fixture("user-alex");
+    const { app, cookie, session } = await fixture("user-mina");
     const valid = mutationHeaders(cookie, session.csrfToken);
     const rejectedHeaders = [
       {
@@ -193,8 +324,111 @@ describe("P1 HTTP boundary", () => {
     await app.close();
   });
 
+  it.each([1, 99])(
+    "preserves non-leaking denials for submitted version %i",
+    async (version) => {
+      const { app, cookie, database, session } = await fixture("user-alex");
+      const headers = mutationHeaders(cookie, session.csrfToken);
+      const taskCount = database.listTasks("tenant-a").length;
+      const create = await app.inject({
+        method: "POST",
+        url: "/api/tasks",
+        headers,
+        payload: { title: "Denied", description: "" },
+      });
+      expect(create.statusCode).toBe(403);
+      expect(create.json()).toEqual({ error: "forbidden" });
+      expect(database.listTasks("tenant-a")).toHaveLength(taskCount);
+
+      const complete = await app.inject({
+        method: "POST",
+        url: "/api/tasks/task-a-brief/complete",
+        headers,
+        payload: { version },
+      });
+      expect(complete.statusCode).toBe(404);
+      expect(complete.json()).toEqual({ error: "task_not_found" });
+      expect(database.getTask("task-a-brief")?.status).toBe("in-progress");
+      await app.close();
+    },
+  );
+
+  describe.each([
+    {
+      operation: "edit",
+      method: "PATCH",
+      suffix: "",
+      userId: "user-alex",
+      body: { title: "Unauthorized edit", description: "" },
+    },
+    {
+      operation: "assign",
+      method: "POST",
+      suffix: "/assign",
+      userId: "user-mina",
+      body: { assigneeId: "user-alex" },
+    },
+    {
+      operation: "complete",
+      method: "POST",
+      suffix: "/complete",
+      userId: "user-mina",
+      body: {},
+    },
+    {
+      operation: "delete",
+      method: "DELETE",
+      suffix: "",
+      userId: "user-mina",
+      body: {},
+    },
+  ] as const)(
+    "$operation snapshot binding",
+    ({ method, suffix, userId, body }) => {
+      it.each([1, 2])(
+        "rejects submitted version %i when assignment changes during authorization",
+        async (version) => {
+          const authorization = authorizationRuntime();
+          const { app, cookie, database, session } = await fixture(
+            userId,
+            oidc,
+            tokenSet(),
+            authorization,
+          );
+          const original = database.getTask("task-a-brief");
+          vi.mocked(authorization.authorize).mockImplementation(
+            async (_requestId, currentSession, target) => {
+              const decision = allowed(currentSession, target);
+              // Simulate Mina reassigning the task while Cedarling evaluates its old snapshot.
+              database.assignTask("task-a-brief", 1, "user-mina");
+              return decision;
+            },
+          );
+          try {
+            const response = await app.inject({
+              method,
+              url: `/api/tasks/task-a-brief${suffix}`,
+              headers: mutationHeaders(cookie, session.csrfToken),
+              payload: { ...body, version },
+            });
+            expect(response.statusCode).toBe(409);
+            expect(response.json()).toEqual({ error: "stale_task_version" });
+            expect(database.getTask("task-a-brief")).toEqual({
+              ...original,
+              assigneeId: "user-mina",
+              version: 2,
+              updatedAt: expect.any(String),
+            });
+          } finally {
+            await app.close();
+          }
+        },
+      );
+    },
+  );
+
   it("rejects a repeated completion without changing task state", async () => {
-    const { app, cookie, session } = await fixture("user-alex");
+    const { app, cookie, session } = await fixture("user-mina");
     const headers = mutationHeaders(cookie, session.csrfToken);
     const first = await app.inject({
       method: "POST",
@@ -299,7 +533,7 @@ describe("P1 HTTP boundary", () => {
   });
 
   it("prevents authenticated responses from being cached", async () => {
-    const { app, cookie, session } = await fixture("user-alex");
+    const { app, cookie, session } = await fixture("user-mina");
     const headers = mutationHeaders(cookie, session.csrfToken);
     const responses = [
       await app.inject({
@@ -333,7 +567,7 @@ describe("P1 HTTP boundary", () => {
   });
 
   it("returns only domain errors for rejected mutations", async () => {
-    const { app, cookie, session } = await fixture("user-alex");
+    const { app, cookie, session } = await fixture("user-mina");
     const response = await app.inject({
       method: "POST",
       url: "/api/tasks/task-a-brief/assign",

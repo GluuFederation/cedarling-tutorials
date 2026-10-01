@@ -29,33 +29,26 @@ describe("P3 setup", () => {
     const root = await mkdtemp(join(tmpdir(), "p3-setup-"));
     temporaryDirectories.push(root);
     const directory = join(root, "p3-mcp-capability-governance");
-    const identityDirectory = join(directory, ".local/idp");
     await mkdir(directory, { recursive: true });
-    await mkdir(identityDirectory, { recursive: true });
     const target = join(directory, ".env");
     const setupScript = resolve("scripts/setup.mjs");
-    await writeFile(
-      join(identityDirectory, ".env"),
-      "IDP_ISSUER=http://localhost:18003\nP3_CLIENT_ID=p3-client\nP3_MCP_RESOURCE=http://localhost:17003/mcp\n",
-    );
-
     await execute(process.execPath, [setupScript], { cwd: directory });
     expect(await readFile(target, "utf8")).toContain(
-      'P3_CLIENT_ID="p3-client"',
+      'P3_PROVIDER_TIMEOUT_MS="15000"',
     );
     if (process.platform !== "win32")
       expect((await stat(target)).mode & 0o777).toBe(0o600);
 
     await writeFile(
       target,
-      "# learner setting\nP3_CLIENT_ID=stale\nP3_OPENROUTER_API_KEY=preserved\n",
+      "# learner setting\nP3_PROVIDER_TIMEOUT_MS=20000\nP3_OPENROUTER_API_KEY=preserved\n",
     );
     if (process.platform !== "win32") await chmod(target, 0o664);
     await execute(process.execPath, [setupScript], { cwd: directory });
 
     const synchronized = await readFile(target, "utf8");
     expect(synchronized).toContain("# learner setting");
-    expect(synchronized).toContain('P3_CLIENT_ID="p3-client"');
+    expect(synchronized).toContain("P3_PROVIDER_TIMEOUT_MS=20000");
     expect(synchronized).toContain("P3_OPENROUTER_API_KEY=preserved");
     if (process.platform !== "win32")
       expect((await stat(target)).mode & 0o777).toBe(0o600);

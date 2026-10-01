@@ -6,5 +6,12 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["src/server/**/*.ts", "test/**/*.ts", "test/**/*.tsx"]
+  "include": [
+    "src/server/**/*.ts",
+    "src/shared/**/*.ts",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "e2e/**/*.ts",
+    "playwright.config.ts"
+  ]
 }

@@ -50,10 +50,6 @@ services:
       retries: 12
     restart: unless-stopped
   tenantrag:
-    command:
-      - node
-      - --env-file=/run/config/app.env
-      - dist/scripts/docker-start.js
     build:
       context: ..
       dockerfile: p2-tenantrag/Dockerfile

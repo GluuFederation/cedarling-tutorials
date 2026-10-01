@@ -1,24 +1,15 @@
-type RetrievalTimings = Readonly<{
-  queryEmbeddingMs: number;
-  searchMs: number;
-  metadataMs: number;
-  generationMs: number;
-  totalMs: number;
-}>;
-
-export type PermissiveTrace = Readonly<{
+export type RetrievalTrace = Readonly<{
   requestId: string;
   principalId: string;
-  candidates: readonly Readonly<{ documentId: string; chunkId: string }>[];
+  candidateCount: number;
   documentAuthorizationCount: number;
   loadedChunkCount: number;
   selectedModel: string | null;
-  timings: RetrievalTimings;
 }>;
 
-/** Marks the two future server enforcement points without logging evidence. */
-export function logPermissiveTrace(trace: PermissiveTrace): void {
+/** Logs bounded pipeline evidence without tokens, queries, or document text. */
+export function logRetrievalTrace(trace: RetrievalTrace): void {
   console.info(
-    `P2 server | FAKE ALLOW | corpus.search, document.retrieve | ${trace.principalId}`,
+    JSON.stringify({ event: "retrieval.completed", ...trace }, null, 2),
   );
 }

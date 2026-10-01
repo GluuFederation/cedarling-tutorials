@@ -1,4 +1,4 @@
-import { BaselineAuthorizationGateway } from "./authorization.ts";
+import { createEditorialAuthorization } from "./authorization.ts";
 import { loadConfig, prepareDataDirectory } from "./config.ts";
 import { AppDatabase } from "./database.ts";
 import { createOidcRuntime } from "./oidc.ts";
@@ -13,17 +13,20 @@ async function createRuntime() {
   const config = loadConfig();
   prepareDataDirectory(config.dataDirectory);
   const database = new AppDatabase(config.dataDirectory, config.issuer);
+  let authorization:
+    | Awaited<ReturnType<typeof createEditorialAuthorization>>
+    | undefined;
   try {
+    authorization = await createEditorialAuthorization();
     const oidc = await createOidcRuntime(config);
-    const authorization = new BaselineAuthorizationGateway();
     return {
       config,
-      database,
       sessions: new SessionManager(config, database, oidc),
-      editorial: new EditorialService(database, authorization),
+      editorial: new EditorialService(database, authorization.authorize),
     };
   } catch (error) {
     database.close();
+    await authorization?.close();
     throw error;
   }
 }

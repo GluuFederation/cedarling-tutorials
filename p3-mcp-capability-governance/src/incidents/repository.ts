@@ -8,7 +8,6 @@ const seed: readonly Incident[] = [
     status: "open",
     assignedTo: "amir",
     severity: "critical",
-    classification: "restricted",
     version: 1,
   },
   {
@@ -17,7 +16,6 @@ const seed: readonly Incident[] = [
     status: "investigating",
     assignedTo: "amir",
     severity: "high",
-    classification: "internal",
     version: 1,
   },
   {
@@ -26,7 +24,6 @@ const seed: readonly Incident[] = [
     status: "mitigated",
     assignedTo: null,
     severity: "medium",
-    classification: "internal",
     version: 1,
   },
 ];
@@ -58,15 +55,13 @@ export class IncidentRepository {
     return incident;
   }
 
-  search(query: string, limit: number): Incident[] {
+  search(query: string): Incident[] {
     const normalized = query.toLowerCase();
-    return [...this.#incidents.values()]
-      .filter((incident) =>
-        [incident.id, incident.title, incident.status].some((value) =>
-          value.toLowerCase().includes(normalized),
-        ),
-      )
-      .slice(0, limit);
+    return [...this.#incidents.values()].filter((incident) =>
+      [incident.id, incident.title, incident.status].some((value) =>
+        value.toLowerCase().includes(normalized),
+      ),
+    );
   }
 
   updateStatus(

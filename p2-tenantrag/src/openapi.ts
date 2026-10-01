@@ -2,7 +2,7 @@ export const openApiDocument = {
   openapi: "3.1.0",
   info: {
     title: "P2 TenantRAG API",
-    version: "0.0.0",
+    version: "0.0.1",
     description:
       "A multi-tenant RAG service for learning Cedarling enforcement boundaries.",
   },

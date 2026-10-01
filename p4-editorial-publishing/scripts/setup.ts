@@ -6,10 +6,12 @@ import {
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
 import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
+import { buildPolicyStore } from "../../shared/policy-store.mjs";
 import { loadConfig, prepareDataDirectory } from "../src/server/config.ts";
 import { AppDatabase } from "../src/server/database.ts";
 
 const root = resolve(import.meta.dirname, "..");
+await buildPolicyStore({ projectRoot: root, dependencyRoot: root });
 const target = resolve(root, ".env");
 const identity = ensureProjectIdentity("P4", resolve(root, ".local/idp/.env"));
 
@@ -29,6 +31,8 @@ const current = readProjectEnvironment(target);
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
     P4_BASE_URL: baseUrl,
+    P4_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P4_ISSUER: url("IDP_ISSUER"),
     P4_CLIENT_ID: required("P4_CLIENT_ID"),
     P4_CLIENT_SECRET: required("P4_CLIENT_SECRET"),
@@ -36,7 +40,6 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P4_HOST: "127.0.0.1",
-    P4_PORT: "17004",
     P4_DATA_DIR: ".local/p4-data",
     P4_SESSION_SECRET: randomBytes(32).toString("base64url"),
   },

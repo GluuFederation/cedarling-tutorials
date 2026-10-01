@@ -34,6 +34,8 @@ const metadataSchema = z
     title: z.string().trim().min(1),
     summary: z.string().trim().min(1),
     order: z.number().int().nonnegative(),
+    socialImage: z.string().trim().min(1),
+    socialImageAlt: z.string().trim().min(1),
     lastVerified: z.iso
       .datetime({ offset: true })
       .refine(
@@ -120,38 +122,41 @@ function parseTutorial(markdown, sourcePath) {
   ) {
     fail(`${sourcePath}: the body must start with one H1 that matches title`);
   }
-  return tree;
+  return { tree, metadata: parsed.data };
 }
 
-function referencedAssets(tree, sourcePath) {
-  const references = new Set();
+function assetFromPath(target, sourcePath) {
+  if (
+    !target.startsWith("./assets/") ||
+    target.includes("\\") ||
+    target.includes("%") ||
+    target.includes("?") ||
+    target.includes("#")
+  ) {
+    fail(`${sourcePath}: unsafe tutorial image path ${target}`);
+  }
+  const asset = target.slice("./assets/".length);
+  if (
+    !safeAssetPathPattern.test(asset) ||
+    asset.split("/").some((component) => component === "..") ||
+    posix.normalize(asset) !== asset ||
+    !imageExtensions.has(posix.extname(asset).toLowerCase())
+  ) {
+    fail(`${sourcePath}: unsupported or unsafe tutorial image ${target}`);
+  }
+  return asset;
+}
+
+function referencedAssets(tree, sourcePath, socialImage) {
+  const references = new Set([assetFromPath(socialImage, sourcePath)]);
   walkMarkdown(tree, (node) => {
     if (node.type === "imageReference") {
       fail(`${sourcePath}: image references must use inline relative paths`);
     }
     if (node.type !== "image") return;
     const alt = (node.alt ?? "").trim();
-    const target = node.url.trim();
     if (alt.length === 0) fail(`${sourcePath}: every image requires alt text`);
-    if (
-      !target.startsWith("./assets/") ||
-      target.includes("\\") ||
-      target.includes("%") ||
-      target.includes("?") ||
-      target.includes("#")
-    ) {
-      fail(`${sourcePath}: unsafe tutorial image path ${target}`);
-    }
-    const asset = target.slice("./assets/".length);
-    if (
-      !safeAssetPathPattern.test(asset) ||
-      asset.split("/").some((component) => component === "..") ||
-      posix.normalize(asset) !== asset ||
-      !imageExtensions.has(posix.extname(asset).toLowerCase())
-    ) {
-      fail(`${sourcePath}: unsupported or unsafe tutorial image ${target}`);
-    }
-    references.add(asset);
+    references.add(assetFromPath(node.url.trim(), sourcePath));
   });
   return references;
 }
@@ -180,7 +185,7 @@ async function walkFiles(directory, root = directory) {
 async function validateImage(bytes, extension, path) {
   if (extension === ".svg") {
     validateSvg(bytes, path);
-    return;
+    return null;
   }
 
   const expectedFormat =
@@ -205,6 +210,7 @@ async function validateImage(bytes, extension, path) {
       throw new Error(`detected ${metadata.format ?? "unknown"}`);
     }
     await image.clone().raw().toBuffer();
+    return metadata;
   } catch {
     fail(
       `${path}: image is corrupt, exceeds ${tutorialLimits.assetPixels} pixels, or does not match its extension`,
@@ -294,8 +300,9 @@ export async function validateTutorialProject(
   }
   const markdown = await readFile(tutorialPath, "utf8");
   const sourcePath = `${project}/docs/tutorials.md`;
-  const tree = parseTutorial(markdown, sourcePath);
-  const references = referencedAssets(tree, sourcePath);
+  const { tree, metadata } = parseTutorial(markdown, sourcePath);
+  const socialAsset = assetFromPath(metadata.socialImage, sourcePath);
+  const references = referencedAssets(tree, sourcePath, metadata.socialImage);
   const assetRoot = join(docsRoot, "assets");
   const assets = await walkFiles(assetRoot);
   if (assets.length > tutorialLimits.assets) {
@@ -317,11 +324,19 @@ export async function validateTutorialProject(
       );
     }
     assetBytes += stats.size;
-    await validateImage(
+    const image = await validateImage(
       await readFile(path),
       posix.extname(asset).toLowerCase(),
       `${project}/docs/assets/${asset}`,
     );
+    if (
+      asset === socialAsset &&
+      (image?.format !== "webp" || image.width !== 1200 || image.height !== 630)
+    ) {
+      fail(
+        `${project}/docs/assets/${asset}: social card must be a 1200x630 WebP`,
+      );
+    }
   }
   for (const reference of references) {
     if (!assets.includes(reference)) {

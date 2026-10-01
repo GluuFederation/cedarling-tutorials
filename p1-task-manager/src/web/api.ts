@@ -1,4 +1,10 @@
-import type { Session, Task, TaskResult } from "./types";
+import type {
+  AuthorizedTaskResult,
+  Session,
+  Task,
+  TaskListResult,
+  TaskResult,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -37,9 +43,9 @@ async function request<T>(
 
 export const api = {
   session: () => request<Session>("/api/session"),
-  tasks: () => request<{ tasks: Task[] }>("/api/tasks"),
+  tasks: () => request<TaskListResult>("/api/tasks"),
   task: (id: string) =>
-    request<TaskResult>(`/api/tasks/${encodeURIComponent(id)}`),
+    request<AuthorizedTaskResult>(`/api/tasks/${encodeURIComponent(id)}`),
   create: (input: { title: string; description: string }, csrf: string) =>
     request<TaskResult>(
       "/api/tasks",

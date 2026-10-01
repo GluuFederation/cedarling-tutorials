@@ -19,10 +19,9 @@ application that matches what you build. The projects run independently;
 you do not need to complete them in order.
 
 > [!NOTE]
-> This checkout contains the tutorial starting applications. Marked authorization
-> checks currently return `FAKE ALLOW`; the tutorials replace them with Cedarling
-> decisions. Use these applications locally with sample data, not as production
-> deployments.
+> P1–P5 include Cedarling authorization. P6–P15 retain the tutorial starting
+> applications, whose marked authorization checks return `FAKE ALLOW`.
+> Use these applications locally with sample data, not as production deployments.
 
 ## Start with a task manager
 
@@ -86,6 +85,9 @@ All fifteen projects include a Compose stack. Read the chosen project's
 P2 needs Voyage and OpenRouter credentials. P3's interactive chat runs in a
 host terminal and needs Node.js, pnpm, and an OpenRouter key even when its
 services run in Docker.
+
+P3's Compose stack also runs its private Cedarling sidecar alongside the MCP
+server and identity provider.
 
 ### With Node.js
 

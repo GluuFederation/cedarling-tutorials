@@ -5,10 +5,17 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
-    ignores: ["dist/", "coverage/", "eslint.config.js", "vite.config.ts"],
+    ignores: [
+      "dist/",
+      "coverage/",
+      "test-results/",
+      ".local/",
+      "eslint.config.js",
+      "vite.config.ts",
+    ],
   },
   {
-    files: ["src/server/**/*.ts"],
+    files: ["src/server/**/*.ts", "src/shared/**/*.ts"],
     languageOptions: {
       parserOptions: {
         project: "./tsconfig.lint.json",
@@ -32,7 +39,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ["test/**/*.ts", "test/**/*.tsx"],
+    files: [
+      "test/**/*.ts",
+      "test/**/*.tsx",
+      "e2e/**/*.ts",
+      "playwright.config.ts",
+    ],
     languageOptions: {
       parserOptions: {
         project: "./tsconfig.lint.json",

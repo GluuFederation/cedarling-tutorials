@@ -1,0 +1,11 @@
+{
+  "cedar_version": "4.4.0",
+  "policy_store": {
+    "id": "0e21adbac60e5d3516e125c176ff1b607e1e8da658f746a6a50ebe097ff0c184",
+    "name": "P1 Task Manager",
+    "description": "Task authorization for the P1 Cedarling tutorial.",
+    "version": "1.0.0",
+    "created_date": "2026-09-24T00:00:00Z",
+    "updated_date": "2026-09-24T00:00:00Z"
+  }
+}

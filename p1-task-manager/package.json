@@ -8,9 +8,9 @@
   },
   "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "build": "vite build && tsc -p tsconfig.server.json",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "dev": "vite build && node scripts/dev.mjs",
+    "build": "node ../shared/policy-store.mjs && vite build && tsc -p tsconfig.server.json",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e",
+    "dev": "node scripts/dev.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -18,6 +18,7 @@
     "setup": "node scripts/setup.mjs",
     "start": "node dist/server/main.js",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
@@ -25,14 +26,18 @@
     "@fastify/helmet": "13.1.1",
     "@fastify/static": "10.1.4",
     "@fastify/swagger": "9.8.1",
+    "@janssenproject/cedarling_wasm": "0.0.468",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.5",
+    "fflate": "0.8.3",
     "openid-client": "6.8.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@cedar-policy/cedar-wasm": "4.12.0",
     "@eslint/js": "10.0.1",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "24.13.6",

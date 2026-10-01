@@ -1,7 +1,11 @@
+/** Loads trusted editorial facts, asks Cedarling, then performs one conditional effect. */
 import { z } from "zod";
-import type { AuthorizationGateway, Capability } from "./authorization.ts";
+import type {
+  AuthorizationRequest,
+  AuthorizeEditorial,
+} from "./authorization.ts";
 import type { AppDatabase } from "./database.ts";
-import { badRequest, forbidden, notFound } from "./errors.ts";
+import { badRequest, conflict, forbidden, notFound } from "./errors.ts";
 import type { ArticleSummary, ArticleView, Session } from "./models.ts";
 
 const id = z
@@ -20,67 +24,21 @@ const draft = z.object({
     .transform((value) => value.normalize("NFC")),
   body: z.string().transform((value) => value.normalize("NFC")),
 });
-type RevisionCapability = Exclude<
-  Capability,
-  "article.create" | "article.read"
->;
 
 export class EditorialService {
-  private readonly database: AppDatabase;
-  private readonly authorization: AuthorizationGateway;
-
-  constructor(database: AppDatabase, authorization: AuthorizationGateway) {
-    this.database = database;
-    this.authorization = authorization;
-  }
+  constructor(
+    private readonly database: AppDatabase,
+    private readonly authorize: AuthorizeEditorial,
+  ) {}
 
   async canCreate(session: Session, requestId: string): Promise<boolean> {
-    return this.authorization.authorize({
+    return this.authorize({
       requestId,
+      principal: session.principal,
       capability: "article.create",
-      actor: session.principal.subject,
-      resource: session.principal.tenantId,
-      facts: { tenantMatch: true },
+      tenantId: session.principal.tenantId,
+      phase: "preview",
     });
-  }
-
-  /** UI guidance only; each mutation reloads facts and authorizes again. */
-  async availability(
-    session: Session,
-    article: ArticleView,
-    requestId: string,
-  ) {
-    const current = article.revision.id === article.currentRevisionId;
-    const preview = (capability: RevisionCapability) =>
-      this.decideAction(
-        session,
-        requestId,
-        capability,
-        article,
-        article.version,
-      );
-    return {
-      edit:
-        current &&
-        (article.revision.state === "draft" || article.revisions.length < 20) &&
-        (await preview("revision.edit")),
-      submit:
-        current &&
-        article.revision.state === "draft" &&
-        (await preview("revision.submit")),
-      approve:
-        current &&
-        article.revision.state === "submitted" &&
-        (await preview("revision.approve")),
-      reject:
-        current &&
-        article.revision.state === "submitted" &&
-        (await preview("revision.reject")),
-      publish:
-        current &&
-        ["submitted", "approved"].includes(article.revision.state) &&
-        (await preview("publication.publish")),
-    };
   }
 
   async create(
@@ -88,6 +46,81 @@ export class EditorialService {
     form: FormData,
     requestId: string,
   ): Promise<string> {
+    const content = this.content(form);
+    await this.allow({
+      requestId,
+      principal: session.principal,
+      capability: "article.create",
+      tenantId: session.principal.tenantId,
+    });
+    return this.database.createArticle({
+      ...content,
+      tenantId: session.principal.tenantId,
+      authorId: session.principal.id,
+    });
+  }
+
+  /** UI guidance only: mutations reload facts and evaluate the policy again. */
+  async availability(
+    session: Session,
+    article: ArticleView,
+    requestId: string,
+  ) {
+    const base = {
+      requestId,
+      principal: session.principal,
+      article,
+      phase: "preview" as const,
+    };
+    const current = article.revision.id === article.currentRevisionId;
+    const editor = this.database.authority(
+      session.principal.id,
+      article.tenantId,
+      "editor",
+    );
+    const publisher = this.database.authority(
+      session.principal.id,
+      article.tenantId,
+      "publisher",
+    );
+    const approval = this.database.latestApproval(article.id);
+    return {
+      edit:
+        current &&
+        (article.revision.state === "draft" || article.revisions.length < 20) &&
+        (await this.authorize({ ...base, capability: "revision.edit" })),
+      submit:
+        current &&
+        article.revision.state === "draft" &&
+        (await this.authorize({ ...base, capability: "revision.submit" })),
+      approve:
+        current &&
+        article.revision.state === "submitted" &&
+        (await this.authorize({
+          ...base,
+          capability: "revision.approve",
+          editorAuthorityCurrent: editor.current,
+        })),
+      reject:
+        current &&
+        article.revision.state === "submitted" &&
+        (await this.authorize({
+          ...base,
+          capability: "revision.reject",
+          editorAuthorityCurrent: editor.current,
+        })),
+      publish:
+        current &&
+        (await this.authorize({
+          ...base,
+          capability: "publication.publish",
+          publisherAuthorityCurrent: publisher.current,
+          approval,
+        })),
+    };
+  }
+
+  private content(form: FormData) {
     const content = draft.safeParse({
       title: form.get("title"),
       body: form.get("body"),
@@ -98,18 +131,7 @@ export class EditorialService {
       Buffer.byteLength(content.data.body, "utf8") > 32_768
     )
       throw badRequest("Title or body is outside the tutorial bounds");
-    await this.allow(
-      session,
-      requestId,
-      "article.create",
-      session.principal.tenantId,
-      { tenantMatch: true },
-    );
-    return this.database.createArticle({
-      ...content.data,
-      tenantId: session.principal.tenantId,
-      authorId: session.principal.id,
-    });
+    return content.data;
   }
 
   async list(session: Session, requestId: string): Promise<ArticleSummary[]> {
@@ -118,16 +140,14 @@ export class EditorialService {
       session.principal.tenantId,
     )) {
       if (
-        await this.authorization.authorize({
+        await this.authorize({
           requestId,
           capability: "article.read",
-          actor: session.principal.subject,
-          resource: article.id,
-          facts: { tenantMatch: true, revisionState: article.state },
+          principal: session.principal,
+          article: { id: article.id, tenantId: session.principal.tenantId },
         })
-      ) {
+      )
         result.push(article);
-      }
     }
     return result;
   }
@@ -149,20 +169,14 @@ export class EditorialService {
     );
     if (!article) throw notFound();
     if (
-      !(await this.authorization.authorize({
+      !(await this.authorize({
         requestId,
         capability: "article.read",
-        actor: session.principal.subject,
-        resource: article.revision.id,
-        facts: {
-          tenantMatch: true,
-          currentRevision: article.currentRevisionId === article.revision.id,
-          revisionState: article.revision.state,
-        },
+        principal: session.principal,
+        article,
       }))
-    ) {
+    )
       throw notFound();
-    }
     return article;
   }
 
@@ -173,33 +187,20 @@ export class EditorialService {
   ): Promise<string> {
     const articleId = this.parseId(form.get("articleId"));
     const version = this.parseVersion(form.get("expectedVersion"));
-    const content = draft.safeParse({
-      title: form.get("title"),
-      body: form.get("body"),
-    });
-    if (
-      !content.success ||
-      Buffer.byteLength(content.data.body, "utf8") > 32_768
-    )
-      throw badRequest("Title or body is outside the tutorial bounds");
-    const current = this.database.article(
-      articleId,
-      session.principal.tenantId,
-    );
-    if (!current) throw notFound();
-    await this.allowAction(
-      session,
+    const content = this.content(form);
+    const article = this.current(session, articleId, version);
+    await this.allow({
       requestId,
-      "revision.edit",
-      current,
-      version,
-    );
+      capability: "revision.edit",
+      principal: session.principal,
+      article,
+    });
     return this.database.saveDraft({
       articleId,
-      tenantId: session.principal.tenantId,
+      tenantId: article.tenantId,
       actorId: session.principal.id,
       expectedVersion: version,
-      ...content.data,
+      ...content,
     });
   }
 
@@ -209,19 +210,22 @@ export class EditorialService {
     requestId: string,
   ): Promise<void> {
     const values = this.mutationCandidates(form);
-    const current = this.current(session, values.articleId);
-    await this.allowAction(
+    const article = this.current(
       session,
-      requestId,
-      "revision.submit",
-      current,
+      values.articleId,
       values.version,
       values.revisionId,
     );
+    await this.allow({
+      requestId,
+      capability: "revision.submit",
+      principal: session.principal,
+      article,
+    });
     this.database.submit(
-      values.articleId,
-      session.principal.tenantId,
-      values.revisionId,
+      article.id,
+      article.tenantId,
+      article.revision.id,
       values.version,
     );
   }
@@ -233,24 +237,33 @@ export class EditorialService {
     decision: "approved" | "rejected",
   ): Promise<void> {
     const values = this.mutationCandidates(form);
-    const current = this.current(session, values.articleId);
-    const capability: Capability =
-      decision === "approved" ? "revision.approve" : "revision.reject";
-    await this.allowAction(
+    const article = this.current(
       session,
-      requestId,
-      capability,
-      current,
+      values.articleId,
       values.version,
       values.revisionId,
     );
+    const authority = this.database.authority(
+      session.principal.id,
+      article.tenantId,
+      "editor",
+    );
+    await this.allow({
+      requestId,
+      capability:
+        decision === "approved" ? "revision.approve" : "revision.reject",
+      principal: session.principal,
+      article,
+      editorAuthorityCurrent: authority.current,
+    });
     this.database.review(
-      values.articleId,
-      session.principal.tenantId,
-      values.revisionId,
+      article.id,
+      article.tenantId,
+      article.revision.id,
       session.principal.id,
       values.version,
       decision,
+      authority,
     );
   }
 
@@ -258,31 +271,49 @@ export class EditorialService {
     session: Session,
     form: FormData,
     requestId: string,
-  ): Promise<string> {
+  ): Promise<void> {
     const articleId = this.parseId(form.get("articleId"));
     const version = this.parseVersion(form.get("expectedVersion"));
-    const current = this.current(session, articleId);
-    await this.allowAction(
-      session,
-      requestId,
-      "publication.publish",
-      current,
-      version,
+    const article = this.current(session, articleId, version);
+    const approval = this.database.latestApproval(articleId);
+    const publisher = this.database.authority(
+      session.principal.id,
+      article.tenantId,
+      "publisher",
     );
-    return this.database.publish(
+    await this.allow({
+      requestId,
+      capability: "publication.publish",
+      principal: session.principal,
+      article,
+      publisherAuthorityCurrent: publisher.current,
+      approval,
+    });
+    this.database.publish(
       articleId,
-      session.principal.tenantId,
+      article.tenantId,
       session.principal.id,
       version,
+      { publisher, approval },
     );
   }
 
-  private current(session: Session, articleId: string): ArticleView {
+  private current(
+    session: Session,
+    articleId: string,
+    version: number,
+    revisionId?: string,
+  ): ArticleView {
     const article = this.database.article(
       articleId,
       session.principal.tenantId,
     );
     if (!article) throw notFound();
+    if (
+      article.version !== version ||
+      (revisionId !== undefined && article.currentRevisionId !== revisionId)
+    )
+      throw conflict();
     return article;
   }
 
@@ -306,92 +337,7 @@ export class EditorialService {
     return parsed.data;
   }
 
-  private decideAction(
-    session: Session,
-    requestId: string,
-    capability: RevisionCapability,
-    article: ArticleView,
-    expectedVersion: number,
-    resource = article.revision.id,
-  ): Promise<boolean> {
-    const facts: Record<string, boolean | number | string> = {
-      revisionState: article.revision.state,
-      expectedVersion,
-    };
-    if (capability === "revision.edit" || capability === "revision.submit") {
-      facts.actorIsAuthor = article.revision.authorId === session.principal.id;
-    } else if (
-      capability === "revision.approve" ||
-      capability === "revision.reject"
-    ) {
-      facts.selfReview = article.revision.authorId === session.principal.id;
-      facts.editorAuthorityCurrent = this.database.hasCurrentAuthority(
-        session.principal.id,
-        article.tenantId,
-        "editor",
-      );
-    } else {
-      const approval = this.database.latestApproval(article.id);
-      facts.publisherAuthorityCurrent = this.database.hasCurrentAuthority(
-        session.principal.id,
-        article.tenantId,
-        "publisher",
-      );
-      facts.approvalPresent = Boolean(approval);
-      facts.approvalMatchesRevision =
-        approval?.revisionId === article.revision.id;
-      facts.approvalMatchesDigest =
-        approval?.digest === article.revision.digest;
-      facts.reviewerAuthorityCurrent = approval?.authorityCurrent ?? false;
-    }
-    return this.authorization.authorize({
-      requestId,
-      capability,
-      actor: session.principal.subject,
-      resource,
-      facts,
-    });
-  }
-
-  private async allowAction(
-    session: Session,
-    requestId: string,
-    capability: RevisionCapability,
-    article: ArticleView,
-    expectedVersion: number,
-    resource = article.revision.id,
-  ): Promise<void> {
-    if (
-      !(await this.decideAction(
-        session,
-        requestId,
-        capability,
-        article,
-        expectedVersion,
-        resource,
-      ))
-    ) {
-      throw forbidden();
-    }
-  }
-
-  private async allow(
-    session: Session,
-    requestId: string,
-    capability: Capability,
-    resource: string,
-    facts: Record<string, boolean | number | string>,
-  ): Promise<void> {
-    if (
-      !(await this.authorization.authorize({
-        requestId,
-        capability,
-        actor: session.principal.subject,
-        resource,
-        facts,
-      }))
-    ) {
-      throw forbidden();
-    }
+  private async allow(request: AuthorizationRequest): Promise<void> {
+    if (!(await this.authorize(request))) throw forbidden();
   }
 }

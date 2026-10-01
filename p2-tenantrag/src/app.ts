@@ -21,6 +21,7 @@ const retrievalRequest = z
 type ApplicationDependencies = Readonly<{
   authenticator: Authenticator;
   retrievalService: RetrievalService;
+  close(): Promise<void>;
 }>;
 
 function isRequestInputError(error: unknown): boolean {
@@ -42,6 +43,8 @@ export function createApp(dependencies: ApplicationDependencies) {
   });
 
   app.get("/openapi.json", async () => openApiDocument);
+
+  app.addHook("onClose", dependencies.close);
 
   app.post("/v1/retrievals", async (request) => {
     const input = retrievalRequest.safeParse(request.body);

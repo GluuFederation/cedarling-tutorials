@@ -1,6 +1,10 @@
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { loadConfig } from "../src/config/project-config.js";
+import {
+  loadConfig,
+  P2_API_RESOURCE,
+  P2_ISSUER,
+} from "../src/config/project-config.js";
 import { loadProjectEnvironment } from "../src/config/environment.js";
 
 const validEnvironment = {
@@ -9,14 +13,19 @@ const validEnvironment = {
 };
 
 describe("P2 configuration", () => {
+  it("rejects a listen port that disagrees with the public URL", () => {
+    expect(() => loadConfig({ ...validEnvironment, P2_PORT: "3002" })).toThrow(
+      "P2_PORT must match P2_BASE_URL",
+    );
+  });
   it("uses safe local defaults and the project root", () => {
     const config = loadConfig(validEnvironment, "/tutorial/p2-tenantrag");
     expect(config).toMatchObject({
       host: "127.0.0.1",
       port: 17002,
       baseUrl: "http://localhost:17002",
-      issuer: "http://localhost:18002",
-      apiResource: "http://localhost:17002/api",
+      issuer: P2_ISSUER,
+      apiResource: P2_API_RESOURCE,
       clientId: "p2-tenantrag-cli",
       voyageModel: "voyage-4-lite",
       voyageDimensions: 256,
@@ -28,6 +37,9 @@ describe("P2 configuration", () => {
     );
     expect(config.artifactPath).toBe(
       resolve("/tutorial/p2-tenantrag", "data/orama-index.json"),
+    );
+    expect(config.policyStorePath).toBe(
+      resolve("/tutorial/p2-tenantrag", ".local/policy-store.cjar"),
     );
   });
 
@@ -72,6 +84,18 @@ describe("P2 configuration", () => {
     expect(() =>
       loadConfig({ ...validEnvironment, P2_VOYAGE_DIMENSIONS: "512" }),
     ).toThrow("P2_VOYAGE_DIMENSIONS");
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        P2_ISSUER: "https://issuer.example",
+      }),
+    ).toThrow(`P2_ISSUER must be ${P2_ISSUER}`);
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        P2_API_RESOURCE: "https://api.example",
+      }),
+    ).toThrow(`P2_API_RESOURCE must be ${P2_API_RESOURCE}`);
   });
 });
 

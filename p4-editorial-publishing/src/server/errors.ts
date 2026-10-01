@@ -27,6 +27,8 @@ export const forbidden = () =>
   new AppError(403, "FORBIDDEN", "The request is not allowed");
 export const requestIntegrityFailed = () =>
   new AppError(403, "REQUEST_INTEGRITY_FAILED", "Request verification failed");
+export const unavailable = () =>
+  new AppError(503, "SERVICE_UNAVAILABLE", "Authorization is unavailable");
 export const notFound = () =>
   new AppError(404, "NOT_FOUND", "The requested article was not found");
 export const conflict = (

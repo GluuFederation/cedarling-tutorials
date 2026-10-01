@@ -31,7 +31,7 @@ export async function requireMcpServer(
     body.service !== "p3-mcp-capability-governance"
   ) {
     throw new Error(
-      `${origin} does not expose the expected P3 health endpoint. Stop the incompatible listener or configure a free P3 port.`,
+      `${origin} does not expose the expected P3 health endpoint. Stop the incompatible listener, then restart the P3 stack with pnpm dev.`,
     );
   }
 }

@@ -1,0 +1,11 @@
+{
+  "cedar_version": "4.4.0",
+  "policy_store": {
+    "id": "4a8d84ab4f51ff441e2a3cdf32cbf264b257f9438ea72c617cf6690a79831ef7",
+    "name": "P2 TenantRAG",
+    "description": "Corpus and document authorization for the P2 Cedarling tutorial.",
+    "version": "1.0.0",
+    "created_date": "2026-09-28T00:00:00Z",
+    "updated_date": "2026-09-28T00:00:00Z"
+  }
+}

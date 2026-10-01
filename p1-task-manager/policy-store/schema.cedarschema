@@ -1,0 +1,116 @@
+
+// Token structures Cedarling builds from P1 JWT evidence.
+namespace P1TaskManager {
+  // Structured issuer URL used by Cedarling's trusted-issuer entity.
+  type Url = {
+    host: String,
+    path: String,
+    protocol: String
+  };
+
+  // Shared tutorial IdP that issued and signed the token.
+  entity TrustedIssuer = {
+    issuer_entity_id: Url
+  };
+
+  // P1 API access token; Cedarling exposes dynamic claims as string tags.
+  entity Access_token = {
+    token_type?: String,
+    jti?: String,
+    iss?: TrustedIssuer,
+    exp?: Long,
+    validated_at?: Long,
+    // OAuth scopes are signed as one space-delimited string.
+    scope?: String
+  } tags Set<String>;
+}
+
+namespace Task {
+  // Cedarling multi-issuer authorization has no runtime principal, but Cedar
+  // requires every action schema to declare a principal type.
+  entity Any;
+
+  // Safe browser principal projected from the current users table row.
+  entity User = {
+    id: String,
+    tenant_id: String,
+    role: String,
+    assurance_level: Long
+  };
+
+  // Existing task targeted by view and mutation decisions.
+  entity Task = {
+    tenant_id: String,
+    owner_id: String,
+    assignee_id?: String
+  };
+
+  // A tenant is the existing container in which tasks are created.
+  entity Tenant = {
+    tenant_id: String
+  };
+
+  // Token context Cedarling creates for a multi-issuer request.
+  type Tokens = {
+    total_token_count: Long,
+    p1taskmanager_access_token?: P1TaskManager::Access_token
+  };
+
+  // Facts supplied by the server or browser for the current decision.
+  type RequestContext = {
+    // Selects the policy group for the authoritative server or shadow browser.
+    boundary: String,
+    user?: {
+      id: String,
+      subject: String,
+      tenant_id: String,
+      role: String,
+      assurance_level: Long
+    },
+    // Current database tenant of the user requested as the new assignee.
+    requested_assignee_tenant_id?: String,
+    tokens?: Tokens
+  };
+
+  // Decide whether an existing task may be returned.
+  action "View" appliesTo {
+    principal: [Any, User],
+    resource: [Task],
+    context: RequestContext
+  };
+
+  // Decide whether a task may be created inside an existing tenant.
+  action "Create" appliesTo {
+    principal: [Any, User],
+    resource: [Tenant],
+    context: RequestContext
+  };
+
+  // Decide whether an existing task's editable fields may change.
+  action "Edit" appliesTo {
+    principal: [Any, User],
+    resource: [Task],
+    context: RequestContext
+  };
+
+  // Decide whether an existing task may receive a new assignee.
+  action "Assign" appliesTo {
+    principal: [Any, User],
+    resource: [Task],
+    context: RequestContext
+  };
+
+  // Decide whether an existing task may transition to completed.
+  action "Complete" appliesTo {
+    principal: [Any, User],
+    resource: [Task],
+    context: RequestContext
+  };
+
+  // Decide whether an existing task may be deleted.
+  action "Delete" appliesTo {
+    principal: [Any, User],
+    resource: [Task],
+    context: RequestContext
+  };
+}

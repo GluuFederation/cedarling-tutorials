@@ -15,11 +15,16 @@ export type Incident = Readonly<{
   status: IncidentStatus;
   assignedTo: PersonaId | null;
   severity: "medium" | "high" | "critical";
-  classification: "internal" | "restricted";
   version: number;
 }>;
 
+export function isPersona(value: unknown): value is PersonaId {
+  return (
+    typeof value === "string" && personaIds.some((persona) => persona === value)
+  );
+}
+
 export function parsePersona(value: string | undefined): PersonaId {
-  if (value === "dana" || value === "amir" || value === "eve") return value;
+  if (isPersona(value)) return value;
   throw new Error("Choose one P3 account: dana, amir, or eve");
 }

@@ -18,6 +18,26 @@ export type Session = {
   principal: Principal;
 };
 
+/** Authority row and version used for both the decision and its write guard. */
+export type Authority = {
+  principalId: string;
+  tenantId: string;
+  role: "editor" | "publisher";
+  current: boolean;
+  version: number | null;
+};
+
+/** Immutable review binding plus the reviewer's current authority snapshot. */
+export type Approval = {
+  id: string;
+  revisionId: string;
+  revisionVersion: number;
+  digest: string;
+  reviewerId: string;
+  authorityCurrent: boolean;
+  authorityVersion: number | null;
+};
+
 export type OidcTokens = {
   issuer: string;
   subject: string;

@@ -1,0 +1,36 @@
+namespace P3IncidentAssistant {
+  // Cedarling creates issuer and token entities from verified JWT evidence.
+  type Url = { host: String, path: String, protocol: String };
+  entity TrustedIssuer = { issuer_entity_id: Url };
+  entity Access_token = {
+    token_type?: String,
+    jti?: String,
+    iss?: TrustedIssuer,
+    exp?: Long,
+    validated_at?: Long
+  } tags Set<String>;
+
+  // Real resources resolved by the MCP server, never supplied by the model.
+  entity Service;
+  entity Runbook;
+  entity Incident = { assigned_to?: String };
+
+  type RequestContext = {
+    caller: { subject: String, role: String },
+    tokens?: {
+      total_token_count: Long,
+      p3incidentassistant_access_token?: Access_token
+    }
+  };
+
+  // Multi-issuer requests use token context; no separate synthetic actor.
+  action "Discover", "Search" appliesTo {
+    principal: [Access_token], resource: [Service], context: RequestContext
+  };
+  action "Read", "UpdateStatus", "Triage" appliesTo {
+    principal: [Access_token], resource: [Incident], context: RequestContext
+  };
+  action "ReadRunbook" appliesTo {
+    principal: [Access_token], resource: [Runbook], context: RequestContext
+  };
+}
