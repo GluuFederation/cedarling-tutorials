@@ -34,10 +34,14 @@ export async function GET(request: NextRequest) {
       services.sessions.cookieOptions(0),
     );
     return response;
-  } catch (error) {
-    console.error("P4 login callback rejected", {
-      error: error instanceof Error ? error.message : "unknown failure",
-    });
+  } catch {
+    console.error(
+      JSON.stringify(
+        { event: "authentication.failed", category: "login_callback_rejected" },
+        null,
+        2,
+      ),
+    );
     const response = NextResponse.json(
       { error: "login_callback_rejected" },
       { status: 400 },

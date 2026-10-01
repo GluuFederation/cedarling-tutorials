@@ -24,9 +24,11 @@ async function execute(operation: Operation, form: FormData): Promise<never> {
   const requestId =
     (await headers()).get("x-request-id") ?? crypto.randomUUID();
   let outcome = `${operation}-complete`;
+  let actorId: string | undefined;
   let revisionId: string | undefined;
   try {
     const session = await services.sessions.requireMutation(form);
+    actorId = session.principal.id;
     if (operation === "save") {
       revisionId = await services.editorial.saveDraft(session, form, requestId);
       outcome = "draft-saved";
@@ -40,11 +42,45 @@ async function execute(operation: Operation, form: FormData): Promise<never> {
     if (operation === "publish")
       await services.editorial.publish(session, form, requestId);
     revalidatePath(`/articles/${String(form.get("articleId"))}`);
+    logAction(requestId, operation, actorId, String(form.get("articleId")));
   } catch (error) {
+    logAction(
+      requestId,
+      operation,
+      actorId,
+      undefined,
+      isAppError(error) ? error.code : "INTERNAL_ERROR",
+    );
     if (isAppError(error)) outcome = `error-${error.code.toLowerCase()}`;
     else throw error;
   }
   redirect(destination(form, outcome, revisionId));
+}
+
+/** Action completion is separate from the Cedarling decision that preceded it. */
+function logAction(
+  requestId: string,
+  operation: string,
+  actorId?: string,
+  articleId?: string,
+  category?: string,
+) {
+  console.info(
+    JSON.stringify(
+      {
+        event: category
+          ? "editorial.action.failed"
+          : "editorial.action.completed",
+        requestId,
+        actorId,
+        operation,
+        articleId,
+        category,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 export async function createArticle(
@@ -55,11 +91,14 @@ export async function createArticle(
   const requestId =
     (await headers()).get("x-request-id") ?? crypto.randomUUID();
   let articleId: string;
+  let actorId: string | undefined;
   try {
     const session = await services.sessions.requireMutation(form);
+    actorId = session.principal.id;
     articleId = await services.editorial.create(session, form, requestId);
   } catch (error) {
     const category = isAppError(error) ? error.code : "INTERNAL_ERROR";
+    logAction(requestId, "create", actorId, undefined, category);
     return {
       error:
         category === "INVALID_REQUEST"
@@ -73,6 +112,7 @@ export async function createArticle(
                 : "The article could not be created. Try again.",
     };
   }
+  logAction(requestId, "create", actorId, articleId);
   revalidatePath("/");
   redirect(`/articles/${articleId}?outcome=article-created`);
 }

@@ -9,22 +9,23 @@
   "packageManager": "pnpm@10.17.1",
   "scripts": {
     "admin": "node --env-file=.env scripts/admin.ts",
-    "build": "next build",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e",
+    "build": "node ../shared/policy-store.mjs && next build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e",
     "dev": "node scripts/dev.mjs",
     "format": "biome check --write .",
     "format:check": "biome format .",
     "lint": "biome check --formatter-enabled=false --error-on-warnings .",
-    "preflight": "node scripts/preflight.mjs",
     "reset": "node --env-file=.env scripts/reset.ts",
     "setup": "node scripts/setup.ts",
     "start": "node scripts/start.mjs",
-    "test": "vitest run",
+    "test": "node ../shared/policy-store.mjs && vitest run",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@janssenproject/cedarling_wasm": "0.0.468",
     "better-sqlite3": "13.0.3",
+    "fflate": "0.8.3",
     "next": "16.3.6",
     "openid-client": "6.8.8",
     "react": "19.3.0",
@@ -32,6 +33,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@cedar-policy/cedar-wasm": "4.12.0",
     "@biomejs/biome": "2.5.14",
     "@playwright/test": "1.63.0",
     "@types/better-sqlite3": "9.6.0",

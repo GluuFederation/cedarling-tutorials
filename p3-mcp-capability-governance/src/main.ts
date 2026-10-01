@@ -3,7 +3,6 @@ import { loadConfig } from "./config/project-config.js";
 import { createRuntime } from "./runtime.js";
 
 loadProjectEnvironment();
-console.info("P3 authorization: FAKE ALLOW; Cedarling is not called.");
 
 const config = loadConfig();
 const runtime = createRuntime(config);

@@ -53,22 +53,37 @@ export function loadConfig(
   if (clientSecret.length < 32)
     throw new Error("P1_CLIENT_SECRET must contain at least 32 characters");
 
+  const issuer = normalizedUrl(
+    env.P1_ISSUER ?? "http://localhost:18001",
+    "P1_ISSUER",
+  );
+  const apiResource = normalizedUrl(
+    env.P1_API_RESOURCE ?? "http://localhost:17001/api",
+    "P1_API_RESOURCE",
+  );
+  if (
+    issuer !== "http://localhost:18001" ||
+    apiResource !== "http://localhost:17001/api"
+  )
+    throw new Error(
+      "P1 policies require issuer http://localhost:18001 and API audience http://localhost:17001/api; align .local/idp/.env and run pnpm run setup",
+    );
+
+  const baseUrl = normalizedUrl(
+    env.P1_BASE_URL ?? "http://localhost:17001",
+    "P1_BASE_URL",
+  );
+  const origin = new URL(baseUrl);
+  if (port !== Number(origin.port || (origin.protocol === "https:" ? 443 : 80)))
+    throw new Error("P1_PORT must match P1_BASE_URL; run pnpm run setup");
+
   return {
     host: env.P1_HOST?.trim() || "127.0.0.1",
     port,
-    baseUrl: normalizedUrl(
-      env.P1_BASE_URL ?? "http://localhost:17001",
-      "P1_BASE_URL",
-    ),
+    baseUrl,
     dataDirectory,
-    issuer: normalizedUrl(
-      env.P1_ISSUER ?? "http://localhost:18001",
-      "P1_ISSUER",
-    ),
-    apiResource: normalizedUrl(
-      env.P1_API_RESOURCE ?? "http://localhost:17001/api",
-      "P1_API_RESOURCE",
-    ),
+    issuer,
+    apiResource,
     clientId: env.P1_CLIENT_ID?.trim() || "p1-task-manager",
     clientSecret,
     sessionEncryptionKey,

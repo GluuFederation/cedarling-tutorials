@@ -10,13 +10,19 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: 2.1.1
-        version: 2.1.1(hono@4.13.5)
+        version: 2.1.1(hono@4.13.7)
+      '@janssenproject/cedarling_wasm':
+        specifier: 0.0.468
+        version: 0.0.468
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       hono:
-        specifier: 4.13.5
-        version: 4.13.5
+        specifier: 4.13.7
+        version: 4.13.7
       openid-client:
         specifier: 6.8.8
         version: 6.8.8
@@ -33,6 +39,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.14
         version: 2.5.14
+      '@cedar-policy/cedar-wasm':
+        specifier: 4.12.0
+        version: 4.12.0
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
@@ -116,11 +125,18 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@cedar-policy/cedar-wasm@4.12.0':
+    resolution: {integrity: sha512-tCSj92hh4fnmas4ojO4tjx8wAAW3mKVgQ7M388NsSpXp64FVeYY6xwhKtJRaaYGK0qLiN2jnq8/SNIU2r5fdPw==}
+
   '@hono/node-server@2.1.1':
     resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
+
+  '@janssenproject/cedarling_wasm@0.0.468':
+    resolution: {integrity: sha512-VVhdqYT4dAaz55pI53ja/Gqxbaf4xSNynBOYdamIp/kwp41t7673Ir/QrR+HWIevZM++vVdV+RXsikcQVd9cLA==}
+    engines: {node: '>=22 <23 || >=24 <25 || >=26 <27'}
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
@@ -338,13 +354,16 @@ packages:
       picomatch:
         optional: true
 
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
     engines: {node: '>=16.9.0'}
 
   jose@6.2.12:
@@ -648,9 +667,13 @@ snapshots:
   '@biomejs/cli-win32-x64@2.5.14':
     optional: true
 
-  '@hono/node-server@2.1.1(hono@4.13.5)':
+  '@cedar-policy/cedar-wasm@4.12.0': {}
+
+  '@hono/node-server@2.1.1(hono@4.13.7)':
     dependencies:
-      hono: 4.13.5
+      hono: 4.13.7
+
+  '@janssenproject/cedarling_wasm@0.0.468': {}
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
@@ -806,10 +829,12 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  fflate@0.8.3: {}
+
   fsevents@2.3.3:
     optional: true
 
-  hono@4.13.5: {}
+  hono@4.13.7: {}
 
   jose@6.2.12: {}
 

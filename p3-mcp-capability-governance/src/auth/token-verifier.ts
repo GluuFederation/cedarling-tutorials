@@ -5,9 +5,7 @@ import {
   type AuthInfo,
 } from "@modelcontextprotocol/server";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
-import type { PersonaId } from "../incidents/types.js";
-
-const personas = new Set<PersonaId>(["dana", "amir", "eve"]);
+import { isPersona, type PersonaId } from "../incidents/types.js";
 
 type TokenVerifierOptions = Readonly<{
   issuer: string;
@@ -52,8 +50,7 @@ export function createP3AccessTokenVerifier(
     const tokenClientId = payload.client_id;
     const tokenScopes = scopes(payload.scope);
     if (
-      typeof subject !== "string" ||
-      !personas.has(subject as PersonaId) ||
+      !isPersona(subject) ||
       tokenClientId !== options.clientId ||
       typeof payload.exp !== "number" ||
       !tokenScopes.includes("mcp.access")
@@ -61,7 +58,7 @@ export function createP3AccessTokenVerifier(
       throw new Error("Invalid P3 access token");
     }
     return {
-      subject: subject as PersonaId,
+      subject,
       scopes: tokenScopes,
       expiresAt: payload.exp,
     };

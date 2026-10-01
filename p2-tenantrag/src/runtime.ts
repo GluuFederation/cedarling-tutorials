@@ -1,4 +1,5 @@
 import { createAuthenticator } from "./auth/authenticator.js";
+import { createRetrievalAuthorization } from "./authorization.js";
 import {
   readCorpusArtifact,
   createCorpusSearch,
@@ -33,6 +34,9 @@ export async function createRuntime(config: P2Config) {
     allowPaid: config.openRouterAllowPaid,
     timeoutMs: config.providerTimeoutMs,
   });
+  const authorization = await createRetrievalAuthorization(
+    config.policyStorePath,
+  );
   return {
     authenticator: createAuthenticator({
       issuer: config.issuer,
@@ -43,6 +47,8 @@ export async function createRuntime(config: P2Config) {
       corpusSearch,
       voyage,
       openRouter,
+      authorization,
     }),
+    close: () => authorization.close(),
   };
 }

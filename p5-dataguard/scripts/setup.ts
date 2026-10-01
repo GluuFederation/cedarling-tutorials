@@ -6,7 +6,8 @@ import {
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
 import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
-import { loadConfig, prepareDataDirectory } from "../src/server/config.ts";
+import { buildPolicyStore } from "../../shared/policy-store.mjs";
+import { loadConfig } from "../src/server/config.ts";
 import { AppDatabase } from "../src/server/database.ts";
 
 const target = resolve(".env");
@@ -27,6 +28,8 @@ const current = readProjectEnvironment(target);
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
     P5_BASE_URL: baseUrl,
+    P5_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P5_ISSUER: url("IDP_ISSUER"),
     P5_API_RESOURCE: url("P5_API_RESOURCE"),
     P5_CLIENT_ID: required("P5_CLIENT_ID"),
@@ -34,7 +37,6 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P5_HOST: "127.0.0.1",
-    P5_PORT: "17005",
     P5_DATA_DIR: ".data",
     P5_SESSION_ENCRYPTION_KEY:
       current.environment.P5_SESSION_ENCRYPTION_KEY ??
@@ -42,13 +44,16 @@ const merged = mergeProjectEnvironment(current.text, {
   },
 });
 const config = loadConfig(merged.environment);
-prepareDataDirectory(config.dataDirectory);
 new AppDatabase(
   resolve(config.dataDirectory, "p5.sqlite"),
   config.issuer,
   resolve(config.dataDirectory, "exports"),
 ).close();
 writePrivateEnvironment(target, merged.text);
+await buildPolicyStore({
+  projectRoot: resolve("."),
+  dependencyRoot: resolve("."),
+});
 console.info(
   merged.synchronizedKeys.length
     ? `Synchronized P5 environment keys: ${merged.synchronizedKeys.join(", ")}`

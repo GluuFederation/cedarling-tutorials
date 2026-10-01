@@ -8,12 +8,18 @@ importers:
 
   .:
     dependencies:
+      '@janssenproject/cedarling_wasm':
+        specifier: 0.0.468
+        version: 0.0.468
       '@orama/orama':
         specifier: 3.1.18
         version: 3.1.18
       fastify:
         specifier: 5.12.5
         version: 5.12.5
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       jose:
         specifier: 6.2.10
         version: 6.2.10
@@ -24,6 +30,9 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@cedar-policy/cedar-wasm':
+        specifier: 4.12.0
+        version: 4.12.0
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.11.0)
@@ -56,6 +65,9 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@cedar-policy/cedar-wasm@4.12.0':
+    resolution: {integrity: sha512-tCSj92hh4fnmas4ojO4tjx8wAAW3mKVgQ7M388NsSpXp64FVeYY6xwhKtJRaaYGK0qLiN2jnq8/SNIU2r5fdPw==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -289,6 +301,10 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@janssenproject/cedarling_wasm@0.0.468':
+    resolution: {integrity: sha512-VVhdqYT4dAaz55pI53ja/Gqxbaf4xSNynBOYdamIp/kwp41t7673Ir/QrR+HWIevZM++vVdV+RXsikcQVd9cLA==}
+    engines: {node: '>=22 <23 || >=24 <25 || >=26 <27'}
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
@@ -767,6 +783,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   file-entry-cache@11.1.5:
     resolution: {integrity: sha512-+PFTHITI08JIGhnNpGNI8T8inUpgZfk3GNEqfT9R2zZV2iFXg3CvqzSl/uEhs7TSGujYRELEANyDvS8Fj7+S7Q==}
@@ -1279,6 +1298,8 @@ snapshots:
       hashery: 1.5.1
       keyv: 5.6.0
 
+  '@cedar-policy/cedar-wasm@4.12.0': {}
+
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
 
@@ -1429,6 +1450,8 @@ snapshots:
   '@humanwhocodes/module-importer@1.0.1': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@janssenproject/cedarling_wasm@0.0.468': {}
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
@@ -1916,6 +1939,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   file-entry-cache@11.1.5:
     dependencies:

@@ -1,12 +1,15 @@
 # P1 - Protecting a Node.js REST API with Cedarling
 
+![Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.](docs/assets/social-card.webp)
+
 P1 is a multi-tenant task manager showing how Cedarling centralizes task
 authorization inside a trusted Node.js API. Authentication, sessions, request
 integrity, validation, tenant-scoped lists, and optimistic concurrency remain
 application responsibilities.
 
-The marked task capabilities currently use a fake permissive decision; the
-Cedarling tutorial replaces that seam with policy-backed decisions.
+The server enforces every protected task read and effect with Cedarling. The
+browser evaluates the same policy release to hide controls conservatively,
+while the server always makes the final decision.
 
 ## Architecture
 
@@ -42,19 +45,22 @@ For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
-pnpm run setup
-node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js
-```
-
-Keep the IdP running. In another terminal in this project directory:
-
-```bash
 pnpm dev
 ```
 
-For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
+`pnpm dev` prepares configuration and policies, starts this project's IdP,
+and watches the browser and server together. Setup keeps the listen port aligned
+with the registered application URL without resetting data.
+
+For compiled startup, run `pnpm run setup`, `pnpm --dir ../shared/identity-provider build`,
+and `pnpm build`. Keep `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js`
+running in another terminal, then run `pnpm start`.
+Setup, build, and development startup validate the readable `policy-store/` source and create the ignored
+`.local/policy-store.cjar` archive used by the Cedarling integration.
+After editing policies, restart `pnpm dev` or rebuild before `pnpm start`.
+The policy store trusts only issuer `http://localhost:18001` and audience
+`http://localhost:17001/api`; setup and startup reject different values.
 
 ## Exercise
 
@@ -65,22 +71,29 @@ The business workflow is a shared task board:
 - **Sam** — Tenant B external user who must remain isolated from Tenant A.
 
 Compare their lists and mutations, including a direct task URL. The current
-decision seam permits protected actions too broadly; Cedarling will decide each
-task read and mutation from the actor, tenant, role, resource, and context.
+policy permits Alex to view and edit assigned Tenant A work, gives Mina the
+owner actions in Tenant A, and isolates Sam's Tenant B work. Browser state
+cannot grant an operation that the server denies.
 
 ## Commands
 
-| Command          | Purpose                                            |
-| ---------------- | -------------------------------------------------- |
-| `pnpm run setup` | Create validated native configuration and fixtures |
-| `pnpm dev`       | Build and watch the browser and server             |
-| `pnpm start`     | Run the built server                               |
-| `pnpm reset`     | Restore synthetic local data                       |
-| `pnpm check`     | Run formatting, lint, types, tests, and build      |
+| Command          | Purpose                                                       |
+| ---------------- | ------------------------------------------------------------- |
+| `pnpm run setup` | Create configuration and the local policy archive             |
+| `pnpm dev`       | Start the IdP and watch the browser and server                |
+| `pnpm start`     | Run the built server                                          |
+| `pnpm reset`     | Restore synthetic local data                                  |
+| `pnpm test:e2e`  | Build and test real browser/IdP authorization                 |
+| `pnpm check`     | Run formatting, lint, types, tests, build, and browser checks |
 
 ## Verify
 
 ```bash
+pnpm exec playwright install chromium
 pnpm check
 pnpm audit --audit-level low
 ```
+
+On Linux, use `pnpm exec playwright install --with-deps chromium` if browser
+system libraries are missing. Browser checks use temporary credentials and data;
+stop this project's running instances first so its ports are free.

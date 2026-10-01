@@ -1,0 +1,54 @@
+namespace P4EditorialPublishing {
+  // New articles belong to a tenant before an article record exists.
+  entity Tenant = { id: String };
+  action "CreateArticle" appliesTo { principal: [Principal], resource: [Tenant], context: {} };
+  // The existing SQLite principal, resolved from the authenticated session.
+  entity Principal = { id: String, tenant_id: String };
+
+  // Reading an article also exposes its bounded revision history.
+  entity Article = { tenant_id: String };
+
+  // Immutable revision identity and content used to bind a review to publication.
+  entity Revision = {
+    revision_id: String,
+    tenant_id: String,
+    author_id: String,
+    version: Long,
+    digest: String,
+    state: String
+  };
+
+  // Current editor authority is loaded from SQLite for this review.
+  type ReviewContext = { editor_authority_current: Bool };
+
+  // Recorded evidence is data, not standing permission to publish.
+  type PublicationContext = {
+    publisher_authority_current: Bool,
+    approval?: {
+      revision_id: String,
+      revision_version: Long,
+      digest: String,
+      reviewer_id: String,
+      reviewer_authority_current: Bool
+    }
+  };
+
+  action "ReadArticle" appliesTo {
+    principal: [Principal], resource: [Article], context: {}
+  };
+  action "EditRevision" appliesTo {
+    principal: [Principal], resource: [Revision], context: {}
+  };
+  action "SubmitRevision" appliesTo {
+    principal: [Principal], resource: [Revision], context: {}
+  };
+  action "ApproveRevision" appliesTo {
+    principal: [Principal], resource: [Revision], context: ReviewContext
+  };
+  action "RejectRevision" appliesTo {
+    principal: [Principal], resource: [Revision], context: ReviewContext
+  };
+  action "PublishRevision" appliesTo {
+    principal: [Principal], resource: [Revision], context: PublicationContext
+  };
+}

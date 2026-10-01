@@ -1,0 +1,75 @@
+// Token structures Cedarling builds from P2 JWT evidence.
+namespace P2TenantRAG {
+  // Structured issuer URL used by Cedarling's trusted-issuer entity.
+  type Url = {
+    host: String,
+    path: String,
+    protocol: String
+  };
+
+  // Shared tutorial IdP that issued and signed the token.
+  entity TrustedIssuer = {
+    issuer_entity_id: Url
+  };
+
+  // OAuth scope stays a space-delimited string; other dynamic claims use tags.
+  entity Access_token = {
+    token_type?: String,
+    jti?: String,
+    scope?: String,
+    iss?: TrustedIssuer,
+    exp?: Long,
+    validated_at?: Long
+  } tags Set<String>;
+}
+
+namespace RAG {
+  // Multi-issuer authorization has no runtime principal, but each action
+  // schema still declares a principal type.
+  entity Any;
+
+  // Existing corpus selected by the server before remote retrieval work.
+  entity Corpus = {
+    corpus_id: String,
+    tenant_id: String
+  };
+
+  // Current document metadata checked before any protected text is loaded.
+  entity Document = {
+    corpus_id: String,
+    tenant_id: String,
+    classification: String,
+    confidential_reader_subjects: Set<String>
+  };
+
+  // Token context Cedarling creates for a multi-issuer request.
+  type Tokens = {
+    total_token_count: Long,
+    p2tenantrag_access_token?: P2TenantRAG::Access_token
+  };
+
+  // Trusted application facts used by the two P2 authorization decisions.
+  type RequestContext = {
+    boundary: String,
+    user: {
+      subject: String,
+      tenant_id: String
+    },
+    selected_corpus_id: String,
+    tokens?: Tokens
+  };
+
+  // Decide whether remote embedding and vector search may start.
+  action "SearchCorpus" appliesTo {
+    principal: [Any],
+    resource: [Corpus],
+    context: RequestContext
+  };
+
+  // Decide whether one candidate document may release protected text.
+  action "RetrieveDocument" appliesTo {
+    principal: [Any],
+    resource: [Document],
+    context: RequestContext
+  };
+}

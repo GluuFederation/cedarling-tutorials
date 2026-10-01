@@ -1,0 +1,11 @@
+{
+  "cedar_version": "4.5.0",
+  "policy_store": {
+    "id": "a053314bf3234b2aad393fd00afdc123",
+    "name": "P3 Incident Assistant",
+    "description": "Authorization for MCP incident operations.",
+    "version": "1.0.0",
+    "created_date": "2026-09-28T00:00:00Z",
+    "updated_date": "2026-09-28T00:00:00Z"
+  }
+}

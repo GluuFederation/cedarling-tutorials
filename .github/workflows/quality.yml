@@ -84,23 +84,46 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
       - name: Install browser and Linux dependencies
-        if: (matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os == 'Linux'
+        if: (matrix.project == 'p1-task-manager' || matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os == 'Linux'
         working-directory: ${{ matrix.project }}
         run: pnpm exec playwright install --with-deps chromium
       - name: Install browser
-        if: (matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os != 'Linux'
+        if: (matrix.project == 'p1-task-manager' || matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os != 'Linux'
         working-directory: ${{ matrix.project }}
         run: pnpm exec playwright install chromium
       - name: Check
         working-directory: ${{ matrix.project }}
         run: pnpm check
       - name: Run Linux integration scenario
-        if: runner.os == 'Linux' && (matrix.project == 'p3-mcp-capability-governance' || matrix.project == 'p8-cedarfile' || matrix.project == 'p9-cedarrealtime' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p12-hr-access-governance' || matrix.project == 'p13-student-records' || matrix.project == 'p15-marketplace')
+        if: runner.os == 'Linux' && (matrix.project == 'p8-cedarfile' || matrix.project == 'p9-cedarrealtime' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p12-hr-access-governance' || matrix.project == 'p13-student-records' || matrix.project == 'p15-marketplace')
         working-directory: ${{ matrix.project }}
         run: pnpm test:e2e
       - name: Audit dependencies
         working-directory: ${{ matrix.project }}
         run: pnpm audit --audit-level low
+
+  p3-sidecar:
+    name: P3 signed-token sidecar workflow
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.projects), 'p3-mcp-capability-governance')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: p3-mcp-capability-governance
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 10.17.1
+          run_install: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+          cache-dependency-path: p3-mcp-capability-governance/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:e2e
 
   compose-config:
     name: Compose startup (${{ matrix.project }})

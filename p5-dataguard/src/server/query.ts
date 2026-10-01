@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  type AggregatePlan,
   type DatasetField,
   type FieldName,
   fieldNames,
@@ -234,14 +235,15 @@ export function compileQuery(plan: QueryPlan): CompiledQuery {
   };
 }
 
-export function compileCardinalityQuery(plan: QueryPlan): CompiledQuery {
+export function compileCardinalityQuery(
+  plan: AggregatePlan,
+): Pick<CompiledQuery, "sql" | "bindings"> {
   const filter = filterClause(plan);
-  const group = plan.kind === "aggregate" ? plan.groupBy : undefined;
+  const group = plan.groupBy;
   return {
     sql: group
       ? `SELECT COUNT(*) AS "groupSize" FROM workforce${filter.sql} GROUP BY ${identifier(group)} ORDER BY ${identifier(group)} LIMIT ?`
       : `SELECT COUNT(*) AS "groupSize" FROM workforce${filter.sql}`,
     bindings: group ? [...filter.bindings, plan.limit] : filter.bindings,
-    outputColumns: ["groupSize"],
   };
 }

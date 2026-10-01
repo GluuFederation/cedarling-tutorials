@@ -1,13 +1,17 @@
 import type {
+  AccessProfile,
   DocumentMetadata,
   FixtureChunk,
   FixtureDocument,
+  PersonaId,
   SearchCandidate,
+  TenantId,
 } from "./types.js";
+import { accessProfiles } from "./fixtures.js";
 
-type Corpus = Readonly<{
+export type Corpus = Readonly<{
   corpusId: string;
-  tenantId: "tenant-a" | "tenant-b";
+  tenantId: TenantId;
 }>;
 
 export class FixtureRepository {
@@ -47,7 +51,11 @@ export class FixtureRepository {
     return this.#corpora.get(corpusId);
   }
 
-  /** Rejects stale or substituted search IDs before protected text is released. */
+  findAccessProfile(subject: PersonaId): AccessProfile {
+    return accessProfiles[subject];
+  }
+
+  /** Rejects substituted search IDs before protected text is released. */
   resolveCandidate(candidate: SearchCandidate): DocumentMetadata {
     const chunk = this.#chunks.get(candidate.chunkId);
     const document = this.#documents.get(candidate.documentId);

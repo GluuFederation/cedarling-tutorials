@@ -1,4 +1,10 @@
-import type { FixtureDefinition } from "./types.js";
+import type { AccessProfile, FixtureDefinition, PersonaId } from "./types.js";
+
+export const accessProfiles: Readonly<Record<PersonaId, AccessProfile>> = {
+  ada: { tenantId: "tenant-a" },
+  leo: { tenantId: "tenant-a" },
+  mallory: { tenantId: "tenant-b" },
+};
 
 export const fixtureDefinitions: readonly FixtureDefinition[] = [
   {
@@ -8,6 +14,7 @@ export const fixtureDefinitions: readonly FixtureDefinition[] = [
     corpusId: "tenant-a-support",
     tenantId: "tenant-a",
     classification: "public",
+    confidentialReaderSubjects: [],
     expectedPageCount: 2,
     expectedChunkCount: 33,
     sha256: "6d9e2bb6397d1152c46d113436c712eb599f35a9573a57e18b946c275e815caa",
@@ -19,6 +26,7 @@ export const fixtureDefinitions: readonly FixtureDefinition[] = [
     corpusId: "tenant-a-support",
     tenantId: "tenant-a",
     classification: "confidential",
+    confidentialReaderSubjects: ["ada"],
     expectedPageCount: 4,
     expectedChunkCount: 69,
     sha256: "a3328f94a152dddfbc1ffdf1cdccce92c9e61e7d40e610d1fa3befed727418cd",
@@ -30,6 +38,7 @@ export const fixtureDefinitions: readonly FixtureDefinition[] = [
     corpusId: "tenant-b-support",
     tenantId: "tenant-b",
     classification: "public",
+    confidentialReaderSubjects: [],
     expectedPageCount: 1,
     expectedChunkCount: 16,
     sha256: "08a6e54c93cbab7726820f3310bd445f0fbf8519f15aa09d147b656609b5d2f2",
@@ -41,6 +50,7 @@ export const fixtureDefinitions: readonly FixtureDefinition[] = [
     corpusId: "tenant-b-support",
     tenantId: "tenant-b",
     classification: "confidential",
+    confidentialReaderSubjects: [],
     expectedPageCount: 3,
     expectedChunkCount: 52,
     sha256: "28f95d032396d1efed533a42f7ce2f97f6dbd0e7261dc30f6640704746f4de2b",
@@ -52,6 +62,7 @@ export const fixtureDefinitions: readonly FixtureDefinition[] = [
     corpusId: "tenant-a-support",
     tenantId: "tenant-a",
     classification: "public",
+    confidentialReaderSubjects: [],
     expectedPageCount: 5,
     expectedChunkCount: 85,
     sha256: "e492c76743d4b547b5355d58111c1e8274072706120adadb1753ce0280dabb5b",

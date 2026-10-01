@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.e2e.ts",
+  globalSetup: "../shared/browser-test-stack.mjs",
   timeout: 45_000,
   expect: { timeout: 8_000 },
   fullyParallel: false,
@@ -12,12 +13,5 @@ export default defineConfig({
     baseURL: "http://localhost:17005",
     browserName: "chromium",
     trace: "retain-on-failure",
-  },
-  webServer: {
-    command: "pnpm dev -- --reset",
-    gracefulShutdown: { signal: "SIGINT", timeout: 10_000 },
-    url: "http://127.0.0.1:17005/health",
-    reuseExistingServer: false,
-    timeout: 120_000,
   },
 });

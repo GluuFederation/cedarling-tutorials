@@ -26,6 +26,7 @@ const documents: readonly FixtureDocument[] = [
       corpusId: "tenant-a-support",
       tenantId: "tenant-a",
       classification: "public",
+      confidentialReaderSubjects: [],
     },
     chunks: [
       {
@@ -43,6 +44,7 @@ const documents: readonly FixtureDocument[] = [
       corpusId: "tenant-b-support",
       tenantId: "tenant-b",
       classification: "public",
+      confidentialReaderSubjects: [],
     },
     chunks: [
       {
@@ -133,7 +135,6 @@ describe("P2 corpus artifact and Orama search", () => {
         chunkId: "a-public-1",
         documentId: "a-public",
         corpusId: "tenant-a-support",
-        score: 1,
       },
     ]);
   });

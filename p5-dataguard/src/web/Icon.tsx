@@ -3,7 +3,6 @@ export type IconName =
   | "download"
   | "file"
   | "play"
-  | "refresh"
   | "shield-check"
   | "warning";
 
@@ -49,14 +48,6 @@ export function Icon({ name, size = 20 }: IconProps) {
       )}
       {name === "play" && (
         <path d="m9 7 8 5-8 5z" fill="currentColor" stroke="none" />
-      )}
-      {name === "refresh" && (
-        <>
-          <path d="M20 7v5h-5" />
-          <path d="M4 17v-5h5" />
-          <path d="M6.1 9a7 7 0 0 1 11.6-2L20 9" />
-          <path d="M17.9 15A7 7 0 0 1 6.3 17L4 15" />
-        </>
       )}
       {name === "shield-check" && (
         <>

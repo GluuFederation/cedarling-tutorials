@@ -9,11 +9,19 @@ import Fastify, {
   type FastifyRequest,
 } from "fastify";
 import { z } from "zod";
-import { capabilities, type Capability } from "./capabilities.js";
-import { logTaskListAuthorization } from "./authorization-trace.js";
+import {
+  capabilities,
+  type Capability,
+  type TaskCeiling,
+  type TaskControl,
+} from "../shared/authorization.js";
+import type {
+  AuthorizationTarget,
+  ServerAuthorization,
+} from "./authorization-trace.js";
 import type { AppConfig } from "./config.js";
 import { safeEqual, randomToken } from "./crypto.js";
-import { AppDatabase, type Session } from "./database.js";
+import { AppDatabase, type Session, type Task } from "./database.js";
 import type { OidcRuntime } from "./oidc.js";
 
 const sessionCookie = "p1_session";
@@ -32,7 +40,6 @@ const assignInputSchema = versionSchema.extend({
 const loginHintSchema = z.enum(["alex", "mina", "sam"]).default("alex");
 
 function apiSchema(capability: Capability, body?: object): object {
-  // Permissive metadata names the future Cedarling check; it does not enforce it.
   return {
     tags: ["tasks"],
     ...(body ? { body } : {}),
@@ -99,12 +106,104 @@ export async function buildApp(
     config: AppConfig;
     database: AppDatabase;
     oidc: OidcRuntime;
+    authorization: ServerAuthorization;
     webRoot?: string;
   }>,
 ): Promise<FastifyInstance> {
-  const { config, database, oidc } = options;
+  const { authorization, config, database, oidc } = options;
   const app = Fastify({ logger: false, trustProxy: false, bodyLimit: 16_384 });
   const refreshes = new Map<string, Promise<Session | undefined>>();
+
+  function unavailable(reply: FastifyReply): undefined {
+    void reply.code(503).send({ error: "authorization_unavailable" });
+    return undefined;
+  }
+
+  async function authorize(
+    session: Session,
+    target: AuthorizationTarget,
+    reply: FastifyReply,
+    deniedStatus: 403 | 404,
+  ): Promise<boolean | undefined> {
+    try {
+      if (await authorization.authorize(reply.request.id, session, target))
+        return true;
+      void reply
+        .code(deniedStatus)
+        .send({ error: deniedStatus === 403 ? "forbidden" : "task_not_found" });
+      return undefined;
+    } catch {
+      unavailable(reply);
+      return undefined;
+    }
+  }
+
+  function assignmentTarget(task: { assigneeId: string | null }) {
+    const id = task.assigneeId === "user-mina" ? "user-alex" : "user-mina";
+    const user = database.findUserById(id);
+    return user
+      ? { id: user.id, name: user.name, tenantId: user.tenantId }
+      : undefined;
+  }
+
+  async function taskResponse(
+    session: Session,
+    task: Task,
+    reply: FastifyReply,
+  ) {
+    const target = assignmentTarget(task);
+    const checks: Array<
+      Readonly<{ control: TaskControl; target: AuthorizationTarget }>
+    > = [
+      {
+        control: "edit",
+        target: { capability: capabilities.edit, task },
+      },
+      ...(target
+        ? [
+            {
+              control: "assign" as const,
+              target: {
+                capability: capabilities.assign,
+                task,
+                requestedAssigneeTenantId: target.tenantId,
+              },
+            } as const,
+          ]
+        : []),
+      {
+        control: "complete",
+        target: { capability: capabilities.complete, task },
+      },
+      {
+        control: "delete",
+        target: { capability: capabilities.delete, task },
+      },
+    ];
+    try {
+      const decisions = await authorization.authorizeBatch(
+        reply.request.id,
+        session,
+        checks.map((check) => check.target),
+      );
+      const ceiling: TaskCeiling = { view: true };
+      checks.forEach(({ control }, index) => {
+        ceiling[control] = decisions[index] ?? false;
+      });
+      return {
+        task,
+        ...(target ? { assignmentTarget: target } : {}),
+        authorization: authorization.envelope({
+          session,
+          taskCeilings: { [task.id]: ceiling },
+          tasks: [task],
+        }),
+      };
+    } catch {
+      unavailable(reply);
+      return undefined;
+    }
+  }
 
   async function refreshSession(rawId: string): Promise<Session | undefined> {
     const current = database.getSession(rawId, config);
@@ -162,7 +261,7 @@ export async function buildApp(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
         styleSrc: ["'self'"],
         imgSrc: ["'self'", "data:"],
         connectSrc: ["'self'"],
@@ -182,6 +281,21 @@ export async function buildApp(
 
   app.get("/health", () => ({ status: "ok" }));
   app.get("/openapi.json", (_request, reply) => reply.send(app.swagger()));
+  app.get<{ Params: { digest: string } }>(
+    "/policy-store/:digest.cjar",
+    async (request, reply) => {
+      if (!/^[a-f0-9]{64}$/.test(request.params.digest))
+        return reply.code(404).send({ error: "policy_store_not_found" });
+      const artifact = await authorization.artifact(request.params.digest);
+      if (artifact === undefined)
+        return reply.code(404).send({ error: "policy_store_not_found" });
+      reply
+        .header("cache-control", "public, max-age=31536000, immutable")
+        .header("content-type", "application/octet-stream")
+        .header("content-length", String(artifact.byteLength));
+      return reply.send(Buffer.from(artifact));
+    },
+  );
 
   app.get<{ Querystring: { login_hint?: string } }>(
     "/auth/login",
@@ -281,14 +395,39 @@ export async function buildApp(
     async (request, reply) => {
       const session = await requireSession(request, reply);
       if (!session) return;
-      // Normal navigation stays tenant-scoped so the direct task routes remain
-      // the single authorization gap learners can isolate.
-      const tasks = database.listTasks(session.user.tenantId);
-      logTaskListAuthorization({
-        principalId: session.user.id,
-        tenantId: session.user.tenantId,
-      });
-      return { tasks };
+      const candidates = database.listTasks(session.user.tenantId);
+      try {
+        const decisions = await authorization.authorizeBatch(
+          request.id,
+          session,
+          [
+            ...candidates.map((task): AuthorizationTarget => ({
+              capability: capabilities.view,
+              task,
+            })),
+            {
+              capability: capabilities.create,
+              tenantId: session.user.tenantId,
+            },
+          ],
+        );
+        const tasks = candidates.filter((_task, index) => decisions[index]);
+        const create = decisions[candidates.length] ?? false;
+        return {
+          tasks,
+          authorization: authorization.envelope({
+            session,
+            tenantCreate: create,
+            taskCeilings: Object.fromEntries(
+              tasks.map((task) => [task.id, { view: true }]),
+            ),
+            tasks,
+          }),
+        };
+      } catch {
+        unavailable(reply);
+        return;
+      }
     },
   );
 
@@ -298,17 +437,21 @@ export async function buildApp(
     async (request, reply) => {
       const session = await requireSession(request, reply);
       if (!session) return;
-      // Authentication succeeds, but task.view is not
-      // evaluated until Cedarling is introduced in the next tutorial phase.
       const task = database.getTask(request.params.id);
-      return task
-        ? { task }
-        : reply.code(404).send({ error: "task_not_found" });
+      if (!task) return reply.code(404).send({ error: "task_not_found" });
+      if (
+        !(await authorize(
+          session,
+          { capability: capabilities.view, task },
+          reply,
+          404,
+        ))
+      )
+        return;
+      return taskResponse(session, task, reply);
     },
   );
 
-  // Direct effect handlers intentionally pass no actor to the database.
-  // Cedarling will be inserted immediately before each effect in the next phase.
   app.post(
     "/api/tasks",
     { schema: apiSchema(capabilities.create) },
@@ -321,6 +464,15 @@ export async function buildApp(
           error: "invalid_task",
           details: z.flattenError(parsed.error).fieldErrors,
         });
+      if (
+        !(await authorize(
+          session,
+          { capability: capabilities.create, tenantId: session.user.tenantId },
+          reply,
+          403,
+        ))
+      )
+        return;
       const task = database.createTask(
         session.user,
         parsed.data.title,
@@ -341,11 +493,27 @@ export async function buildApp(
       const parsed = editInputSchema.safeParse(request.body);
       if (!parsed.success)
         return reply.code(400).send({ error: "invalid_task" });
+      const task = database.getTask(request.params.id);
+      if (!task) return reply.code(404).send({ error: "task_not_found" });
+      if (
+        !(await authorize(
+          session,
+          { capability: capabilities.edit, task },
+          reply,
+          404,
+        ))
+      )
+        return;
+      // The write must use the same task version Cedarling evaluated.
+      if (parsed.data.version !== task.version) {
+        sendMutationResult(reply, "conflict");
+        return;
+      }
       sendMutationResult(
         reply,
         database.editTask(
           request.params.id,
-          parsed.data.version,
+          task.version,
           parsed.data.title,
           parsed.data.description,
         ),
@@ -362,11 +530,32 @@ export async function buildApp(
       const parsed = assignInputSchema.safeParse(request.body);
       if (!parsed.success)
         return reply.code(400).send({ error: "invalid_assignment" });
+      const task = database.getTask(request.params.id);
+      const assignee = database.findUserById(parsed.data.assigneeId);
+      if (!task || !assignee)
+        return reply.code(404).send({ error: "task_not_found" });
+      if (
+        !(await authorize(
+          session,
+          {
+            capability: capabilities.assign,
+            task,
+            requestedAssigneeTenantId: assignee.tenantId,
+          },
+          reply,
+          404,
+        ))
+      )
+        return;
+      if (parsed.data.version !== task.version) {
+        sendMutationResult(reply, "conflict");
+        return;
+      }
       sendMutationResult(
         reply,
         database.assignTask(
           request.params.id,
-          parsed.data.version,
+          task.version,
           parsed.data.assigneeId,
         ),
       );
@@ -382,9 +571,24 @@ export async function buildApp(
       const parsed = versionSchema.safeParse(request.body);
       if (!parsed.success)
         return reply.code(400).send({ error: "invalid_task_version" });
+      const task = database.getTask(request.params.id);
+      if (!task) return reply.code(404).send({ error: "task_not_found" });
+      if (
+        !(await authorize(
+          session,
+          { capability: capabilities.complete, task },
+          reply,
+          404,
+        ))
+      )
+        return;
+      if (parsed.data.version !== task.version) {
+        sendMutationResult(reply, "conflict");
+        return;
+      }
       sendMutationResult(
         reply,
-        database.completeTask(request.params.id, parsed.data.version),
+        database.completeTask(request.params.id, task.version),
       );
     },
   );
@@ -398,17 +602,36 @@ export async function buildApp(
       const parsed = versionSchema.safeParse(request.body);
       if (!parsed.success)
         return reply.code(400).send({ error: "invalid_task_version" });
+      const task = database.getTask(request.params.id);
+      if (!task) return reply.code(404).send({ error: "task_not_found" });
+      if (
+        !(await authorize(
+          session,
+          { capability: capabilities.delete, task },
+          reply,
+          404,
+        ))
+      )
+        return;
+      if (parsed.data.version !== task.version) {
+        sendMutationResult(reply, "conflict");
+        return;
+      }
       sendMutationResult(
         reply,
-        database.deleteTask(request.params.id, parsed.data.version),
+        database.deleteTask(request.params.id, task.version),
       );
     },
   );
 
   const webRoot = options.webRoot ?? path.resolve(process.cwd(), "dist/web");
   await app.register(fastifyStatic, { root: webRoot, wildcard: false });
-  app.addHook("onClose", () => {
-    database.close();
+  app.addHook("onClose", async () => {
+    try {
+      await authorization.close();
+    } finally {
+      database.close();
+    }
   });
   return app;
 }

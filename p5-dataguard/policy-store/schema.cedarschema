@@ -1,0 +1,27 @@
+namespace P5DataGuard {
+  // Current SQLite analyst, mapped from the authenticated session.
+  entity Analyst = { id: String, tenant_id: String, role: String };
+  // The workforce dataset is shared; each plan must explicitly select its tenant.
+  entity Dataset;
+  // Field metadata is authorized independently before disclosure.
+  entity Field = { name: String, classification: String };
+  // These facts come from the saved export, never the download request.
+  entity Export = { owner_id: String, tenant_id: String, purpose: String };
+
+  // Includes fields used by filters and grouping, not just returned columns.
+  type PlanContext = {
+    kind: String,
+    purpose: String,
+    tenant_id?: String,
+    field_names: Set<String>,
+    classifications: Set<String>,
+    minimum_group_size?: Long
+  };
+
+  action "InspectDataset" appliesTo { principal: [Analyst], resource: [Field], context: {} };
+  action "Query" appliesTo { principal: [Analyst], resource: [Dataset], context: PlanContext };
+  action "Aggregate" appliesTo { principal: [Analyst], resource: [Dataset], context: PlanContext };
+  action "CreateExport" appliesTo { principal: [Analyst], resource: [Dataset], context: PlanContext };
+  action "RevokeExport" appliesTo { principal: [Analyst], resource: [Export], context: {} };
+  action "DownloadExport" appliesTo { principal: [Analyst], resource: [Export], context: {} };
+}

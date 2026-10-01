@@ -2,6 +2,8 @@ import type { P2Config } from "../config/project-config.js";
 import { authorizeDevice, parsePersona } from "./device-flow.js";
 import type { PersonaId } from "../rag/types.js";
 
+type AuthConfig = Pick<P2Config, "issuer" | "clientId" | "apiResource">;
+
 type AuthDependencies = Readonly<{
   authorize?: typeof authorizeDevice;
   stderr?: (value: string) => void;
@@ -21,7 +23,7 @@ export function authPersonaArgument(
 /** Runs Device Flow while keeping its short-lived token out of diagnostics. */
 export async function authorizePersona(
   persona: PersonaId,
-  config: P2Config,
+  config: AuthConfig,
   dependencies: AuthDependencies = {},
 ): Promise<string> {
   const stderr =
@@ -45,7 +47,7 @@ export async function authorizePersona(
 
 export async function runAuthCli(
   argument: string | undefined,
-  config: P2Config,
+  config: AuthConfig,
   dependencies: AuthCliDependencies = {},
 ): Promise<void> {
   const persona = parsePersona(argument);

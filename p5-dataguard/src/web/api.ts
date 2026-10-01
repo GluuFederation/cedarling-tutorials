@@ -1,4 +1,6 @@
 import type {
+  ActionAvailability,
+  AuthorizationPreview,
   DatasetField,
   ExportCreated,
   QueryPlan,
@@ -17,9 +19,20 @@ export class ApiError extends Error {
 
 function browserTrace(
   operation: string,
-  outcome: Readonly<{ status: number | "network failure"; requestId?: string }>,
+  outcome: Readonly<{
+    status: number | "network failure";
+    requestId?: string | undefined;
+    category?: string;
+  }>,
 ): void {
-  console.info(`P5 browser | ${JSON.stringify({ operation, ...outcome })}`);
+  console.info(`P5 browser | ${operation}`, {
+    event:
+      typeof outcome.status === "number"
+        ? "http.response"
+        : "http.request.failed",
+    operation,
+    ...outcome,
+  });
 }
 
 async function fetchResponse(
@@ -38,7 +51,11 @@ async function fetchResponse(
       credentials: "same-origin",
     });
   } catch (error) {
-    browserTrace(operation, { status: "network failure" });
+    if (options.signal?.aborted) throw error;
+    browserTrace(operation, {
+      status: "network failure",
+      category: "network_unavailable",
+    });
     throw error;
   }
 }
@@ -58,7 +75,8 @@ async function request<T>(
   };
   browserTrace(operation, {
     status: response.status,
-    ...(body.requestId ? { requestId: body.requestId } : {}),
+    requestId: response.headers.get("x-request-id") ?? body.requestId,
+    ...(!response.ok ? { category: body.error ?? "request_failed" } : {}),
   });
   if (!response.ok) {
     throw new ApiError(response.status, body.error ?? "request_failed");
@@ -67,11 +85,22 @@ async function request<T>(
 }
 
 export const api = {
+  availability: (
+    input: AuthorizationPreview,
+    csrf: string,
+    signal: AbortSignal,
+  ) =>
+    request<ActionAvailability>(
+      "authorization.preview",
+      "/api/authorization",
+      { method: "POST", body: JSON.stringify(input), signal },
+      csrf,
+    ),
   session: () => request<SessionResponse>("session.load", "/api/session"),
   dataset: () =>
     request<{
       requestId: string;
-      dataset: { id: string; recordCount: number; fields: DatasetField[] };
+      dataset: { id: string; fields: DatasetField[] };
     }>("dataset.inspect", "/api/dataset"),
   query: (plan: QueryPlan, csrf: string) =>
     request<QueryResponse>(
@@ -89,7 +118,7 @@ export const api = {
     ),
   revokeExport: (id: string, csrf: string) =>
     request<{ export: ExportCreated["export"] }>(
-      "data.export.revoke",
+      "export.revoke",
       `/api/exports/${encodeURIComponent(id)}/revoke`,
       { method: "POST" },
       csrf,
@@ -101,13 +130,21 @@ export const api = {
       { method: "POST", body: JSON.stringify({ downloadRef }) },
       csrf,
     );
-    browserTrace("export.download", { status: response.status });
     if (!response.ok) {
       const body = (await response
         .json()
         .catch(() => ({ error: "request_failed" }))) as { error?: string };
+      browserTrace("export.download", {
+        status: response.status,
+        requestId: response.headers.get("x-request-id") ?? undefined,
+        category: body.error ?? "request_failed",
+      });
       throw new ApiError(response.status, body.error ?? "request_failed");
     }
+    browserTrace("export.download", {
+      status: response.status,
+      requestId: response.headers.get("x-request-id") ?? undefined,
+    });
     const blob = await response.blob();
     const href = URL.createObjectURL(blob);
     const link = document.createElement("a");

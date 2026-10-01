@@ -20,6 +20,29 @@ class Child extends EventEmitter {
 }
 
 describe("native development supervision", () => {
+  it("supervises a non-HTTP watcher and propagates its failure", async () => {
+    const child = new Child();
+    const fetch = vi.fn();
+    const supervisor = new DevSupervisor({
+      fetch,
+      spawn: vi.fn(() => child),
+      log: vi.fn(),
+    });
+    await supervisor.ensure({
+      name: "browser watcher",
+      command: "node",
+      args: ["watch.js"],
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(supervisor.ownedCount).toBe(1);
+    const failure = expect(supervisor.wait()).rejects.toThrow(
+      "browser watcher exited with exit code 1",
+    );
+    child.exitCode = 1;
+    child.emit("exit", 1, null);
+    await failure;
+    await supervisor.stop();
+  });
   it("uses the Windows command processor only for command shims", () => {
     expect(
       resolveCommand("pnpm.cmd", ["run", "setup"], {
@@ -91,6 +114,30 @@ describe("native development supervision", () => {
     });
     expect(spawn).not.toHaveBeenCalled();
     expect(supervisor.ownedCount).toBe(0);
+    await supervisor.stop();
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not spawn or replace an incompatible listener", async () => {
+    const spawn = vi.fn();
+    const supervisor = new DevSupervisor({
+      fetch: vi.fn().mockResolvedValue(response()),
+      spawn,
+      log: vi.fn(),
+    });
+    await expect(
+      supervisor.ensure({
+        name: "identity provider",
+        command: "node",
+        args: ["idp.js"],
+        health: {
+          url: "http://localhost:18001/health",
+          validate: async () => false,
+        },
+      }),
+    ).rejects.toThrow("owned by an incompatible service");
+    await supervisor.stop();
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it("fails when a child exits before it becomes healthy", async () => {
@@ -117,6 +164,30 @@ describe("native development supervision", () => {
         timeoutMs: 20,
       }),
     ).rejects.toThrow("application exited with exit code 1");
+  });
+
+  it("refuses to reuse an existing listener for an isolated test", async () => {
+    const spawn = vi.fn();
+    const supervisor = new DevSupervisor({
+      fetch: vi.fn().mockResolvedValue(response()),
+      spawn,
+      log: vi.fn(),
+    });
+    await expect(
+      supervisor.ensure({
+        name: "browser test",
+        reuseExisting: false,
+        command: "node",
+        args: ["app.js"],
+        health: {
+          url: "http://example.test/health",
+          validate: async () => true,
+        },
+      }),
+    ).rejects.toThrow("requires its own test instance");
+    await supervisor.stop();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(supervisor.ownedCount).toBe(0);
   });
 
   it("reports a missing runtime without waiting for the health timeout", async () => {

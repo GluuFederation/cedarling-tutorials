@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { ActionButton } from "@/app/action-button.tsx";
 import {
   approveRevision,
   publishRevision,
@@ -12,7 +13,6 @@ import { CreateArticleLink } from "@/app/components.tsx";
 import { isAppError } from "@/src/server/errors.ts";
 import type { ArticleView } from "@/src/server/models.ts";
 import { runtime } from "@/src/server/runtime.ts";
-import { Check } from "@/src/web/icons.tsx";
 
 const outcomes: Record<string, string> = {
   "article-created": "Article created.",
@@ -153,21 +153,20 @@ export default async function ArticlePage({
             </label>
             {isCurrent ? (
               <div className="action-row">
-                <button
-                  className="secondary"
-                  type="submit"
-                  disabled={!editable}
-                  aria-describedby={!editable ? "edit-denied" : undefined}
-                >
-                  {article.revision.state === "draft"
-                    ? "Save draft"
-                    : "Create new draft"}
-                </button>
-                {!editable && (
-                  <p className="permission-note" id="edit-denied">
-                    You cannot edit this article.
-                  </p>
-                )}
+                <ActionButton
+                  allowed={allowed.edit}
+                  label={
+                    article.revision.state === "draft"
+                      ? "Save draft"
+                      : "Create new draft"
+                  }
+                  reason={
+                    article.revisions.length >= 20 &&
+                    article.revision.state !== "draft"
+                      ? "This article has reached its 20-revision limit."
+                      : "This account cannot edit this revision."
+                  }
+                />
               </div>
             ) : null}
           </form>
@@ -177,83 +176,48 @@ export default async function ArticlePage({
               {article.revision.state === "draft" ? (
                 <form action={submitRevision}>
                   {mutationFields}
-                  <button
-                    className="primary"
-                    type="submit"
-                    disabled={!allowed.submit}
-                    aria-describedby={
-                      !allowed.submit ? "submit-denied" : undefined
-                    }
-                  >
-                    <Check />
-                    Submit for review
-                  </button>
-                  {!allowed.submit && (
-                    <p className="permission-note" id="submit-denied">
-                      You cannot submit this revision.
-                    </p>
-                  )}
+                  <ActionButton
+                    primary
+                    allowed={allowed.submit}
+                    label="Submit for review"
+                    reason="This account cannot submit this revision."
+                  />
                 </form>
               ) : null}
               {article.revision.state === "submitted" ? (
                 <>
                   <form action={approveRevision}>
                     {mutationFields}
-                    <button
-                      className="primary"
-                      type="submit"
-                      disabled={!allowed.approve}
-                      aria-describedby={
-                        !allowed.approve ? "approve-denied" : undefined
-                      }
-                    >
-                      <Check />
-                      Approve revision
-                    </button>
-                    {!allowed.approve && (
-                      <p className="permission-note" id="approve-denied">
-                        You cannot approve this revision.
-                      </p>
-                    )}
+                    <ActionButton
+                      primary
+                      allowed={allowed.approve}
+                      label="Approve revision"
+                      reason="This account cannot approve this revision."
+                    />
                   </form>
                   <form action={rejectRevision}>
                     {mutationFields}
-                    <button
-                      className="secondary"
-                      type="submit"
-                      disabled={!allowed.reject}
-                      aria-describedby={
-                        !allowed.reject ? "reject-denied" : undefined
-                      }
-                    >
-                      Reject revision
-                    </button>
-                    {!allowed.reject && (
-                      <p className="permission-note" id="reject-denied">
-                        You cannot reject this revision.
-                      </p>
-                    )}
+                    <ActionButton
+                      allowed={allowed.reject}
+                      label="Reject revision"
+                      reason="This account cannot reject this revision."
+                    />
                   </form>
                 </>
               ) : null}
               {["submitted", "approved"].includes(article.revision.state) ? (
                 <form action={publishRevision}>
                   {mutationFields}
-                  <button
-                    className="primary"
-                    type="submit"
-                    disabled={!allowed.publish}
-                    aria-describedby={
-                      !allowed.publish ? "publish-denied" : undefined
+                  <ActionButton
+                    primary
+                    allowed={allowed.publish}
+                    label="Publish current revision"
+                    reason={
+                      article.revision.state !== "approved"
+                        ? "This revision needs approval before publication."
+                        : "Publication is not permitted with the current authority and approval."
                     }
-                  >
-                    Publish current revision
-                  </button>
-                  {!allowed.publish && (
-                    <p className="permission-note" id="publish-denied">
-                      You cannot publish this revision.
-                    </p>
-                  )}
+                  />
                 </form>
               ) : null}
             </div>

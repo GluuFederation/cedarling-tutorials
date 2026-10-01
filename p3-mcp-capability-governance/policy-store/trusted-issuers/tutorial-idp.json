@@ -1,0 +1,21 @@
+{
+  "name": "P3IncidentAssistant",
+  "description": "Shared Cedarling tutorial identity provider",
+  "configuration_endpoint": "http://localhost:18003/.well-known/openid-configuration",
+  "token_metadata": {
+    "access_token": {
+      "trusted": true,
+      "entity_type_name": "P3IncidentAssistant::Access_token",
+      "token_id": "jti",
+      "required_claims": [
+        "iss",
+        "sub",
+        "aud",
+        "jti",
+        "exp",
+        "scope",
+        "client_id"
+      ]
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  ActionAvailability,
   DatasetField,
   ExportCreated,
   FieldName,
@@ -41,6 +42,10 @@ function friendlyError(error: unknown): string {
     return "The application could not complete the request.";
   const messages: Record<string, string> = {
     authentication_required: "Your session expired. Choose an identity again.",
+    authorization_denied: "This action is not allowed.",
+    authorization_unavailable: "Authorization is temporarily unavailable.",
+    authorization_state_changed:
+      "Access or data changed. Run the request again.",
     database_unavailable: "The dataset is temporarily unavailable.",
     export_expired: "This export has expired.",
     export_revoked: "This export was revoked.",
@@ -209,11 +214,24 @@ function Workspace({
   const [activeExport, setActiveExport] = useState<ExportCreated>();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const [preview, setPreview] = useState<{
+    key: string;
+    actions?: ActionAvailability;
+    error?: string;
+  }>();
+  const [previewVersion, refreshPreview] = useState(0);
 
   useEffect(() => {
     void api
       .dataset()
-      .then((response) => setFields(response.dataset.fields))
+      .then((response) => {
+        setFields(response.dataset.fields);
+        setSelected((current) =>
+          current.filter((name) =>
+            response.dataset.fields.some((field) => field.name === name),
+          ),
+        );
+      })
       .catch((error: unknown) => {
         if (error instanceof ApiError && error.status === 401) onExpired();
         else setNotice({ kind: "error", text: friendlyError(error) });
@@ -253,6 +271,49 @@ function Workspace({
     selected,
   ]);
 
+  const previewInput = useMemo(
+    () => ({
+      queryPlan: plan,
+      ...(lastPlan ? { exportPlan: lastPlan } : {}),
+      ...(activeExport ? { exportId: activeExport.export.id } : {}),
+    }),
+    [plan, lastPlan, activeExport],
+  );
+  const previewKey = JSON.stringify([previewInput, previewVersion]);
+  const availability =
+    preview?.key === previewKey ? preview.actions : undefined;
+  const previewMessage =
+    preview?.key === previewKey && preview.error
+      ? preview.error
+      : "Checking permissions…";
+
+  useEffect(() => {
+    const refresh = () => refreshPreview((version) => version + 1);
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void api
+        .availability(previewInput, session.csrfToken, controller.signal)
+        .then((actions) => {
+          if (!controller.signal.aborted)
+            setPreview({ key: previewKey, actions });
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          if (error instanceof ApiError && error.status === 401) onExpired();
+          else setPreview({ key: previewKey, error: friendlyError(error) });
+        });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [previewInput, previewKey, session.csrfToken, onExpired]);
+
   async function perform(action: () => Promise<void>) {
     setBusy(true);
     setNotice(null);
@@ -269,6 +330,7 @@ function Workspace({
       setNotice({ kind: "error", text: friendlyError(error) });
     } finally {
       setBusy(false);
+      refreshPreview((version) => version + 1);
     }
   }
 
@@ -374,7 +436,10 @@ function Workspace({
                   }
                 >
                   <option value="count">Count</option>
-                  <option value="average">Average</option>
+                  {fields.some(
+                    (field) =>
+                      field.name === "salary" || field.name === "bonus",
+                  ) && <option value="average">Average</option>}
                 </select>
               </label>
               {aggregateOperation === "average" && (
@@ -388,8 +453,16 @@ function Workspace({
                       )
                     }
                   >
-                    <option value="salary">Salary</option>
-                    <option value="bonus">Bonus</option>
+                    {fields
+                      .filter(
+                        (field) =>
+                          field.name === "salary" || field.name === "bonus",
+                      )
+                      .map((field) => (
+                        <option key={field.name} value={field.name}>
+                          {field.label}
+                        </option>
+                      ))}
                   </select>
                 </label>
               )}
@@ -412,6 +485,13 @@ function Workspace({
             </div>
           )}
 
+          {mode === "aggregate" && (
+            <p className="permission-note">
+              Every returned group needs at least five records. Start with No
+              grouping; grouping by Department includes smaller groups and can
+              be denied.
+            </p>
+          )}
           <fieldset className="filter-controls">
             <legend>
               <label className="filter-toggle">
@@ -438,8 +518,8 @@ function Workspace({
             )}
           </fieldset>
           <p className="permission-note">
-            Keep the tenant filter on your own tenant. Changing or removing it
-            reveals the authorization gap in this starting application.
+            A plan must explicitly match your tenant. Changing or omitting this
+            constraint demonstrates a denied request.
           </p>
 
           <div className="control-grid final-controls">
@@ -468,25 +548,42 @@ function Workspace({
             </label>
           </div>
 
+          <p className="permission-note">
+            Purpose: Support for Amina, Finance review for Leah, External audit
+            for Theo.
+          </p>
+
           <button
             className="primary run-button"
             disabled={
               busy ||
+              !availability?.query ||
+              fields.length === 0 ||
               (mode === "rows" && selected.length === 0) ||
               (filterEnabled && filterValue.length === 0)
             }
             onClick={() => void runQuery()}
+            aria-describedby={
+              !availability?.query ? "query-permission" : undefined
+            }
             type="button"
           >
             <Icon name="play" size={18} />
             Run query
           </button>
+          {!availability?.query && (
+            <p className="permission-note" id="query-permission">
+              {availability
+                ? "This account cannot run the selected plan. Review its result type, fields, tenant, purpose, and aggregate grouping."
+                : previewMessage}
+            </p>
+          )}
         </section>
 
         <section className="results-panel" aria-labelledby="results-title">
           <div className="section-heading results-heading">
             <div>
-              <span className="eyebrow">Current projection</span>
+              <span className="eyebrow">Latest query result</span>
               <h2 id="results-title">Results</h2>
             </div>
             {result && (
@@ -497,6 +594,12 @@ function Workspace({
           </div>
 
           <section aria-label="Query results" className="table-region">
+            {lastPlan && JSON.stringify(lastPlan) !== JSON.stringify(plan) && (
+              <p className="permission-note">
+                Showing the last completed query. Run the edited plan to replace
+                it.
+              </p>
+            )}
             {!result ? (
               <div className="empty-state">
                 <Icon name="shield-check" size={32} />
@@ -543,7 +646,10 @@ function Workspace({
             <div className="export-actions">
               <button
                 className="secondary"
-                disabled={busy || !lastPlan}
+                disabled={busy || !lastPlan || !availability?.createExport}
+                aria-describedby={
+                  !availability?.createExport ? "export-permission" : undefined
+                }
                 onClick={() => void createExport()}
                 type="button"
               >
@@ -553,7 +659,12 @@ function Workspace({
                 <>
                   <button
                     className="secondary"
-                    disabled={busy}
+                    disabled={busy || !availability?.download}
+                    aria-describedby={
+                      !availability?.download
+                        ? "download-permission"
+                        : undefined
+                    }
                     onClick={() =>
                       void perform(async () => {
                         await api.download(
@@ -573,7 +684,10 @@ function Workspace({
                   </button>
                   <button
                     className="danger"
-                    disabled={busy}
+                    disabled={busy || !availability?.revoke}
+                    aria-describedby={
+                      !availability?.revoke ? "revoke-permission" : undefined
+                    }
                     onClick={() =>
                       void perform(async () => {
                         const response = await api.revokeExport(
@@ -595,6 +709,30 @@ function Workspace({
               )}
             </div>
           </aside>
+          {!availability?.createExport && (
+            <p className="permission-note" id="export-permission">
+              {!lastPlan
+                ? "Run an allowed query before creating an export."
+                : availability
+                  ? "This account cannot export the displayed result."
+                  : previewMessage}
+            </p>
+          )}
+          {activeExport?.export.state === "ready" &&
+            !availability?.download && (
+              <p className="permission-note" id="download-permission">
+                {availability
+                  ? "This export is not available for download with your current permissions."
+                  : previewMessage}
+              </p>
+            )}
+          {activeExport?.export.state === "ready" && !availability?.revoke && (
+            <p className="permission-note" id="revoke-permission">
+              {availability
+                ? "This export cannot be revoked with your current permissions."
+                : previewMessage}
+            </p>
+          )}
           {notice && (
             <p
               className={

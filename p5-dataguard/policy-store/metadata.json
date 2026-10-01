@@ -1,0 +1,10 @@
+{
+  "cedar_version": "4.4.0",
+  "policy_store": {
+    "id": "a6c19e524d9a45f6b9125ae3c8701d05",
+    "name": "P5 DataGuard",
+    "version": "1.0.0",
+    "created_date": "2026-09-28T00:00:00Z",
+    "updated_date": "2026-09-28T00:00:00Z"
+  }
+}

@@ -1,441 +1,495 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { BaselineAuthorizationGateway } from "../src/server/authorization.ts";
+/** Proves real policy decisions and atomic editorial effects against isolated SQLite fixtures. */
+
+import { resolve } from "node:path";
+import Database from "better-sqlite3";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import {
+  type AuthorizeEditorial,
+  createEditorialAuthorization,
+} from "../src/server/authorization.ts";
+import { AppDatabase } from "../src/server/database.ts";
+import { unavailable } from "../src/server/errors.ts";
 import { EditorialService } from "../src/server/service.ts";
 import { fixture, form, present } from "./support.ts";
 
-let cleanup: (() => void) | undefined;
-afterEach(() => {
-  cleanup?.();
-  cleanup = undefined;
+let authorization: Awaited<ReturnType<typeof createEditorialAuthorization>>;
+const cleanups: Array<() => void> = [];
+beforeAll(async () => {
+  authorization = await createEditorialAuthorization();
 });
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+});
+afterAll(async () => {
+  await authorization?.close();
+});
+function open(
+  subject = "riley",
+  authorize: AuthorizeEditorial = authorization.authorize,
+) {
+  const result = fixture(subject);
+  cleanups.push(result.cleanup);
+  return {
+    ...result,
+    service: new EditorialService(result.database, authorize),
+  };
+}
+function mutation(opened: ReturnType<typeof open>, articleId: string) {
+  const article = present(opened.database.article(articleId, "tenant-a"));
+  return form({
+    articleId,
+    revisionId: article.revision.id,
+    expectedVersion: article.version,
+  });
+}
+function as(opened: ReturnType<typeof open>, subject: string) {
+  return {
+    ...opened.session,
+    principal: present(
+      opened.database.principal("http://localhost:18004", subject),
+    ),
+  };
+}
+const launch = "article-launch-brief";
+const migration = "article-migration-guide";
+const partner = "article-partner-announcement";
 
-describe("editorial authorization boundaries", () => {
-  it("previews the baseline decision without hiding its self-approval gap", async () => {
-    const opened = fixture("riley");
-    cleanup = opened.cleanup;
-    const service = new EditorialService(
-      opened.database,
-      new BaselineAuthorizationGateway(),
-    );
-    const draft = present(
-      opened.database.article("article-launch-brief", "tenant-a"),
-    );
-    expect(
-      await service.availability(opened.session, draft, "request-draft"),
-    ).toMatchObject({ edit: true, submit: true });
+describe("editorial enforcement", () => {
+  it.each(["riley", "ana", "omar"])(
+    "lets %s create and submit their own article, but not review it",
+    async (subject) => {
+      const o = open(subject);
+      const articleId = await o.service.create(
+        o.session,
+        form({
+          title: "New article",
+          body: "Original content",
+          authorId: "user-ana",
+          tenantId: "tenant-b",
+        }),
+        "create",
+      );
+      expect(o.database.article(articleId, "tenant-b")).toBeUndefined();
+      expect(o.database.article(articleId, "tenant-a")).toMatchObject({
+        version: 1,
+        revision: {
+          version: 1,
+          state: "draft",
+          authorId: o.session.principal.id,
+        },
+      });
+      await o.service.submit(o.session, mutation(o, articleId), "submit");
+      await expect(
+        o.service.review(
+          o.session,
+          mutation(o, articleId),
+          "self-review",
+          "approved",
+        ),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    },
+  );
 
-    await service.submit(
-      opened.session,
-      form({
-        articleId: draft.id,
-        revisionId: draft.revision.id,
-        expectedVersion: draft.version,
-      }),
-      "request-submit",
-    );
-    const submitted = present(opened.database.article(draft.id, "tenant-a"));
+  it("returns policy-based UI availability without changing articles", async () => {
+    const o = open();
+    const article = present(o.database.article(migration, "tenant-a"));
     expect(
-      await service.availability(opened.session, submitted, "request-riley"),
-    ).toEqual({
+      await o.service.availability(o.session, article, "preview"),
+    ).toMatchObject({
       edit: true,
-      submit: false,
-      approve: true,
+      approve: false,
       reject: false,
       publish: false,
     });
-    await expect(
-      service.review(
-        opened.session,
-        form({
-          articleId: submitted.id,
-          revisionId: submitted.revision.id,
-          expectedVersion: submitted.version,
-        }),
-        "request-reject",
-        "rejected",
-      ),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(
-      opened.database.article(submitted.id, "tenant-a")?.revision.state,
-    ).toBe("submitted");
-
-    const ana = present(
-      opened.database.principal("http://localhost:18004", "ana"),
-    );
-    expect(
-      await service.availability(
-        { ...opened.session, principal: ana },
-        submitted,
-        "request-ana",
-      ),
-    ).toEqual({
+      await o.service.availability(as(o, "ana"), article, "preview"),
+    ).toMatchObject({
       edit: false,
-      submit: false,
       approve: true,
       reject: true,
       publish: false,
     });
+    expect(o.database.article(migration, "tenant-a")).toEqual(article);
+  });
 
-    const omar = present(
-      opened.database.principal("http://localhost:18004", "omar"),
-    );
-    const omarSession = { ...opened.session, principal: omar };
+  it("does not create records on denied or unavailable decisions or invalid content", async () => {
+    const o = open();
+    const original = o.database.listArticles("tenant-a");
+    for (const authorize of [
+      async () => false,
+      async () => {
+        throw unavailable();
+      },
+    ]) {
+      const service = new EditorialService(o.database, authorize);
+      await expect(
+        service.create(
+          o.session,
+          form({ title: "Title", body: "Content" }),
+          "blocked",
+        ),
+      ).rejects.toBeDefined();
+    }
+    const authorize = vi.fn(authorization.authorize);
+    const service = new EditorialService(o.database, authorize);
+    for (const content of [
+      { title: " ", body: "Content" },
+      { title: "Title", body: " " },
+      { title: "Title", body: "x".repeat(32769) },
+    ]) {
+      await expect(
+        service.create(o.session, form(content), "invalid"),
+      ).rejects.toMatchObject({ status: 400 });
+    }
+    expect(authorize).not.toHaveBeenCalled();
+    expect(o.database.listArticles("tenant-a")).toEqual(original);
+  });
+
+  it("a preview allow does not survive editor revocation", async () => {
+    const o = open("omar");
     expect(
-      (await service.availability(omarSession, submitted, "request-omar"))
-        .approve,
+      (
+        await o.service.availability(
+          o.session,
+          present(o.database.article(partner, "tenant-a")),
+          "preview",
+        )
+      ).approve,
     ).toBe(true);
-    expect(opened.database.revokeOmar()).toBe(true);
+    o.database.revokeOmar();
     await expect(
-      service.review(
-        omarSession,
-        form({
-          articleId: submitted.id,
-          revisionId: submitted.revision.id,
-          expectedVersion: submitted.version,
-        }),
-        "request-omar-revoked",
+      o.service.review(o.session, mutation(o, partner), "effect", "approved"),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects self-approval without recording review evidence", async () => {
+    const o = open();
+    await o.service.submit(o.session, mutation(o, launch), "submit");
+    await expect(
+      o.service.review(
+        o.session,
+        mutation(o, launch),
+        "self-review",
         "approved",
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(o.database.article(launch, "tenant-a")).toMatchObject({
+      version: 2,
+      revision: { state: "submitted" },
+      review: undefined,
+      published: false,
+    });
   });
 
-  it("creates an article through the fake authorization seam", async () => {
-    const opened = fixture("riley");
-    cleanup = opened.cleanup;
-    expect(
-      await opened.service.canCreate(opened.session, "request-preview"),
-    ).toBe(true);
-    const articleId = await opened.service.create(
-      opened.session,
-      form({ title: "New guide", body: "Draft content" }),
-      "request-create",
+  it("requires a new approval after the author creates another revision", async () => {
+    const o = open("ana");
+    await o.service.review(
+      o.session,
+      mutation(o, migration),
+      "review",
+      "approved",
     );
-    expect(opened.requests.at(-1)).toMatchObject({
-      capability: "article.create",
-      facts: { tenantMatch: true },
-    });
-    expect(
-      opened.database.article(articleId, "tenant-a")?.revision,
-    ).toMatchObject({
-      authorId: "user-riley",
-      state: "draft",
-    });
-  });
-
-  it("rejects invalid or denied article creation without persistence", async () => {
-    const opened = fixture("riley", false);
-    cleanup = opened.cleanup;
-    const before = opened.database.listArticles("tenant-a");
+    const previous = present(o.database.article(migration, "tenant-a"));
+    const author = as(o, "riley");
+    await o.service.saveDraft(
+      author,
+      form({
+        articleId: migration,
+        expectedVersion: previous.version,
+        title: previous.revision.title,
+        body: "Changed after approval.",
+      }),
+      "edit",
+    );
+    await o.service.submit(author, mutation(o, migration), "submit");
     await expect(
-      opened.service.create(
-        opened.session,
-        form({ title: "", body: "Body" }),
-        "invalid",
-      ),
-    ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
-    await expect(
-      opened.service.create(
-        opened.session,
-        form({ title: "Denied", body: "Body" }),
-        "denied",
+      o.service.publish(
+        o.session,
+        mutation(o, migration),
+        "publish-unapproved",
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(opened.database.listArticles("tenant-a")).toEqual(before);
-  });
-
-  it("reproduces self-approval with the separation fact exposed", async () => {
-    const opened = fixture("riley");
-    cleanup = opened.cleanup;
-    const article = present(
-      opened.database.article("article-launch-brief", "tenant-a"),
-    );
-    await opened.service.submit(
-      opened.session,
-      form({
-        articleId: article.id,
-        revisionId: article.revision.id,
-        expectedVersion: article.version,
-      }),
-      "request-submit",
-    );
-    const submitted = present(opened.database.article(article.id, "tenant-a"));
-    await opened.service.review(
-      opened.session,
-      form({
-        articleId: article.id,
-        revisionId: submitted.revision.id,
-        expectedVersion: submitted.version,
-      }),
-      "request-approve",
+    expect(o.database.article(migration, "tenant-a")).toMatchObject({
+      revision: { version: 2, state: "submitted" },
+      published: false,
+    });
+    await o.service.review(
+      o.session,
+      mutation(o, migration),
+      "new-review",
       "approved",
     );
-    expect(opened.requests.at(-1)).toMatchObject({
-      capability: "revision.approve",
-      facts: { selfReview: true, editorAuthorityCurrent: false },
+    await o.service.publish(
+      o.session,
+      mutation(o, migration),
+      "publish-approved",
+    );
+    expect(o.database.article(migration, "tenant-a")).toMatchObject({
+      revision: { version: 2, state: "published" },
+      published: true,
     });
     expect(
-      opened.database.article(article.id, "tenant-a")?.revision.state,
-    ).toBe("approved");
+      o.database.article(migration, "tenant-a", previous.revision.id)?.revision
+        .digest,
+    ).toBe(previous.revision.digest);
   });
 
-  it("reproduces approval reuse across revisions", async () => {
-    const opened = fixture("ana");
-    cleanup = opened.cleanup;
-    const first = present(
-      opened.database.article("article-migration-guide", "tenant-a"),
-    );
-    await opened.service.review(
-      opened.session,
-      form({
-        articleId: first.id,
-        revisionId: first.revision.id,
-        expectedVersion: first.version,
-      }),
-      "request-review",
+  it("rejects publication after the approver loses editor authority", async () => {
+    const o = open("omar");
+    await o.service.review(
+      o.session,
+      mutation(o, partner),
+      "review",
       "approved",
     );
-    const riley = present(
-      opened.database.principal("http://localhost:18004", "riley"),
-    );
-    const rileySession = { ...opened.session, principal: riley };
-    const approved = present(opened.database.article(first.id, "tenant-a"));
-    const revisionId = await opened.service.saveDraft(
-      rileySession,
-      form({
-        articleId: first.id,
-        expectedVersion: approved.version,
-        title: approved.revision.title,
-        body: `${approved.revision.body}\nUpdated after approval.`,
-      }),
-      "request-edit",
-    );
-    const draft = present(opened.database.article(first.id, "tenant-a"));
-    await opened.service.submit(
-      rileySession,
-      form({ articleId: first.id, revisionId, expectedVersion: draft.version }),
-      "request-submit",
-    );
-    const current = present(opened.database.article(first.id, "tenant-a"));
-    await opened.service.publish(
-      opened.session,
-      form({ articleId: first.id, expectedVersion: current.version }),
-      "request-publish",
-    );
-    expect(opened.requests.at(-1)).toMatchObject({
-      capability: "publication.publish",
-      facts: {
-        approvalPresent: true,
-        approvalMatchesRevision: false,
-        approvalMatchesDigest: false,
-      },
-    });
-    expect(opened.database.article(first.id, "tenant-a")?.revision.state).toBe(
-      "published",
-    );
-  });
-
-  it("reproduces approval use after reviewer revocation", async () => {
-    const opened = fixture("omar");
-    cleanup = opened.cleanup;
-    const article = present(
-      opened.database.article("article-partner-announcement", "tenant-a"),
-    );
-    await opened.service.review(
-      opened.session,
-      form({
-        articleId: article.id,
-        revisionId: article.revision.id,
-        expectedVersion: article.version,
-      }),
-      "request-review",
-      "approved",
-    );
-    expect(opened.database.revokeOmar()).toBe(true);
-    const ana = present(
-      opened.database.principal("http://localhost:18004", "ana"),
-    );
-    const current = present(opened.database.article(article.id, "tenant-a"));
-    await opened.service.publish(
-      { ...opened.session, principal: ana },
-      form({ articleId: article.id, expectedVersion: current.version }),
-      "request-publish",
-    );
-    expect(opened.requests.at(-1)).toMatchObject({
-      facts: { reviewerAuthorityCurrent: false, approvalMatchesRevision: true },
-    });
-  });
-
-  it("performs no effect after an authorization denial", async () => {
-    const opened = fixture("riley", false);
-    cleanup = opened.cleanup;
-    const article = present(
-      opened.database.article("article-launch-brief", "tenant-a"),
-    );
+    o.database.revokeOmar();
     await expect(
-      opened.service.submit(
-        opened.session,
-        form({
-          articleId: article.id,
-          revisionId: article.revision.id,
-          expectedVersion: article.version,
-        }),
-        "request-denied",
-      ),
+      o.service.publish(as(o, "ana"), mutation(o, partner), "publish"),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(
-      opened.database.article(article.id, "tenant-a")?.revision.state,
-    ).toBe("draft");
+    expect(o.database.article(partner, "tenant-a")).toMatchObject({
+      version: 2,
+      revision: { state: "approved" },
+      published: false,
+    });
   });
 
-  it("does not disclose another tenant article", async () => {
-    const opened = fixture();
-    cleanup = opened.cleanup;
-    await expect(
-      opened.service.read(
-        opened.session,
-        "article-private-tenant-b",
-        undefined,
-        "request-read",
-      ),
-    ).rejects.toMatchObject({ status: 404 });
-  });
-
-  it("maps an authorization-denied read to not found", async () => {
-    const opened = fixture("riley", false);
-    cleanup = opened.cleanup;
-    await expect(
-      opened.service.read(
-        opened.session,
-        "article-launch-brief",
-        undefined,
-        "request-read-denied",
-      ),
-    ).rejects.toMatchObject({ status: 404 });
-  });
-
-  it("does not invent editor authority for a self-reviewer", async () => {
-    const opened = fixture("riley");
-    cleanup = opened.cleanup;
-    const article = present(
-      opened.database.article("article-launch-brief", "tenant-a"),
-    );
-    await opened.service.submit(
-      opened.session,
+  it("finishes the valid author-reviewer-publisher flow once, rejecting stale replay", async () => {
+    const o = open();
+    await o.service.saveDraft(
+      o.session,
       form({
-        articleId: article.id,
-        revisionId: article.revision.id,
-        expectedVersion: article.version,
+        articleId: launch,
+        expectedVersion: 1,
+        title: "Launch brief",
+        body: "Ready for review.",
       }),
-      "request-submit",
+      "edit",
     );
-    const submitted = present(opened.database.article(article.id, "tenant-a"));
-    await opened.service.review(
-      opened.session,
-      form({
-        articleId: article.id,
-        revisionId: submitted.revision.id,
-        expectedVersion: submitted.version,
-      }),
-      "request-self-review",
+    await o.service.submit(o.session, mutation(o, launch), "submit");
+    const reviewer = as(o, "ana");
+    await o.service.review(
+      reviewer,
+      mutation(o, launch),
+      "approve",
       "approved",
     );
-
-    expect(
-      opened.database.article(article.id, "tenant-a")?.review,
-    ).toMatchObject({ reviewerName: "Riley", authorityCurrent: false });
-    expect(opened.database.latestApproval(article.id)?.authorityCurrent).toBe(
-      false,
-    );
+    const publication = mutation(o, launch);
+    await o.service.publish(reviewer, publication, "publish");
+    await expect(
+      o.service.publish(reviewer, publication, "replay"),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    expect(o.database.article(launch, "tenant-a")).toMatchObject({
+      version: 5,
+      published: true,
+    });
   });
 
-  it("does not publish draft or rejected revisions", () => {
-    const opened = fixture("ana");
-    cleanup = opened.cleanup;
-    const draft = present(
-      opened.database.article("article-launch-brief", "tenant-a"),
-    );
-    expect(() =>
-      opened.database.publish(
-        draft.id,
-        draft.tenantId,
-        opened.session.principal.id,
-        draft.version,
-      ),
-    ).toThrow("Only a reviewable revision can be published");
-
-    const submitted = present(
-      opened.database.article("article-migration-guide", "tenant-a"),
-    );
-    opened.database.review(
-      submitted.id,
-      submitted.tenantId,
-      submitted.revision.id,
-      opened.session.principal.id,
-      submitted.version,
+  it("allows rejection, but not publication of rejected content", async () => {
+    const o = open("ana");
+    await o.service.review(
+      o.session,
+      mutation(o, migration),
+      "reject",
       "rejected",
     );
-    const rejected = present(
-      opened.database.article(submitted.id, submitted.tenantId),
-    );
-    expect(() =>
-      opened.database.publish(
-        rejected.id,
-        rejected.tenantId,
-        opened.session.principal.id,
-        rejected.version,
-      ),
-    ).toThrow("Only a reviewable revision can be published");
+    await expect(
+      o.service.publish(o.session, mutation(o, migration), "publish"),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(o.database.article(migration, "tenant-a")).toMatchObject({
+      revision: { state: "rejected" },
+      published: false,
+    });
   });
 
-  it("rejects stale and duplicate publication effects", async () => {
-    const opened = fixture("ana");
-    cleanup = opened.cleanup;
-    const article = present(
-      opened.database.article("article-editorial-handbook", "tenant-a"),
-    );
-    await opened.service.review(
-      opened.session,
-      form({
-        articleId: article.id,
-        revisionId: article.revision.id,
-        expectedVersion: article.version,
-      }),
-      "request-review",
-      "approved",
-    );
-    const approved = present(opened.database.article(article.id, "tenant-a"));
-    await opened.service.publish(
-      opened.session,
-      form({ articleId: article.id, expectedVersion: approved.version }),
-      "request-publish",
-    );
+  it("preserves owner-only editing and submission", async () => {
+    const o = open("ana");
     await expect(
-      opened.service.publish(
-        opened.session,
-        form({ articleId: article.id, expectedVersion: approved.version }),
-        "request-replay",
-      ),
-    ).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("rejects an oversized body before authorization", async () => {
-    const opened = fixture();
-    cleanup = opened.cleanup;
-    const article = present(
-      opened.database.article("article-launch-brief", "tenant-a"),
-    );
-    await expect(
-      opened.service.saveDraft(
-        opened.session,
+      o.service.saveDraft(
+        o.session,
         form({
-          articleId: article.id,
-          expectedVersion: article.version,
-          title: "Bounded",
-          body: "x".repeat(32_769),
+          articleId: launch,
+          expectedVersion: 1,
+          title: "Forged",
+          body: "Forged",
         }),
-        "request-large",
+        "edit",
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      o.service.submit(o.session, mutation(o, launch), "submit"),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(o.database.article(launch, "tenant-a")?.version).toBe(1);
+  });
+
+  it("hides inaccessible and missing articles and filters denied lists", async () => {
+    const o = open();
+    for (const id of ["article-private-tenant-b", "missing"]) {
+      await expect(
+        o.service.read(o.session, id, undefined, "read"),
+      ).rejects.toMatchObject({ status: 404 });
+    }
+    expect(
+      (await o.service.list(o.session, "list")).map((a) => a.id),
+    ).not.toContain("article-private-tenant-b");
+    const denied = new EditorialService(o.database, async () => false);
+    expect(await denied.list(o.session, "denied-list")).toEqual([]);
+    await expect(
+      denied.read(o.session, launch, undefined, "denied-read"),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("rejects stale and substituted revision candidates before authorization", async () => {
+    const authorize = vi.fn(authorization.authorize);
+    const o = open("ana", authorize);
+    for (const values of [
+      {
+        articleId: migration,
+        revisionId: "revision-launch-1",
+        expectedVersion: 1,
+      },
+      {
+        articleId: migration,
+        revisionId: "revision-migration-1",
+        expectedVersion: 2,
+      },
+    ]) {
+      await expect(
+        o.service.review(o.session, form(values), "invalid", "approved"),
+      ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    }
+    expect(authorize).not.toHaveBeenCalled();
+    expect(o.database.article(migration, "tenant-a")?.version).toBe(1);
+  });
+
+  it("rejects oversized content before authorization", async () => {
+    const authorize = vi.fn(authorization.authorize);
+    const o = open("riley", authorize);
+    await expect(
+      o.service.saveDraft(
+        o.session,
+        form({
+          articleId: launch,
+          expectedVersion: 1,
+          title: "Bounded",
+          body: "x".repeat(32769),
+        }),
+        "large",
       ),
     ).rejects.toMatchObject({ status: 400 });
-    expect(opened.requests).toHaveLength(0);
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("performs no mutation when authorization is unavailable", async () => {
+    const o = open("riley", async () => {
+      throw unavailable();
+    });
+    await expect(
+      o.service.submit(o.session, mutation(o, launch), "unavailable"),
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(o.database.article(launch, "tenant-a")?.version).toBe(1);
+    await expect(
+      o.service.read(o.session, launch, undefined, "unavailable-read"),
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
+
+  it("rejects content changed while a submission decision is pending", async () => {
+    const o = open();
+    const other = new AppDatabase(o.directory, "http://localhost:18004");
+    cleanups.push(() => other.close());
+    const service = new EditorialService(o.database, async (request) => {
+      const allowed = await authorization.authorize(request);
+      other.saveDraft({
+        articleId: launch,
+        tenantId: "tenant-a",
+        actorId: "user-riley",
+        expectedVersion: 1,
+        title: "Updated launch brief",
+        body: "Changed while Cedarling was evaluating the previous revision.",
+      });
+      return allowed;
+    });
+    await expect(
+      service.submit(o.session, mutation(o, launch), "racing-submit"),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    expect(o.database.article(launch, "tenant-a")).toMatchObject({
+      version: 2,
+      revision: { state: "draft", title: "Updated launch brief" },
+    });
+  });
+
+  it.each(["reviewer", "publisher", "approval"] as const)(
+    "rejects a %s change between publication decision and commit",
+    async (changed) => {
+      const o = open("omar");
+      await o.service.review(
+        o.session,
+        mutation(o, partner),
+        "review",
+        "approved",
+      );
+      const connection = new Database(resolve(o.directory, "p4.sqlite"));
+      cleanups.push(() => connection.close());
+      const service = new EditorialService(o.database, async (request) => {
+        const allowed = await authorization.authorize(request);
+        if (request.capability === "publication.publish") {
+          if (changed === "approval")
+            connection
+              .prepare(
+                "UPDATE reviews SET digest = 'changed' WHERE article_id = ?",
+              )
+              .run(partner);
+          else
+            connection
+              .prepare(
+                "UPDATE authorities SET revoked_at = ?, version = version + 1 WHERE principal_id = ? AND role = ?",
+              )
+              .run(
+                new Date().toISOString(),
+                changed === "reviewer" ? "user-omar" : "user-ana",
+                changed === "reviewer" ? "editor" : "publisher",
+              );
+        }
+        return allowed;
+      });
+      await expect(
+        service.publish(as(o, "ana"), mutation(o, partner), "racing-publish"),
+      ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+      expect(o.database.article(partner, "tenant-a")).toMatchObject({
+        version: 2,
+        published: false,
+      });
+    },
+  );
+
+  it("rejects editor revocation between review decision and commit", async () => {
+    const o = open("omar");
+    const other = new AppDatabase(o.directory, "http://localhost:18004");
+    cleanups.push(() => other.close());
+    const service = new EditorialService(o.database, async (request) => {
+      const allowed = await authorization.authorize(request);
+      other.revokeOmar();
+      return allowed;
+    });
+    await expect(
+      service.review(
+        o.session,
+        mutation(o, partner),
+        "racing-review",
+        "approved",
+      ),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    expect(o.database.article(partner, "tenant-a")).toMatchObject({
+      version: 1,
+      review: undefined,
+      revision: { state: "submitted" },
+    });
   });
 });

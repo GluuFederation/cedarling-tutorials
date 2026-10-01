@@ -178,6 +178,7 @@ export async function loadFixtureDocument(
         corpusId: definition.corpusId,
         tenantId: definition.tenantId,
         classification: definition.classification,
+        confidentialReaderSubjects: definition.confidentialReaderSubjects,
       },
       chunks,
     };

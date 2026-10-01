@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto";
-import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { ExportCreated, QueryPlan } from "../shared/contracts.ts";
+import type {
+  ExportCreated,
+  QueryPlan,
+  QueryResponse,
+} from "../shared/contracts.ts";
 import { randomToken } from "./crypto.ts";
-import type { AppDatabase, QueryEvaluation } from "./database.ts";
+import type { AppDatabase } from "./database.ts";
 
 function csvCell(value: string | number | null): string {
   const text = value === null ? "" : String(value);
@@ -21,22 +19,20 @@ export class ExportService {
 
   constructor(database: AppDatabase) {
     this.database = database;
-    mkdirSync(database.exportDirectory, { recursive: true, mode: 0o700 });
-    this.removeOrphanedFiles();
   }
 
   create(
     ownerId: string,
     plan: QueryPlan,
     columns: string[],
-    evaluation: QueryEvaluation,
+    rows: QueryResponse["rows"],
   ): ExportCreated {
     const id = randomUUID();
     const downloadRef = randomToken();
     const filePath = path.join(this.database.exportDirectory, `${id}.csv`);
     const content = [
       columns.map(csvCell).join(","),
-      ...evaluation.rows.map((row) =>
+      ...rows.map((row) =>
         columns.map((column) => csvCell(row[column] ?? null)).join(","),
       ),
     ].join("\n");
@@ -52,7 +48,7 @@ export class ExportService {
         plan,
         downloadRef,
         filePath,
-        rowCount: evaluation.rows.length,
+        rowCount: rows.length,
       });
       return { export: exportSummary, downloadRef };
     } catch (error) {
@@ -65,14 +61,10 @@ export class ExportService {
     return readFileSync(filePath);
   }
 
-  private removeOrphanedFiles(): void {
-    const referenced = this.database.referencedExportFiles();
-    for (const entry of readdirSync(this.database.exportDirectory, {
-      withFileTypes: true,
-    })) {
-      if (!entry.isFile() || !entry.name.endsWith(".csv")) continue;
-      const filePath = path.join(this.database.exportDirectory, entry.name);
-      if (!referenced.has(filePath)) rmSync(filePath, { force: true });
-    }
+  /** Remove a newly created file if its enclosing database commit failed. */
+  remove(id: string): void {
+    rmSync(path.join(this.database.exportDirectory, `${id}.csv`), {
+      force: true,
+    });
   }
 }

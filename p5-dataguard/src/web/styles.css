@@ -379,12 +379,9 @@ label {
 }
 
 .filter-controls .control-grid {
+  grid-template-columns: 1fr;
   padding: 10px 0 0;
   border: 0;
-}
-
-.filter-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 input[type="text"],
@@ -689,10 +686,6 @@ footer a {
 @media (max-width: 1050px) {
   .workspace {
     grid-template-columns: minmax(330px, 42%) minmax(0, 58%);
-  }
-
-  .filter-grid {
-    grid-template-columns: 1fr;
   }
 }
 

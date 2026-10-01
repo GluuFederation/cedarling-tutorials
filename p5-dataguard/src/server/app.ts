@@ -3,19 +3,25 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { HTTPException } from "hono/http-exception";
+import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
-import type { QueryPlan } from "../shared/contracts.ts";
+import type {
+  ExportCreated,
+  QueryPlan,
+  QueryResponse,
+} from "../shared/contracts.ts";
+import type { DataAuthorization } from "./authorization.ts";
 import type { AppConfig } from "./config.ts";
 import { randomToken, safeEqual } from "./crypto.ts";
 import type { AppDatabase, Session } from "./database.ts";
+import { AuthorizationError } from "./errors.ts";
 import type { ExportService } from "./export-service.ts";
 import type { OidcRuntime } from "./oidc.ts";
-import { type Capability, logPermissiveTrace } from "./permissive-trace.ts";
 import {
   compileCardinalityQuery,
   compileQuery,
-  datasetFields,
   queryPlanSchema,
 } from "./query.ts";
 
@@ -26,9 +32,26 @@ const exportIdSchema = z.string().uuid();
 const exportReferenceSchema = z
   .object({ downloadRef: z.string().min(32).max(128) })
   .strict();
+const previewSchema = z
+  .object({
+    queryPlan: queryPlanSchema,
+    exportPlan: queryPlanSchema.optional(),
+    exportId: exportIdSchema.optional(),
+  })
+  .strict();
 
 function noStore(context: Context): void {
   context.header("cache-control", "private, no-store");
+}
+
+function requireActiveRequest(context: Context): void {
+  if (context.req.raw.signal.aborted)
+    throw new HTTPException(400, {
+      res: context.json(
+        { error: "request_cancelled", requestId: context.get("requestId") },
+        400,
+      ),
+    });
 }
 
 function acceptsJsonBody(context: Context): boolean {
@@ -55,7 +78,7 @@ function requireMutation(
   session: Session,
   config: AppConfig,
 ): boolean {
-  // Request authenticity is independent of the future authorization decision.
+  // Request authenticity is independent of the authorization decision.
   const csrf = context.req.header("x-csrf-token");
   const origin = context.req.header("origin");
   const fetchSite = context.req.header("sec-fetch-site");
@@ -75,12 +98,70 @@ export function buildApp(
     database: AppDatabase;
     oidc: OidcRuntime;
     exports: ExportService;
+    authorization: DataAuthorization;
     webRoot?: string;
   }>,
 ): Hono {
-  const { config, database, oidc, exports, webRoot } = options;
+  const { config, database, oidc, exports, authorization, webRoot } = options;
   const app = new Hono();
   const refreshes = new Map<string, Promise<Session | undefined>>();
+  // Record effects only after their transaction succeeds; never log result values.
+  function logEvent(
+    context: Context,
+    event: string,
+    details: {
+      resultCount?: number;
+      exportId?: string;
+      category?: string;
+      httpStatus?: number;
+    } = {},
+  ) {
+    console.info(
+      JSON.stringify(
+        {
+          event,
+          requestId: context.get("requestId"),
+          actorId: context.get("actorId"),
+          ...details,
+        },
+        null,
+        2,
+      ),
+    );
+  }
+  function cleanupExports(context: Context): void {
+    try {
+      database.cleanupExports();
+    } catch {
+      // The lifecycle transition is committed; downloads remain blocked.
+      console.warn(
+        JSON.stringify(
+          {
+            event: "export.cleanup.deferred",
+            requestId: context.get("requestId"),
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  }
+  app.use("/api/*", requestId({ limitLength: 0 }));
+  app.use("/api/*", async (context, next) => {
+    noStore(context);
+    await next();
+    if (context.res.status >= 400) {
+      // These are controlled API error codes, not exception messages or request bodies.
+      const body = (await context.res
+        .clone()
+        .json()
+        .catch(() => ({}))) as { error?: string };
+      logEvent(context, "request.failed", {
+        httpStatus: context.res.status,
+        category: body.error ?? "request_failed",
+      });
+    }
+  });
 
   app.use(
     "*",
@@ -141,7 +222,9 @@ export function buildApp(
     const rawId = getCookie(context, sessionCookie);
     if (!rawId) return undefined;
     try {
-      return await refreshSession(rawId);
+      const session = await refreshSession(rawId);
+      if (session) context.set("actorId", session.user.id);
+      return session;
     } catch {
       database.deleteSession(rawId);
       deleteCookie(context, sessionCookie, { path: "/" });
@@ -149,48 +232,133 @@ export function buildApp(
     }
   }
 
-  function trace(
-    capability: Capability,
-    session: Session,
-    resourceId: string,
-    facts: Record<string, string | number | boolean>,
-    requestId: string = crypto.randomUUID(),
-  ): string {
-    logPermissiveTrace({
-      requestId,
-      capability,
-      principalId: session.user.id,
-      resourceId,
-      facts,
-    });
-    return requestId;
-  }
-
-  function evaluatePlan(
+  async function executePlan<T>(
+    context: Context,
     plan: QueryPlan,
     capability: "data.query" | "data.aggregate" | "data.export",
     session: Session,
     requestId: string,
-  ) {
-    const compiled = compileQuery(plan);
-    const evaluation = database.evaluate(
-      compiled,
-      compileCardinalityQuery(plan),
-    );
-    trace(
-      capability,
+    effect: (columns: string[], rows: QueryResponse["rows"]) => T,
+  ): Promise<T> {
+    requireActiveRequest(context);
+    const { cardinality, minimumGroupSize } = planFacts(plan);
+    if (
+      !(await authorization.authorize({
+        requestId,
+        analyst: session.user,
+        capability,
+        plan,
+        ...(minimumGroupSize !== undefined ? { minimumGroupSize } : {}),
+      }))
+    )
+      throw new AuthorizationError(403, "authorization_denied");
+    return database.withCurrentSession(
+      getCookie(context, sessionCookie) ?? "",
+      config,
       session,
-      "workforce",
-      {
-        planKind: plan.kind,
-        purpose: plan.purpose,
-        matchingCount: evaluation.matchingCount,
-        minimumGroupSize: evaluation.minimumGroupSize,
+      () => {
+        // Only the bounded cardinality probe precedes ALLOW; protected values do not.
+        requireActiveRequest(context);
+        if (
+          cardinality &&
+          database.minimumGroupSize(cardinality) !== minimumGroupSize
+        )
+          throw new AuthorizationError(409, "authorization_state_changed");
+        const compiled = compileQuery(plan);
+        return effect(compiled.outputColumns, database.execute(compiled));
       },
-      requestId,
     );
-    return { compiled, evaluation };
   }
+
+  // The same bounded metadata probe feeds previews and execution-time policy checks.
+  function planFacts(plan: QueryPlan) {
+    const cardinality =
+      plan.kind === "aggregate" ? compileCardinalityQuery(plan) : undefined;
+    return {
+      cardinality,
+      minimumGroupSize: cardinality
+        ? database.minimumGroupSize(cardinality)
+        : undefined,
+    };
+  }
+
+  app.post("/api/authorization", async (context) => {
+    const session = await requireSession(context);
+    if (!session)
+      return context.json({ error: "authentication_required" }, 401);
+    if (!requireMutation(context, session, config))
+      return context.json({ error: "request_verification_failed" }, 403);
+    if (!acceptsJsonBody(context))
+      return context.json({ error: "unsupported_media_type" }, 415);
+    const parsed = previewSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return context.json({ error: "invalid_query_plan" }, 400);
+    requireActiveRequest(context);
+    const requestId = context.get("requestId") as string;
+    const base = {
+      requestId,
+      analyst: session.user,
+      phase: "preview" as const,
+    };
+    async function planAllowed(
+      plan: QueryPlan,
+      capability: "data.query" | "data.aggregate" | "data.export",
+    ) {
+      requireActiveRequest(context);
+      const { minimumGroupSize } = planFacts(plan);
+      return authorization.authorize({
+        ...base,
+        capability,
+        plan,
+        ...(minimumGroupSize !== undefined ? { minimumGroupSize } : {}),
+      });
+    }
+    const { queryPlan, exportPlan, exportId } = parsed.data;
+    const query = await planAllowed(
+      queryPlan,
+      queryPlan.kind === "rows" ? "data.query" : "data.aggregate",
+    );
+    const createExport = exportPlan
+      ? await planAllowed(exportPlan, "data.export")
+      : false;
+    const record = exportId ? database.exportMetadata(exportId) : undefined;
+    // Missing and other users' exports produce the same bounded UI response.
+    const ready =
+      record?.ownerId === session.user.id &&
+      record.state === "ready" &&
+      Date.parse(record.expiresAt) > Date.now();
+    const download =
+      ready &&
+      (await authorization.authorize({
+        ...base,
+        capability: "export.download",
+        export: record,
+      }));
+    const revoke =
+      ready &&
+      (await authorization.authorize({
+        ...base,
+        capability: "export.revoke",
+        export: record,
+      }));
+    return database.withCurrentSession(
+      getCookie(context, sessionCookie) ?? "",
+      config,
+      session,
+      () => {
+        requireActiveRequest(context);
+        return context.json({
+          requestId,
+          query,
+          createExport,
+          download,
+          revoke,
+        });
+      },
+    );
+  });
 
   app.get("/health", (context) =>
     context.json({ status: "ok", service: "p5-dataguard" }),
@@ -279,7 +447,6 @@ export function buildApp(
   });
 
   app.get("/api/session", async (context) => {
-    noStore(context);
     const session = await requireSession(context);
     if (!session) {
       return context.json({ error: "authentication_required" }, 401);
@@ -292,22 +459,30 @@ export function buildApp(
   });
 
   app.get("/api/dataset", async (context) => {
-    noStore(context);
     const session = await requireSession(context);
     if (!session) {
       return context.json({ error: "authentication_required" }, 401);
     }
-    const requestId = trace("dataset.inspect", session, "workforce", {
-      fieldCount: datasetFields.length,
-    });
-    return context.json({
-      requestId,
-      dataset: {
-        id: "workforce",
-        recordCount: 18,
-        fields: datasetFields,
+    const requestId = context.get("requestId") as string;
+    requireActiveRequest(context);
+    const fields = await authorization.inspect(requestId, session.user);
+    if (fields.length === 0)
+      throw new AuthorizationError(403, "authorization_denied");
+    return database.withCurrentSession(
+      getCookie(context, sessionCookie) ?? "",
+      config,
+      session,
+      () => {
+        requireActiveRequest(context);
+        return context.json({
+          requestId,
+          dataset: {
+            id: "workforce",
+            fields,
+          },
+        });
       },
-    });
+    );
   });
 
   async function executeQuery(
@@ -329,20 +504,27 @@ export function buildApp(
     if (!parsed.success || parsed.data.kind !== expectedKind) {
       return context.json({ error: "invalid_query_plan" }, 400);
     }
-    const requestId = crypto.randomUUID();
+    const requestId = context.get("requestId") as string;
     try {
-      const { compiled, evaluation } = evaluatePlan(
+      const result = await executePlan(
+        context,
         parsed.data,
         expectedKind === "rows" ? "data.query" : "data.aggregate",
         session,
         requestId,
+        (columns, rows) => ({ requestId, columns, rows }),
       );
-      return context.json({
-        requestId,
-        columns: compiled.outputColumns,
-        rows: evaluation.rows,
-      });
-    } catch {
+      logEvent(
+        context,
+        expectedKind === "rows"
+          ? "data.query.completed"
+          : "data.aggregate.completed",
+        { resultCount: result.rows.length },
+      );
+      return context.json(result);
+    } catch (error) {
+      if (error instanceof AuthorizationError || error instanceof HTTPException)
+        throw error;
       return context.json({ error: "database_unavailable", requestId }, 503);
     }
   }
@@ -369,24 +551,31 @@ export function buildApp(
     if (!parsed.success) {
       return context.json({ error: "invalid_query_plan" }, 400);
     }
-    const requestId = crypto.randomUUID();
+    const requestId = context.get("requestId") as string;
+    let created: ExportCreated | undefined;
     try {
-      const { compiled, evaluation } = evaluatePlan(
+      await executePlan(
+        context,
         parsed.data,
         "data.export",
         session,
         requestId,
+        (columns, rows) => {
+          created = exports.create(session.user.id, parsed.data, columns, rows);
+        },
       );
-      const created = exports.create(
-        session.user.id,
-        parsed.data,
-        compiled.outputColumns,
-        evaluation,
-      );
-      return context.json({ requestId, ...created }, 201);
-    } catch {
+    } catch (error) {
+      if (created) exports.remove(created.export.id);
+      if (error instanceof AuthorizationError || error instanceof HTTPException)
+        throw error;
       return context.json({ error: "export_unavailable", requestId }, 503);
     }
+    if (created)
+      logEvent(context, "export.created", {
+        exportId: created.export.id,
+        resultCount: created.export.rowCount,
+      });
+    return context.json({ requestId, ...created }, 201);
   });
 
   app.post("/api/exports/:id/revoke", async (context) => {
@@ -401,21 +590,39 @@ export function buildApp(
     if (!exportId.success) {
       return context.json({ error: "invalid_export_id" }, 400);
     }
+    requireActiveRequest(context);
     const current = database.getExportById(exportId.data);
     if (!current) {
       return context.json({ error: "export_not_found" }, 404);
     }
-    trace("export.revoke", session, current.id, {
-      ownerMatch: current.ownerId === session.user.id,
-      state: current.state,
-    });
-    const value = database.revokeExport(current.id);
-    if (!value) throw new Error("Export disappeared during revocation");
-    return context.json({ export: value });
+    const requestId = context.get("requestId") as string;
+    if (
+      !(await authorization.authorize({
+        requestId,
+        capability: "export.revoke",
+        analyst: session.user,
+        export: current,
+      }))
+    )
+      throw new AuthorizationError(403, "authorization_denied");
+    const value = database.withCurrentSession(
+      getCookie(context, sessionCookie) ?? "",
+      config,
+      session,
+      () => {
+        requireActiveRequest(context);
+        database.assertExport(current);
+        const value = database.revokeExport(current.id);
+        if (!value) throw new Error("Export disappeared during revocation");
+        return value;
+      },
+    );
+    cleanupExports(context);
+    logEvent(context, "export.revoked", { exportId: value.id });
+    return context.json({ export: value, requestId });
   });
 
   app.post("/api/exports/download", async (context) => {
-    noStore(context);
     const session = await requireSession(context);
     if (!session) {
       return context.json({ error: "authentication_required" }, 401);
@@ -432,34 +639,54 @@ export function buildApp(
     if (!parsed.success) {
       return context.json({ error: "invalid_download_reference" }, 400);
     }
+    requireActiveRequest(context);
     const current = database.getExportByReference(parsed.data.downloadRef);
     if (!current) {
       return context.json({ error: "export_not_found" }, 404);
     }
     if (current.state === "expired" || current.state === "revoked") {
+      cleanupExports(context);
       return context.json({ error: `export_${current.state}` }, 410);
     }
     if (!current.filePath)
       return context.json({ error: "export_expired" }, 410);
-    trace("export.download", session, current.id, {
-      ownerMatch: current.ownerId === session.user.id,
-      purpose: current.purpose,
-      rowCount: current.rowCount,
-    });
-    const bytes = exports.read(current.filePath);
+    const requestId = context.get("requestId") as string;
+    if (
+      !(await authorization.authorize({
+        requestId,
+        capability: "export.download",
+        analyst: session.user,
+        export: current,
+      }))
+    )
+      throw new AuthorizationError(403, "authorization_denied");
+    const filePath = current.filePath;
+    const bytes = database.withCurrentSession(
+      getCookie(context, sessionCookie) ?? "",
+      config,
+      session,
+      () => {
+        requireActiveRequest(context);
+        database.assertExport(current);
+        return exports.read(filePath);
+      },
+    );
     context.header("content-type", "text/csv; charset=utf-8");
     context.header(
       "content-disposition",
       `attachment; filename="dataguard-${current.id}.csv"`,
     );
-    return context.body(Uint8Array.from(bytes).buffer);
+    const response = context.body(Uint8Array.from(bytes).buffer);
+    logEvent(context, "export.download.prepared", { exportId: current.id });
+    return response;
   });
 
   app.onError((error, context) => {
-    console.error(
-      JSON.stringify({ event: "P5 request failed", error: error.name }),
-    );
-    return context.json({ error: "internal_error" }, 500);
+    if (error instanceof HTTPException) return error.getResponse();
+    const requestId = context.get("requestId") as string | undefined;
+    if (error instanceof AuthorizationError)
+      return context.json({ error: error.code, requestId }, error.status);
+    return context.json({ error: "internal_error", requestId }, 500);
   });
 
   app.all("/api/*", (context) =>

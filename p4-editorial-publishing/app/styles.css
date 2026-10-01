@@ -446,6 +446,9 @@ textarea:disabled {
 .secondary {
   text-decoration: none;
 }
+.action-control {
+  max-width: 260px;
+}
 .permission-note {
   margin: 7px 0 0;
   color: var(--slate);

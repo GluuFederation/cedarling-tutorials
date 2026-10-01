@@ -48,6 +48,7 @@ function sourceDigest(documents: readonly FixtureDocument[]): string {
           metadata.tenantId,
           metadata.title,
           metadata.classification,
+          metadata.confidentialReaderSubjects,
           chunks.map(({ chunkId, text }) => [chunkId, text]),
         ]),
       ),
@@ -192,11 +193,10 @@ export async function createCorpusSearch(
         limit,
         includeVectors: false,
       });
-      return results.hits.map(({ document, score }) => ({
+      return results.hits.map(({ document }) => ({
         chunkId: document.chunkId,
         documentId: document.documentId,
         corpusId: document.corpusId,
-        score,
       }));
     },
   };

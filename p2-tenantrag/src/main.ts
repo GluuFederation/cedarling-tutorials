@@ -4,7 +4,6 @@ import { loadProjectEnvironment } from "./config/environment.js";
 import { createRuntime } from "./runtime.js";
 
 loadProjectEnvironment();
-console.info("P2 authorization: FAKE ALLOW; Cedarling is not called.");
 
 const config = loadConfig();
 const runtime = await createRuntime(config);

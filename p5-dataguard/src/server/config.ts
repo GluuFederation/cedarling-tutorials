@@ -1,4 +1,3 @@
-import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 export type AppConfig = Readonly<{
@@ -56,13 +55,18 @@ export function loadConfig(
     throw new Error("P5_DATA_DIR must stay inside the project directory");
   }
 
+  const baseUrl = normalizedUrl(
+    env.P5_BASE_URL ?? "http://localhost:17005",
+    "P5_BASE_URL",
+  );
+  const origin = new URL(baseUrl);
+  if (port !== Number(origin.port || (origin.protocol === "https:" ? 443 : 80)))
+    throw new Error("P5_PORT must match P5_BASE_URL; run pnpm run setup");
+
   return {
     host: env.P5_HOST?.trim() || "127.0.0.1",
     port,
-    baseUrl: normalizedUrl(
-      env.P5_BASE_URL ?? "http://localhost:17005",
-      "P5_BASE_URL",
-    ),
+    baseUrl,
     dataDirectory,
     issuer: normalizedUrl(
       env.P5_ISSUER ?? "http://localhost:18005",
@@ -76,8 +80,4 @@ export function loadConfig(
     clientSecret,
     sessionEncryptionKey,
   };
-}
-
-export function prepareDataDirectory(directory: string): void {
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
 }

@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 import {
   finalizeRelease,
@@ -24,6 +25,16 @@ const sourceCommit = "a".repeat(40);
 const releaseScript = fileURLToPath(
   new URL("./tutorial-release.mjs", import.meta.url),
 );
+const socialCard = await sharp({
+  create: {
+    width: 1200,
+    height: 630,
+    channels: 3,
+    background: "#102a3b",
+  },
+})
+  .webp()
+  .toBuffer();
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "cedarling-tutorial-release-"));
@@ -36,6 +47,8 @@ slug: protect-a-node-api
 title: Protect a Node API
 summary: Enforce one Cedarling decision at an API boundary.
 order: 10
+socialImage: ./assets/social-card.webp
+socialImageAlt: The API checks an action with Cedarling.
 lastVerified: 2026-09-01T12:00:00Z
 ---
 
@@ -48,6 +61,7 @@ lastVerified: 2026-09-01T12:00:00Z
     join(assetRoot, "boundary.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10z"/></svg>',
   );
+  await writeFile(join(assetRoot, "social-card.webp"), socialCard);
   return root;
 }
 
@@ -68,7 +82,7 @@ test("validates and stages the current tutorial source contract", async (context
   context.after(() => rm(root, { force: true, recursive: true }));
 
   const validated = await validateTutorialProject(root, project);
-  assert.deepEqual(validated.assets, ["boundary.svg"]);
+  assert.deepEqual(validated.assets, ["boundary.svg", "social-card.webp"]);
 
   const prepared = spawnSync(
     process.execPath,
@@ -89,6 +103,12 @@ test("validates and stages the current tutorial source contract", async (context
     ),
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10z"/></svg>',
   );
+  assert.deepEqual(
+    await readFile(
+      join(root, ".release", "stage", "docs", "assets", "social-card.webp"),
+    ),
+    socialCard,
+  );
   assert.equal(
     await readFile(join(root, ".release", "release.env"), "utf8"),
     `ARCHIVE=${project}-tutorial.zip\n`,
@@ -103,6 +123,62 @@ test("rejects a tutorial whose referenced asset is unavailable", async (context)
   await assert.rejects(
     validateTutorialProject(root, project),
     /missing asset \.\/assets\/boundary\.svg/,
+  );
+});
+
+test("rejects a missing or incorrectly sized frontmatter social card", async (context) => {
+  const root = await fixture();
+  context.after(() => rm(root, { force: true, recursive: true }));
+  const cardPath = join(root, project, "docs", "assets", "social-card.webp");
+  await rm(cardPath);
+  await assert.rejects(
+    validateTutorialProject(root, project),
+    /missing asset \.\/assets\/social-card\.webp/,
+  );
+
+  await writeFile(
+    cardPath,
+    await sharp({
+      create: {
+        width: 1200,
+        height: 620,
+        channels: 3,
+        background: "#102a3b",
+      },
+    })
+      .webp()
+      .toBuffer(),
+  );
+  await assert.rejects(
+    validateTutorialProject(root, project),
+    /social card must be a 1200x630 WebP/,
+  );
+});
+
+test("requires safe social-card metadata", async (context) => {
+  const root = await fixture();
+  context.after(() => rm(root, { force: true, recursive: true }));
+  const tutorialPath = join(root, project, "docs", "tutorials.md");
+  const markdown = await readFile(tutorialPath, "utf8");
+  await writeFile(
+    tutorialPath,
+    markdown.replace(
+      "socialImageAlt: The API checks an action with Cedarling.",
+      "socialImageAlt: ''",
+    ),
+  );
+  await assert.rejects(
+    validateTutorialProject(root, project),
+    /socialImageAlt/,
+  );
+
+  await writeFile(
+    tutorialPath,
+    markdown.replace("./assets/social-card.webp", "../social-card.webp"),
+  );
+  await assert.rejects(
+    validateTutorialProject(root, project),
+    /unsafe tutorial image path/,
   );
 });
 
@@ -144,7 +220,7 @@ test("ignores Markdown syntax inside code", async (context) => {
   );
 
   const validated = await validateTutorialProject(root, project);
-  assert.deepEqual(validated.assets, ["boundary.svg"]);
+  assert.deepEqual(validated.assets, ["boundary.svg", "social-card.webp"]);
 });
 
 test("rejects reference-style tutorial images", async (context) => {
@@ -175,6 +251,8 @@ slug: protect-a-node-api
 title: true
 summary: null
 order: 10
+socialImage: ./assets/social-card.webp
+socialImageAlt: The API checks an action with Cedarling.
 lastVerified: 2026-09-01T12:00:00Z
 ---
 
@@ -200,6 +278,8 @@ slug: protect-a-node-api
 title: Protect a Node API
 summary: Enforce one Cedarling decision at an API boundary.
 order: 10
+socialImage: ./assets/social-card.webp
+socialImageAlt: The API checks an action with Cedarling.
 lastVerified: 2026-09-01T12:00:00Z
 ---
 

@@ -6,12 +6,12 @@ import { createTokenVerifier } from "../src/auth/token-verifier.js";
 import { IncidentRepository } from "../src/incidents/repository.js";
 import { loadConfig } from "../src/config/project-config.js";
 import type { PersonaId } from "../src/incidents/types.js";
-import type { FakeTrace } from "../src/mcp/trace.js";
+import type { authorize, Action, Resource } from "../src/mcp/authorization.js";
 
 export type TestApplication = Readonly<{
   endpoint: string;
   config: ReturnType<typeof loadConfig>;
-  traces: FakeTrace[];
+  calls: { action: Action; resource: Resource }[];
   incidents: IncidentRepository;
   token: (
     persona: PersonaId,
@@ -27,12 +27,13 @@ export type TestApplication = Readonly<{
   close: () => Promise<void>;
 }>;
 
-export async function startTestApplication(): Promise<TestApplication> {
-  const config = loadConfig({
-    P3_MCP_RESOURCE: "http://localhost:17003/mcp",
-  });
+/** Exercises MCP routing with an explicit decision stub; real Cedarling is covered by test:e2e. */
+export async function startTestApplication(
+  decide: typeof authorize = async () => true,
+): Promise<TestApplication> {
+  const config = loadConfig({});
   const { publicKey, privateKey } = await generateKeyPair("RS256");
-  const traces: FakeTrace[] = [];
+  const calls: { action: Action; resource: Resource }[] = [];
   const incidents = new IncidentRepository();
   const runtime = createApp({
     config,
@@ -43,7 +44,10 @@ export async function startTestApplication(): Promise<TestApplication> {
       clientId: config.clientId,
       keySet: async () => publicKey,
     }),
-    traceSink: (trace) => traces.push(trace),
+    authorize: async (auth, action, resource, requestId) => {
+      calls.push({ action, resource });
+      return decide(auth, action, resource, requestId);
+    },
   });
   const listener: Server = runtime.app.listen(0, "127.0.0.1");
   await once(listener, "listening");
@@ -55,7 +59,7 @@ export async function startTestApplication(): Promise<TestApplication> {
   return {
     endpoint: `http://127.0.0.1:${address.port}/mcp`,
     config,
-    traces,
+    calls,
     incidents,
     async token(persona, overrides = {}) {
       const now = Math.floor(Date.now() / 1_000);

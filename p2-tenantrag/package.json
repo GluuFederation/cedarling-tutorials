@@ -9,10 +9,10 @@
   "packageManager": "pnpm@10.17.1",
   "scripts": {
     "auth": "tsx scripts/auth.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node ../shared/policy-store.mjs && tsc -p tsconfig.build.json",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "corpus:reset": "tsx scripts/corpus-reset.ts",
-    "dev": "tsx watch src/main.ts",
+    "dev": "node scripts/dev.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -23,13 +23,16 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@janssenproject/cedarling_wasm": "0.0.468",
     "@orama/orama": "3.1.18",
     "fastify": "5.12.5",
+    "fflate": "0.8.3",
     "jose": "6.2.10",
     "pdfjs-dist": "6.2.108",
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@cedar-policy/cedar-wasm": "4.12.0",
     "@eslint/js": "10.0.1",
     "@types/node": "24.13.6",
     "eslint": "10.11.0",

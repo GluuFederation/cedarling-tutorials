@@ -1,98 +1,140 @@
 # P3 - Authorizing MCP Incident Operations with Cedarling
 
-P3 is a terminal assistant for searching incidents, reading a runbook, preparing
-triage, and updating incident status through MCP. It shows how Cedarling
-centralizes authorization for tools, resources, and prompts at the MCP server.
+![An MCP server checks incident capabilities with a private Cedarling sidecar before protected effects.](docs/assets/social-card.webp)
 
-The protected MCP capabilities currently use a fake permissive decision; the
-Cedarling tutorial replaces that seam with policy-backed decisions.
+P3 is a terminal assistant for searching incidents, reading a runbook, preparing
+triage, and updating incident status through MCP. Cedarling centralizes decisions
+for tools, resources, and prompts; the MCP server enforces them before returning
+content or changing an incident.
 
 ## Architecture
 
 ```text
-Dana / Amir / Eve ── Device Flow ──→ Tutorial IdP
-        │
-        └── terminal chat → OpenRouter → MCP client → MCP server (PEP)
-                                                     │ caller + action + resource
-                                                     ▼
-                                                Cedarling PDP
-                                                 │        │
-                                               DENY     ALLOW → incidents / runbook / triage
+Dana / Amir / Eve ── Device Flow ──→ Tutorial IdP (localhost:18003)
+        │                                  │ signed access token
+        └── terminal chat → OpenRouter → MCP client
+                                             │
+                    Compose trust boundary   ▼
+                    ┌─────────────────────────────────────────┐
+                    │ MCP server (PEP) → Cedarling sidecar PDP │
+                    │      │              private loopback    │
+                    │      ├── DENY → no content / no change   │
+                    │      └── ALLOW → incidents / runbook     │
+                    │                  / triage                │
+                    │ Tutorial IdP shares this namespace      │
+                    └─────────────────────────────────────────┘
 ```
+
+The MCP server verifies the token and `mcp.access` scope. It sends signed token
+evidence and current account/incident facts directly to the sidecar's AuthZen
+endpoint. Cedarling checks the caller, client, audience, role, and assignment.
+Discovery is filtered; direct calls still pass the operation's authorization
+boundary. The model never receives the access token or chooses trusted facts.
+
+The readable `policy-store/` is packaged by the shared builder into ignored
+`.local/policy-store.cjar`. Compose loads it read-only into the pinned sidecar.
+Only the MCP and IdP ports are published on host loopback. The IdP, MCP server,
+and sidecar share one local trust boundary; this is a local learning deployment.
 
 ## Prerequisites
 
 - Node.js 24.21 or newer within 24.x and pnpm 10 on Ubuntu, macOS, or Windows.
-- Docker Desktop or Docker Engine with Compose when using Docker startup.
-- The project-local tutorial identity provider (started below).
+- Docker Engine with Compose v2, or Docker Desktop. The pinned sidecar is
+  `linux/amd64`; ARM Docker Desktop needs amd64 emulation.
 - An OpenRouter API key in `P3_OPENROUTER_API_KEY` for interactive chat.
+
+P3 starts its own tutorial IdP at `http://localhost:18003` and MCP service at
+`http://localhost:17003/mcp`. Other projects use separate ports and IdP instances.
 
 ## Run
 
-Start the application and its own IdP:
+From this project directory, start the services:
 
 ```bash
 docker compose up --build
 ```
 
-MCP endpoint: <http://localhost:17003/mcp>. The issuer is <http://localhost:18003>. Stop the stack with `Ctrl+C`, then `docker compose down`.
-
-For native development, run from this project directory:
+Wait for the identity provider and Cedarling sidecar to be healthy. In another
+terminal, prepare the host client:
 
 ```bash
-pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
 pnpm run setup
-pnpm dev
 ```
 
-`pnpm dev` starts this project’s IdP and application together.
+Set `P3_OPENROUTER_API_KEY` in the generated `.env`, then start a conversation:
 
-For interactive chat, install the project dependencies on the host, set `P3_OPENROUTER_API_KEY` in its `.env`, and run `pnpm chat dana` in another terminal. This client works with either the native or Docker service.
-`P3_OPENROUTER_MODEL` defaults to `liquid/lfm-2.5-2.6b:free`. Select another
-OpenRouter model that supports tool calling if needed. Paid routing requires
-`P3_OPENROUTER_ALLOW_PAID=true`; without it, the client keeps its zero-price
-cap and has no paid fallback. Provider availability can vary. The scripted
-tests reproduce the baseline gap without a provider account.
+```bash
+pnpm chat dana
+```
 
-For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
+Chat defaults to `liquid/lfm-2.5-2.6b:free`. Set `P3_OPENROUTER_MODEL` to
+another tool-calling model if needed. Paid routing requires
+`P3_OPENROUTER_ALLOW_PAID=true`; otherwise the client keeps its zero-price cap
+and has no paid fallback. Provider availability can vary.
+The provider may retain prompts and responses for training; use only fictional
+incident data.
+
+Open the displayed verification URL, sign in as the chosen persona, and approve
+access. The MCP endpoint is `http://localhost:17003/mcp`. Leave the service
+terminal open while using chat.
 
 ## Exercise
 
-The intended responsibilities are:
+- **Dana (`dana`)** — Supervisor allowed to operate on every incident.
+- **Amir (`amir`)** — Analyst allowed to operate on assigned incidents.
+- **Eve (`eve`)** — Authenticated caller with no incident operations.
 
-- **Dana (`dana`)** — Incident supervisor responsible for all incidents.
-- **Amir (`amir`)** — Analyst responsible for assigned incidents.
-- **Eve (`eve`)** — Authenticated caller without incident authority.
+In `pnpm chat amir`, enter these prompts separately:
 
-Run `pnpm chat <persona>` and send one request at a time:
+```text
+Find incident INC-1001.
+Read the incident response runbook.
+Prepare triage for INC-1001.
+Advance INC-1001 from open to investigating.
+```
 
-1. As Amir, ask to find the payment incident (`INC-1001`), read the runbook,
-   and obtain its triage guidance.
-2. Ask to advance `INC-1001` from `open` to `investigating`. Confirm the
-   change when prompted; declining leaves it unchanged.
-3. As Dana, find the unassigned audit incident (`INC-2001`).
-4. As Eve or Amir, find that same incident and request a valid next status.
-   Both callers currently succeed despite lacking the intended authority.
+Confirm the status change with `y`; declining leaves the incident unchanged.
+P3 advances one incident per request, not a bulk "resolve all" operation.
 
-Cedarling will restrict discovery and enforce authorization again before each
-server operation. Host confirmation protects against accidental changes; it
-does not replace server authorization. Statuses advance through `open` →
-`investigating` → `mitigated` → `resolved`. Restart P3 to restore the fixtures.
+- **Dana:** `Find incident INC-2001.` returns the unassigned audit incident.
+- **Amir:** `Find incident INC-2001.` returns no matching incident;
+  `Prepare triage for INC-2001.` returns `authorization_denied`.
+- **Eve:** `Find incident INC-1001.` reports no available operations without calling the model.
 
-`pnpm test:e2e` runs these paths with a scripted model, without an OpenRouter key.
+These are chat requests through MCP, not REST POST examples. The free model must
+return a valid tool call before any operation runs. Greetings and unrelated
+messages show help without invoking MCP. Chat reports provider, quota,
+timeout, and invalid-response failures separately from authorization denials;
+free-provider availability is not guaranteed.
+
+The MCP server prints JSON `authorization.decision` or `authorization.failed`
+records with actor, action, resource, and application request ID. The sidecar
+prints Cedarling's native decision records, including policy reasons. Its native
+request IDs are separate from the application's IDs. The token-cache limit is
+1,800 seconds, matching the tutorial tokens' 30-minute lifetime. Signature,
+issuer, audience, and expiration validation remain enabled.
+
+Cedarling closes both discovery and direct-operation access gaps. Confirmation
+prevents accidental changes; it is not authorization. Statuses advance through
+`open` → `investigating` → `mitigated` → `resolved`. A sidecar failure denies
+access without changing incidents.
+
+Stop and restart the stack with `docker compose down`, then
+`docker compose up --build`, to restore incident fixtures. This also rebuilds
+the archive after policy edits.
 
 ## Commands
 
-| Command               | Purpose                                       |
-| --------------------- | --------------------------------------------- |
-| `pnpm run setup`      | Validate native configuration                 |
-| `pnpm dev`            | Start the MCP service for development         |
-| `pnpm chat <persona>` | Start the terminal learner experience         |
-| `pnpm start`          | Run the built service                         |
-| `pnpm test:e2e`       | Run deterministic end-to-end tool scenarios   |
-| `pnpm check`          | Run formatting, lint, types, tests, and build |
+| Command               | Purpose                                                      |
+| --------------------- | ------------------------------------------------------------ |
+| `pnpm run setup`      | Prepare host chat configuration                              |
+| `pnpm dev`            | Build and start the Compose service stack                    |
+| `pnpm chat <persona>` | Start the terminal conversation                              |
+| `pnpm build`          | Package policies and compile the MCP server and client       |
+| `pnpm start`          | Start the Compose stack using existing images                |
+| `pnpm test:e2e`       | Verify the real isolated Compose stack with a scripted model |
+| `pnpm check`          | Run formatting, lint, types, tests, and build                |
 
 ## Verify
 
@@ -101,3 +143,8 @@ pnpm check
 pnpm test:e2e
 pnpm audit --audit-level low
 ```
+
+The end-to-end check uses real signed tokens and the pinned sidecar. It verifies
+allowed and denied operations, direct-call bypass attempts, sidecar outage and
+recovery, and unchanged protected state. It needs no OpenRouter key and removes
+only its own temporary containers and volumes.

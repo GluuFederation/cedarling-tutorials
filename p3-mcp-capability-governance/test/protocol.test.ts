@@ -10,6 +10,32 @@ afterEach(async () => {
 });
 
 describe("MCP transport and resource authentication", () => {
+  it.each([
+    ["malformed JSON", '{"private-input":', 400, "invalid_request"],
+    [
+      "oversized JSON",
+      JSON.stringify({ message: "x".repeat(34_000) }),
+      413,
+      "request_too_large",
+    ],
+  ] as const)(
+    "rejects %s as a client error without dispatching MCP",
+    async (_name, body, status, code) => {
+      const application = await startTestApplication();
+      applications.push(application);
+      const original = application.incidents.get("INC-1001");
+      const response = await fetch(application.endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toEqual({ error: code });
+      expect(application.calls).toEqual([]);
+      expect(application.incidents.get("INC-1001")).toEqual(original);
+    },
+  );
+
   it("publishes protected-resource metadata and challenges a missing token", async () => {
     const application = await startTestApplication();
     applications.push(application);

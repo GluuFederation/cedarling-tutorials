@@ -1,31 +1,21 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AuthorizationRequest } from "../src/server/authorization.ts";
 import { AppDatabase } from "../src/server/database.ts";
 import type { Session } from "../src/server/models.ts";
-import { EditorialService } from "../src/server/service.ts";
 
-export function fixture(subject = "riley", allow = true) {
+export function fixture(subject = "riley") {
   const directory = mkdtempSync(join(tmpdir(), "p4-test-"));
   const database = new AppDatabase(directory, "http://localhost:18004");
   const principal = database.principal("http://localhost:18004", subject);
   if (!principal) throw new Error(`Missing test principal ${subject}`);
-  const requests: AuthorizationRequest[] = [];
-  const service = new EditorialService(database, {
-    async authorize(request) {
-      requests.push(request);
-      return allow;
-    },
-  });
   const session: Session = {
     csrfToken: "test-csrf",
     principal,
   };
   return {
     database,
-    requests,
-    service,
+    directory,
     session,
     cleanup() {
       database.close();

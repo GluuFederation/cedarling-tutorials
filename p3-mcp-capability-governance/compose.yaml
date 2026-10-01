@@ -12,6 +12,20 @@ services:
     volumes:
       - identity-config:/identity-config
       - app-config:/app-config
+  policy-store:
+    build:
+      context: ..
+      dockerfile: p3-mcp-capability-governance/Dockerfile
+      target: policy-store
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - policy-store:/policy-store
+
+  # IdP, MCP server, and Cedarling share a local trust boundary.
+  # Only the MCP and IdP ports are published on host loopback.
   identity-provider:
     build:
       context: ..
@@ -49,6 +63,7 @@ services:
     depends_on:
       configure: { condition: service_completed_successfully }
       identity-provider: { condition: service_healthy }
+      cedarling: { condition: service_healthy }
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -63,6 +78,54 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+  cedarling:
+    image: ghcr.io/janssenproject/jans/cedarling-flask-sidecar:2.4.1-1@sha256:501d5bc88e8a0b67cbab314b31c787f94b6c4ad9f16a77ec81d0e183b2645f0b
+    platform: linux/amd64
+    network_mode: service:identity-provider
+    command:
+      [
+        "gunicorn",
+        "--bind",
+        "127.0.0.1:5000",
+        "--workers",
+        "1",
+        "--threads",
+        "8",
+        "--worker-class",
+        "gthread",
+        "--worker-tmp-dir",
+        "/dev/shm",
+        "--error-logfile",
+        "-",
+        "main.core:app",
+      ]
+    environment:
+      APP_MODE: production
+      SIDECAR_DEBUG_RESPONSE: "False"
+      CEDARLING_BOOTSTRAP_CONFIG_FILE: /bootstrap.json
+    depends_on:
+      identity-provider: { condition: service_healthy }
+      policy-store: { condition: service_completed_successfully }
+    volumes:
+      - policy-store:/policy-store:ro
+      - ./sidecar-bootstrap.json:/bootstrap.json:ro
+    read_only: true
+    tmpfs: ["/tmp:mode=1777", "/home/web/.cloud:uid=1000,gid=1000,mode=700"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test:
+        [
+          CMD,
+          python,
+          -c,
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/.well-known/authzen-configuration', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
 volumes:
   identity-config:
   app-config:
+  policy-store:

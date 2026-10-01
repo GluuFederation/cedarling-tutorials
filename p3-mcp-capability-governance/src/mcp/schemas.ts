@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { incidentStatuses } from "../incidents/types.js";
 
 export const searchIncidentsInput = z
   .object({
@@ -9,8 +10,8 @@ export const searchIncidentsInput = z
 export const updateIncidentInput = z
   .object({
     incidentId: z.string().regex(/^INC-[0-9]{4}$/),
-    expectedStatus: z.enum(["open", "investigating", "mitigated", "resolved"]),
-    nextStatus: z.enum(["open", "investigating", "mitigated", "resolved"]),
+    expectedStatus: z.enum(incidentStatuses),
+    nextStatus: z.enum(incidentStatuses),
     confirmed: z.literal(true),
     idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
   })

@@ -67,6 +67,20 @@ export type QueryResponse = Readonly<{
   rows: Array<Record<string, string | number | null>>;
 }>;
 
+/** UI guidance for exact candidate plans; every effect is authorized again. */
+export type AuthorizationPreview = Readonly<{
+  queryPlan: QueryPlan;
+  exportPlan?: QueryPlan;
+  exportId?: string;
+}>;
+export type ActionAvailability = Readonly<{
+  requestId: string;
+  query: boolean;
+  createExport: boolean;
+  download: boolean;
+  revoke: boolean;
+}>;
+
 export type ExportState = "ready" | "expired" | "revoked";
 export type ExportSummary = Readonly<{
   id: string;

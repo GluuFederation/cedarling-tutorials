@@ -1,14 +1,20 @@
 export type PersonaId = "ada" | "leo" | "mallory";
+export type TenantId = "tenant-a" | "tenant-b";
 
 type Classification = "public" | "confidential";
+
+export type AccessProfile = Readonly<{
+  tenantId: TenantId;
+}>;
 
 export type FixtureDefinition = Readonly<{
   documentId: string;
   pdfFileName: string;
   title: string;
   corpusId: string;
-  tenantId: "tenant-a" | "tenant-b";
+  tenantId: TenantId;
   classification: Classification;
+  confidentialReaderSubjects: readonly PersonaId[];
   expectedPageCount: number;
   expectedChunkCount: number;
   sha256: string;
@@ -17,7 +23,12 @@ export type FixtureDefinition = Readonly<{
 export type DocumentMetadata = Readonly<
   Pick<
     FixtureDefinition,
-    "documentId" | "title" | "corpusId" | "tenantId" | "classification"
+    | "documentId"
+    | "title"
+    | "corpusId"
+    | "tenantId"
+    | "classification"
+    | "confidentialReaderSubjects"
   >
 >;
 
@@ -52,7 +63,6 @@ export type SearchCandidate = Readonly<{
   chunkId: string;
   documentId: string;
   corpusId: string;
-  score: number;
 }>;
 
 type Citation = Readonly<{

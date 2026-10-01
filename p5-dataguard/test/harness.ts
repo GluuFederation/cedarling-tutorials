@@ -1,8 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import Sqlite from "better-sqlite3";
 import type { Hono } from "hono";
 import { buildApp } from "../src/server/app.ts";
+import {
+  createDataAuthorization,
+  type DataAuthorization,
+} from "../src/server/authorization.ts";
 import type { AppConfig } from "../src/server/config.ts";
 import { AppDatabase } from "../src/server/database.ts";
 import { ExportService } from "../src/server/export-service.ts";
@@ -12,15 +17,14 @@ import type {
   OidcTokens,
 } from "../src/server/oidc.ts";
 
-const now = Date.now();
 const tokens = (subject: string): OidcTokens => ({
   issuer: "http://localhost:18005",
   subject,
   accessToken: `access-${subject}`,
-  accessTokenExpiresAt: now + 1_800_000,
+  accessTokenExpiresAt: Date.now() + 1_800_000,
   refreshToken: `refresh-${subject}`,
   idToken: `id-${subject}`,
-  idTokenExpiresAt: now + 1_800_000,
+  idTokenExpiresAt: Date.now() + 1_800_000,
   tokenType: "Bearer",
   scope: "openid profile email data.access",
 });
@@ -49,7 +53,6 @@ const oidc: OidcRuntime = {
 export type TestSession = Readonly<{
   cookie: string;
   csrf: string;
-  analystId: string;
 }>;
 
 export type Harness = Readonly<{
@@ -57,12 +60,15 @@ export type Harness = Readonly<{
   config: AppConfig;
   database: AppDatabase;
   exports: ExportService;
+  authorization: DataAuthorization;
+  sql: Sqlite.Database;
+  directory: string;
   session(persona: "amina" | "leah" | "theo"): TestSession;
   mutation(session: TestSession, body?: unknown): RequestInit;
-  close(): void;
+  close(): Promise<void>;
 }>;
 
-export function createHarness(): Harness {
+export async function createHarness(): Promise<Harness> {
   const directory = mkdtempSync(path.join(tmpdir(), "p5-test-"));
   const config: AppConfig = {
     host: "127.0.0.1",
@@ -76,12 +82,14 @@ export function createHarness(): Harness {
     sessionEncryptionKey: Buffer.alloc(32, 7),
   };
   const database = new AppDatabase(
-    ":memory:",
+    path.join(directory, "p5.sqlite"),
     config.issuer,
     path.join(directory, "exports"),
   );
   const exports = new ExportService(database);
-  const app = buildApp({ config, database, oidc, exports });
+  const authorization = await createDataAuthorization();
+  const sql = new Sqlite(path.join(directory, "p5.sqlite"));
+  const app = buildApp({ config, database, oidc, exports, authorization });
   const sessions = new Map<string, TestSession>();
 
   return {
@@ -89,6 +97,9 @@ export function createHarness(): Harness {
     config,
     database,
     exports,
+    authorization,
+    sql,
+    directory,
     session(persona) {
       const existing = sessions.get(persona);
       if (existing) return existing;
@@ -102,7 +113,6 @@ export function createHarness(): Harness {
       const value = {
         cookie: `p5_session=${created.rawId}`,
         csrf: created.csrfToken,
-        analystId: analyst.id,
       };
       sessions.set(persona, value);
       return value;
@@ -120,9 +130,14 @@ export function createHarness(): Harness {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       };
     },
-    close() {
-      database.close();
-      rmSync(directory, { recursive: true, force: true });
+    async close() {
+      try {
+        await authorization.close();
+      } finally {
+        sql.close();
+        database.close();
+        rmSync(directory, { recursive: true, force: true });
+      }
     },
   };
 }

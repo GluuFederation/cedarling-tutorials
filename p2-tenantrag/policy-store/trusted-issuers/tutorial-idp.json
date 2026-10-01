@@ -1,0 +1,13 @@
+{
+  "name": "P2TenantRAG",
+  "description": "Shared Cedarling tutorial identity provider",
+  "openid_configuration_endpoint": "http://localhost:18002/.well-known/openid-configuration",
+  "token_metadata": {
+    "access_token": {
+      "trusted": true,
+      "entity_type_name": "P2TenantRAG::Access_token",
+      "token_id": "jti",
+      "required_claims": ["iss", "sub", "aud", "jti", "exp", "scope"]
+    }
+  }
+}

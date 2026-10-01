@@ -126,8 +126,14 @@ export class DevSupervisor {
   }
 
   async ensure(service) {
-    const initial = await probeHttp(service.health, this.#dependencies.fetch);
+    const initial = service.health
+      ? await probeHttp(service.health, this.#dependencies.fetch)
+      : "missing";
     if (initial === "ready") {
+      if (service.reuseExisting === false)
+        throw new Error(
+          `${service.name} requires its own test instance; stop the existing listener first.`,
+        );
       this.#dependencies.log(
         `Reusing ${service.name} at ${service.health.url}`,
       );
@@ -139,7 +145,8 @@ export class DevSupervisor {
       );
     }
 
-    const child = this.#dependencies.spawn(service.command, service.args, {
+    const resolved = resolveCommand(service.command, service.args);
+    const child = this.#dependencies.spawn(resolved.command, resolved.args, {
       cwd: service.cwd,
       env: service.env,
       stdio: "inherit",
@@ -166,6 +173,8 @@ export class DevSupervisor {
       }
     });
 
+    // Build watchers have no HTTP endpoint; their lifetime is still supervised.
+    if (!service.health) return;
     const deadline = Date.now() + (service.timeoutMs ?? 30_000);
     while (Date.now() < deadline) {
       if (startupFailure) throw startupFailure;

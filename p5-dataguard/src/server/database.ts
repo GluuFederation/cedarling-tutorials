@@ -1,5 +1,6 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import Sqlite from "better-sqlite3";
 import type {
   Analyst,
@@ -7,6 +8,7 @@ import type {
   ExportSummary,
   Purpose,
   QueryPlan,
+  QueryResponse,
 } from "../shared/contracts.ts";
 import type { AppConfig } from "./config.ts";
 import {
@@ -16,6 +18,7 @@ import {
   randomToken,
   tokenHash,
 } from "./crypto.ts";
+import { AuthorizationError } from "./errors.ts";
 import { workforceFixtures } from "./fixtures.ts";
 import type { OidcTokens } from "./oidc.ts";
 import type { CompiledQuery } from "./query.ts";
@@ -35,12 +38,6 @@ export type ExportRecord = ExportSummary &
     planDigest: string;
     filePath: string | null;
   }>;
-
-export type QueryEvaluation = Readonly<{
-  rows: Array<Record<string, string | number | null>>;
-  matchingCount: number;
-  minimumGroupSize: number;
-}>;
 
 const schema = `
 CREATE TABLE IF NOT EXISTS analysts (
@@ -82,17 +79,54 @@ export class AppDatabase {
     this.raw = new Sqlite(filename);
     this.raw.pragma("foreign_keys = ON");
     this.raw.pragma("journal_mode = WAL");
+    this.raw.pragma("busy_timeout = 3000");
     this.raw.exec(schema);
-    this.raw
-      .prepare(
-        "DELETE FROM exports WHERE state NOT IN ('ready', 'expired', 'revoked')",
-      )
-      .run();
     this.seed(issuer);
   }
 
   close(): void {
     this.raw.close();
+  }
+
+  /** Restore fixtures without replacing files used by a running process. */
+  reset(issuer: string): void {
+    this.raw
+      .transaction(() => {
+        this.raw.exec(
+          "DELETE FROM exports; DELETE FROM sessions; DELETE FROM oidc_transactions; DELETE FROM workforce; DELETE FROM analysts;",
+        );
+        this.seed(issuer);
+      })
+      .immediate();
+    this.cleanupExports();
+  }
+
+  /** Recheck identity and perform one synchronous effect under the same lock. */
+  withCurrentSession<T>(
+    rawId: string,
+    config: AppConfig,
+    expected: Session,
+    effect: () => T,
+  ): T {
+    return this.raw
+      .transaction(() => {
+        const current = this.getSession(rawId, config);
+        if (
+          !current ||
+          current.tokens.accessTokenExpiresAt <= Date.now() ||
+          !isDeepStrictEqual(current.user, expected.user) ||
+          current.csrfToken !== expected.csrfToken
+        ) {
+          throw new AuthorizationError(409, "authorization_state_changed");
+        }
+        return effect();
+      })
+      .immediate();
+  }
+
+  assertExport(expected: ExportRecord): void {
+    if (!isDeepStrictEqual(this.getExportById(expected.id), expected))
+      throw new AuthorizationError(409, "authorization_state_changed");
   }
 
   private seed(issuer: string): void {
@@ -235,12 +269,22 @@ export class AppDatabase {
     const user = this.mapAnalyst(row);
     if (!user) return undefined;
     try {
+      const tokens = decryptJson(
+        String(row.encrypted_tokens),
+        config.sessionEncryptionKey,
+      ) as OidcTokens;
+      if (
+        tokens.issuer !== user.issuer ||
+        tokens.subject !== user.subject ||
+        tokens.idTokenExpiresAt <= Date.now() ||
+        !tokens.scope.split(/\s+/).includes("data.access")
+      ) {
+        this.deleteSession(rawId);
+        return undefined;
+      }
       return {
         user,
-        tokens: decryptJson(
-          String(row.encrypted_tokens),
-          config.sessionEncryptionKey,
-        ) as OidcTokens,
+        tokens,
         csrfToken: String(row.csrf_token),
         expiresAt: Number(row.expires_at),
       };
@@ -266,23 +310,21 @@ export class AppDatabase {
       .run(tokenHash(rawId));
   }
 
-  evaluate(result: CompiledQuery, cardinality: CompiledQuery): QueryEvaluation {
-    return this.raw.transaction(() => {
-      const rows = this.raw
-        .prepare(result.sql)
-        .all(...result.bindings) as Array<
-        Record<string, string | number | null>
-      >;
-      const groups = this.raw
-        .prepare(cardinality.sql)
-        .all(...cardinality.bindings) as Array<{ groupSize: number }>;
-      const sizes = groups.map((group) => Number(group.groupSize));
-      return {
-        rows,
-        matchingCount: sizes.reduce((total, size) => total + size, 0),
-        minimumGroupSize: sizes.length > 0 ? Math.min(...sizes) : 0,
-      };
-    })();
+  minimumGroupSize(
+    cardinality: Pick<CompiledQuery, "sql" | "bindings">,
+  ): number {
+    const groups = this.raw
+      .prepare(cardinality.sql)
+      .all(...cardinality.bindings) as Array<{ groupSize: number }>;
+    return groups.length
+      ? Math.min(...groups.map((group) => group.groupSize))
+      : 0;
+  }
+
+  execute(result: CompiledQuery): QueryResponse["rows"] {
+    return this.raw
+      .prepare(result.sql)
+      .all(...result.bindings) as QueryResponse["rows"];
   }
 
   storeReadyExport(value: {
@@ -319,10 +361,13 @@ export class AppDatabase {
   }
 
   getExportById(id: string): ExportRecord | undefined {
-    return this.applyExpiry(
-      this.mapExport(
-        this.raw.prepare("SELECT * FROM exports WHERE id = ?").get(id),
-      ),
+    return this.applyExpiry(this.exportMetadata(id));
+  }
+
+  /** Read-only UI previews must not perform expiry lifecycle writes. */
+  exportMetadata(id: string): ExportRecord | undefined {
+    return this.mapExport(
+      this.raw.prepare("SELECT * FROM exports WHERE id = ?").get(id),
     );
   }
 
@@ -336,11 +381,29 @@ export class AppDatabase {
     );
   }
 
-  referencedExportFiles(): Set<string> {
-    const rows = this.raw
-      .prepare("SELECT file_path FROM exports WHERE file_path IS NOT NULL")
-      .all() as Array<{ file_path: string }>;
-    return new Set(rows.map((row) => row.file_path));
+  /** Serialize orphan removal with export writers, after lifecycle commits. */
+  cleanupExports(): void {
+    this.raw
+      .transaction(() => {
+        const rows = this.raw
+          .prepare("SELECT file_path FROM exports WHERE file_path IS NOT NULL")
+          .all() as Array<{ file_path: string }>;
+        const referenced = new Set(rows.map((row) => row.file_path));
+        for (const entry of readdirSync(this.exportDirectory, {
+          withFileTypes: true,
+        })) {
+          if (
+            !entry.isFile() ||
+            !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\.csv$/u.test(
+              entry.name,
+            )
+          )
+            continue;
+          const filePath = path.join(this.exportDirectory, entry.name);
+          if (!referenced.has(filePath)) rmSync(filePath, { force: true });
+        }
+      })
+      .immediate();
   }
 
   revokeExport(id: string): ExportSummary | undefined {
@@ -353,15 +416,8 @@ export class AppDatabase {
         "UPDATE exports SET state = 'revoked', file_path = NULL WHERE id = ? AND state = 'ready'",
       )
       .run(id);
-    if (current.filePath) rmSync(current.filePath, { force: true });
     const revoked = this.getExportById(id);
     return revoked ? this.toSummary(revoked) : undefined;
-  }
-
-  forceExpireExport(id: string): void {
-    this.raw
-      .prepare("UPDATE exports SET expires_at = ? WHERE id = ?")
-      .run(Date.now() - 1, id);
   }
 
   private applyExpiry(
@@ -379,7 +435,6 @@ export class AppDatabase {
         "UPDATE exports SET state = 'expired', file_path = NULL WHERE id = ? AND state = 'ready'",
       )
       .run(value.id);
-    if (value.filePath) rmSync(value.filePath, { force: true });
     return { ...value, state: "expired", filePath: null };
   }
 

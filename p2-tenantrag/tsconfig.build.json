@@ -17,5 +17,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["scripts/setup.ts"]
+  "exclude": ["scripts/setup.ts", "scripts/prepare.ts", "scripts/preflight.ts"]
 }
