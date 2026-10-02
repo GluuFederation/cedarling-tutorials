@@ -86,6 +86,7 @@ jobs:
           gh release create "$TAG" \
             ".release/$ARCHIVE" \
             ".release/$ARCHIVE.sha256" \
+            ".release/registry-entry.json" \
             --verify-tag \
             --title "$TAG" \
             --notes-file .release/release-notes.md
