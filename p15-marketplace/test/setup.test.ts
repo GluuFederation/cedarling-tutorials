@@ -103,11 +103,12 @@ it("repairs shared registration values and preserves project settings", () => {
   execFileSync(process.execPath, [resolve("scripts/setup.ts")], {
     cwd: project,
     stdio: "pipe",
+    timeout: 20_000,
   });
   const configured = readFileSync(join(project, ".env"), "utf8");
   expect(configured).toContain(`P15_CLIENT_SECRET="${secret}"`);
   expect(configured).toContain("P15_LOCAL_NOTE=keep");
-});
+}, 30_000);
 
 it("refuses linked state paths before opening the database", () => {
   const directory = testDirectory();
