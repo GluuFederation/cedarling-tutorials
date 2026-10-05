@@ -10,6 +10,56 @@ lastVerified: 2026-10-01T09:46:20Z
 
 # Protect a Node.js REST API with Cedarling
 
+This tutorial will show how Cedarling can authorize 
+a user request based on their role and other attributes. We will see this 
+using a ready-to-use example app. 
+
+## The Usecase
+
+We have a task manager app that lets users create, edit, delete tasks. The app supports
+multi-tenancy where it can be used by users from multiple organizations(tenants)
+at the same time. 
+
+For this app, it is important to ensure that each user can only perform operations
+that the user is allowed to perform. Each user is assigned an assurance level which
+helps determine which operations are allowed or denied. 
+
+<TODO: explain more on what is assurance>
+
+There are three users in our usecase:
+
+- **Alex** is a Tenant A contributor with assurance level 1. He works on assigned tasks.
+- **Mina** is a Tenant A owner with assurance level 2. She manages her team's work.
+- **Sam** is a Tenant B external user with assurance level 1. His work must stay separate from Tenant A.
+
+## The Application
+
+The sample task manager app is built using React, a Fastify Node.js API, and SQLite. The app uses Cedarling to perform authorization checks and uses Janssen server as the IDP. The app also has a policy store which contain the policies used in this tutorial.
+
+
+The application code along with the setup instructions is available at <gh repo>. The remainder of the tutorial refers to the code from this repository. All relative paths for files are from base directory `p1-task-manager/`. 
+
+<TODO: the app repo should have all the technical details around the app. 
+- Tech stack
+- Architecture diagram
+- integration points if any
+- build instructions
+- how to configure required settings for this usecase.
+- Sample input and output flow
+>
+
+
+
+## Important concepts
+
+This tutorial assumes basic understanding of authentication and authorization concepts. Plus, it will
+be helpful to be aware of following in order to follow this tutorial. 
+
+- New to Cedarling? [Read the short introduction](https://cedarling.dev/learn/what-is-cedarling) when you need it.
+- Keep the official [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy for the policy-store steps.
+
+<TODO: all the details below should be moved to the GH repo readme if possible. And removed 
+from here.>
 <details>
 <summary>Project source and prerequisites</summary>
 
@@ -17,12 +67,7 @@ lastVerified: 2026-10-01T09:46:20Z
 - Install Docker with Compose, or Node.js 24.21+ within 24.x and pnpm 10.17.1. The project supplies its own tutorial identity provider.
 - Local HTTP and the bundled IdP are for learning only. Production requires HTTPS and a configured OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/), Gluu, Auth0, or Okta.
 - I prepared these steps on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
-- New to Cedarling? [Read the short introduction](https://cedarling.dev/learn/what-is-cedarling) when you need it.
-- Keep the official [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy for the policy-store steps.
-
 </details>
-
-Paths to application code below are relative to `p1-task-manager/`.
 
 ## What are we going to secure?
 
@@ -31,15 +76,8 @@ create work, edit another person's task, or read another organization's data.
 I'll show how to describe those decisions in Cedar policies and enforce them
 with Cedarling.
 
-The application uses React, a Fastify Node.js API, and SQLite:
 
-- **Alex** is a Tenant A contributor with assurance level 1. He works on assigned tasks.
-- **Mina** is a Tenant A owner with assurance level 2. She manages her team's work.
-- **Sam** is a Tenant B external user with assurance level 1. His work must stay separate from Tenant A.
-
-![Mina and Alex belong to Tenant A; Sam belongs to Tenant B. Their roles are owner, contributor, and user.](./assets/meet-the-users.webp)
-
-_Meet the three users. A role or tenant label introduces a person; the current
+A role or tenant label introduces a person; the current
 action and resource determine each authorization result._
 
 Assurance is a database fact in this tutorial. Selecting Mina demonstrates the
