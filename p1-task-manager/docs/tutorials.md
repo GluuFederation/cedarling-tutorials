@@ -48,8 +48,6 @@ The application code along with the setup instructions is available at <gh repo>
 - Sample input and output flow
 >
 
-
-
 ## Important concepts
 
 This tutorial assumes basic understanding of authentication and authorization concepts. Plus, it will
@@ -69,24 +67,35 @@ from here.>
 - I prepared these steps on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
 </details>
 
+
 ## What are we going to secure?
 
-Signing in tells a task manager who you are. It does not answer whether you may
-create work, edit another person's task, or read another organization's data.
-I'll show how to describe those decisions in Cedar policies and enforce them
+We are going to implement authorization checks in the task manager app so that
+each user is only allowed to perform actions that are permitted to them. For example,
+Alex should not be able to create a task as he does not have an owner role, but 
+he should be able to edit tasks.
+
+We will describe these permissions using Cedar policies and enforce them
 with Cedarling.
 
+<TODO
+explain the two paragraphs below in simpler language. For example, remove things like 
+`database fact`, `selecting Mina demonstrates`, `ceremony` etc. 
+>
 
+<TODO
+describe in the app README about what is preconfigured. For instance assurance 
+in this case. How roles and tenant labels are obtained by the app. Give
+link to that section here. If requrired, give a summary here for 
+completeness.
+>
 A role or tenant label introduces a person; the current
 action and resource determine each authorization result._
 
 Assurance is a database fact in this tutorial. Selecting Mina demonstrates the
 rule; it is not a real multi-factor authentication ceremony.
 
-Our first problem: Alex can create a task even though creation belongs to an
-assured owner. We will stop that operation while preserving his ability to edit
-an assigned task.
-
+<TODO: replace the chart below by a mermaid chart. See if it gets properly rendered on the website>
 ```text
 Tutorial IdP -- signed access token --> Node.js session
                                              |
@@ -100,10 +109,16 @@ React -- request --> Fastify API (PEP) <-- current user/task -- SQLite
 API -- safe facts + decision ceiling + policy archive --> React
                 Cedarling browser PDP --> visible controls
 ```
-
+<TODO: 
+Please rewrite the para below by yourself. This is too much of AI writing that is too verbose
+>
 The **PDP** decides; the **PEP** enforces. Cedarling is the policy decision point.
 The API handlers enforce its decisions. The browser evaluates presentation rules,
 but the server decides again before releasing data or changing a task.
+
+
+<TODO: showing a failure case is good but since this is a very simple usecase,
+we can either omit this section entirely or reduce it to couple of lines.>
 
 ## See what happens without authorization
 
@@ -179,11 +194,11 @@ Keep a capture of the response and saved task. Stop the application before
 changing code. For Docker, use `Ctrl+C`, then `docker compose down`; this keeps
 its data volume.
 
+
+
 ## Prepare the existing application for authorization
 
-No separate feature needs adding before Cedarling. The starting application
-already authenticates the session, checks CSRF and input, and uses task versions
-to reject stale writes. Locate the point where its Create route goes straight
+Locate the point where its Create route goes straight
 from those checks to a database write:[^6]
 
 ```ts
@@ -194,7 +209,8 @@ const task = database.createTask(
   parsed.data.description,
 );
 ```
-
+<TODO: I could not understand any of this. Only understood the last sentence. 
+Either explain this better with context or remove if possible.>
 The route's capability metadata names `task.create`; it does not authorize the
 write. The baseline's `FAKE ALLOW` list trace is diagnostic, not a decision for
 Create. Make no source change yet: keep the existing safeguards, then add a
@@ -203,6 +219,7 @@ below.
 
 ## Who should be allowed to do what?
 
+<TODO: Images are distraction when a few words can do the same job. Please remove image. >
 ![Mina creates a task inside Tenant A; Alex edits an existing task assigned to him in the same tenant.](./assets/authorization-model.webp)
 
 _Create targets the existing tenant; Edit targets a current task.[^1] The policy
