@@ -2,36 +2,34 @@
 
 ![Next.js Server Actions check current editorial facts with Cedarling before protected publishing effects.](docs/assets/social-card.webp)
 
-CedarPress is a focused editorial workspace where authors create articles and submit immutable
-revisions, editors review exact content, and publishers release a revision only
-while its approval evidence and reviewer authority remain current.
+P4 lets authors submit article revisions for review and publishers release
+approved content. Server-side Cedarling checks prevent self-review, reuse of
+approval across revisions, and publication after a reviewer's authority is revoked.
 
-Cedarling authorizes each read and mutation on the server using the signed-in
-user and current database facts. Its policies prevent self-review, approval
-reuse across revisions, and publication after reviewer authority is revoked.
+Follow the [tutorial](docs/tutorials.md) to add these checks to the [starting
+application](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing).
 
 ## Architecture
 
-```text
-Riley / Ana / Omar ── sign in ──→ Tutorial IdP
-         │
-         └── article and revision forms ──→ Next.js App Router
-                                                   │
-                                      Server Component / Action
-                                                   │
-                                                   ▼
-                                        Cedarling PDP
-                                              │        │
-                                            DENY     ALLOW
-                                                       │
-                                                       ▼
-                                          conditional SQLite effect
+```mermaid
+flowchart TD
+    accTitle: Server authorization for editorial changes
+    accDescr: A Next.js Server Action authenticates the caller and loads current facts. Cedarling evaluates them, then the service either rejects the change or rechecks the facts in a database transaction.
+    Form["Browser form"] --> Action["Next.js Server Action: authenticate and validate"]
+    Action --> Facts["Load actor, revision, approval and authority from SQLite"]
+    Facts --> PDP["Embedded Cedarling: unsigned evaluation"]
+    PDP --> Check["Editorial service enforces decision"]
+    Check -->|"DENY or failure"| Stop["No mutation"]
+    Check -->|"ALLOW"| Transaction["SQLite transaction: recheck authorized facts"]
+    Transaction -->|"Facts still match"| Save["Commit change"]
 ```
 
 ## Prerequisites
 
-- Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x, pnpm 10, and the project-local tutorial identity provider.
+- To run with Docker: Docker Desktop or Docker Engine with Compose.
+- For native development and checks: Node.js 24.21 or newer within 24.x and pnpm 10.
+
+Both startup paths include the project's tutorial identity provider.
 
 The commands work from PowerShell, macOS terminals, and Ubuntu shells.
 
@@ -55,8 +53,8 @@ pnpm run setup
 pnpm dev
 ```
 
-`pnpm dev` starts this project’s IdP and application together.
-Setup synchronizes the application listen port with its registered URL and
+`pnpm dev` starts this project's IdP and application together.
+Setup keeps the application port consistent with its registered URL and
 preserves your editorial data.
 
 `pnpm build` followed by `pnpm start` runs the compiled application stack and its project IdP.
@@ -65,12 +63,9 @@ Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
 
 ## Exercise
 
-The workflow demonstrates why an earlier editorial decision is not standing
-authority for later publication:
-
-- **Riley** — Author who drafts and submits articles but has no review authority.
-- **Ana** — Editor and publisher for the valid review and publication path.
-- **Omar** — Editor whose seeded authority can be revoked after approval.
+Riley is an author, Ana can review and publish, and Omar has revocable editor
+authority. All three can create articles in their tenant and edit their own
+drafts. Try these workflows:
 
 - As Riley, choose **New article**, enter a title and body, then submit it.
   Approval and rejection are disabled for its author. Sign in as Ana to approve
@@ -81,10 +76,8 @@ authority for later publication:
 - Approve **Partner announcement** as Omar, revoke his authority, then try to
   publish as Ana: publication is disabled because the approval is no longer valid.
 
-All three identities can create articles in their own tenant and edit their own
-drafts. Editor and publisher grants remain separate: no author can review their
-own content. Unavailable actions remain visible with a short explanation.
-Direct requests that bypass disabled buttons are still checked on the server.
+Unavailable actions stay visible but disabled, with a short explanation.
+The server also checks direct requests that bypass the buttons.
 
 Revoke Omar's authority with:
 
@@ -107,35 +100,19 @@ the database file or stopping the application.
 ## Authorization
 
 Readable schema and policies live in `policy-store/`. Setup, build, and tests
-use the shared builder to validate them and generate the ignored
-`.local/policy-store.cjar` archive. The server logs its version and SHA-256
-when loading it.
+use the shared builder to validate them and generate the ignored `.local/policy-store.cjar` archive. The server logs its version and SHA-256 when loading it.
 
-`src/server/authorization.ts` calls Cedarling's `authorizeUnsigned()` directly.
-The application authenticates the user through OIDC; it constructs Cedarling
-principals, resources, and context from trusted server data, not form fields.
-Server Components and Actions enforce the decisions. Before writing, SQLite
-checks that the authorized revision and authority evidence have not changed.
-`CreateArticle` targets the authenticated user's `Tenant`, before an article
-exists. The server supplies its tenant and author and atomically saves the
-article and first draft. Page-render decisions guide controls; each mutation
-reloads facts and requests a fresh decision.
+[`src/server/authorization.ts`](src/server/authorization.ts) evaluates current
+database facts with `authorizeUnsigned()` after OIDC authentication. Server
+Components and Actions enforce the results. Each mutation gets a fresh decision,
+then SQLite rechecks the authorized facts before committing. See the
+[server integration](docs/tutorials.md#add-cedarling-to-the-server) for request
+construction and transaction checks.
 
-`authorization.context` links the application `requestId`, actor, capability,
-and `preview` or `enforcement` phase to `cedarlingRequestId`. The following
-Cedarling JSON decision includes the full `diagnostics.reason` and `errors`.
-An empty reason on DENY means no permit matched, not necessarily an engine error.
-`editorial.action.completed` records a committed effect; `editorial.action.failed`
-records a controlled failure category. An ALLOW alone does not prove a write.
-Browser messages show readable outcomes without correlation IDs or policy diagnostics.
-Cedarling memory logs expire after
-five minutes; they are not a durable audit store. P4 uses the standard Next.js
-lifecycle, which does not guarantee an awaited Cedarling shutdown hook.
-
-Riley can also choose **New article** to create a tenant-scoped draft, then
-submit it through the same review workflow. Cedarling checks `CreateArticle`
-against the signed-in user's tenant before insertion; the Server Action also
-checks the session, CSRF token, and draft input.
+Server logs distinguish permission decisions from committed changes; browser
+messages show the outcome without policy diagnostics. The
+[log guide](docs/tutorials.md#read-the-decision-and-publication-logs) explains
+request correlation. Cedarling's five-minute memory logs are not a durable audit store.
 
 ## Commands
 
