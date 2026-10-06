@@ -2,32 +2,34 @@
 
 ![Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.](docs/assets/social-card.webp)
 
-P1 is a multi-tenant task manager showing how Cedarling centralizes task
-authorization inside a trusted Node.js API. Authentication, sessions, request
-integrity, validation, tenant-scoped lists, and optimistic concurrency remain
-application responsibilities.
+P1 is a multi-tenant task manager. Its Node.js API asks Cedarling before reading
+or changing a task. The browser evaluates the same policy release to hide
+unavailable controls; the server checks every protected request.
 
-The server enforces every protected task read and effect with Cedarling. The
-browser evaluates the same policy release to hide controls conservatively,
-while the server always makes the final decision.
+The application handles authentication, sessions, request integrity, validation,
+tenant-scoped lists, and optimistic concurrency. Follow the
+[tutorial](docs/tutorials.md) to add authorization to the [starting application](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p1-task-manager).
 
 ## Architecture
 
-```text
-Alex / Mina / Sam ── sign in ──→ Tutorial IdP
-        │
-        └── task request ──→ React UI → Node.js API (PEP)
-                                          │ principal + action + task + context
-                                          ▼
-                                     Cedarling PDP
-                                      │        │
-                                    DENY     ALLOW → Task service → SQLite
+```mermaid
+flowchart TD
+    accTitle: Task authorization in the completed application
+    accDescr: The API asks its embedded Cedarling instance before accessing tasks. Browser evaluation guides controls but cannot grant server permission.
+    IdP["Tutorial IdP"] -->|"Signed token in server session"| API["Fastify API: current user and task facts"]
+    UI["React task board"] -->|"Task request"| API
+    API --> PDP["Embedded Cedarling instance"]
+    PDP --> Check["API enforces decision"]
+    Check -->|"ALLOW"| Data["Read or write SQLite tasks"]
+    Check -->|"DENY or error"| Stop["No protected effect"]
+    API -->|"Safe facts, ceiling and policy archive"| Browser["Browser Cedarling: unsigned evaluation"]
+    Browser -->|"Available controls"| UI
 ```
 
 ## Prerequisites
 
-- Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x and pnpm 10.
+- To run with Docker: Docker Desktop or Docker Engine with Compose.
+- For native development and checks: Node.js 24.21 or newer within 24.x and pnpm 10.
 
 The commands work from PowerShell, macOS terminals, and Ubuntu shells.
 
@@ -56,24 +58,22 @@ with the registered application URL without resetting data.
 For compiled startup, run `pnpm run setup`, `pnpm --dir ../shared/identity-provider build`,
 and `pnpm build`. Keep `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js`
 running in another terminal, then run `pnpm start`.
-Setup, build, and development startup validate the readable `policy-store/` source and create the ignored
-`.local/policy-store.cjar` archive used by the Cedarling integration.
+Setup, build, and development startup validate the readable `policy-store/` source and create the ignored `.local/policy-store.cjar` archive used by the Cedarling integration.
 After editing policies, restart `pnpm dev` or rebuild before `pnpm start`.
 The policy store trusts only issuer `http://localhost:18001` and audience
 `http://localhost:17001/api`; setup and startup reject different values.
 
 ## Exercise
 
-The business workflow is a shared task board:
+Compare the task board using these accounts:
 
-- **Alex** — Tenant A contributor who works assigned tasks.
-- **Mina** — Tenant A owner who creates, assigns, edits, and deletes tasks.
-- **Sam** — Tenant B external user who must remain isolated from Tenant A.
+- Alex can view and edit his assigned Tenant A task, but cannot create one.
+- Mina can create tasks in Tenant A and manage tasks she owns.
+- Sam can view and edit his own Tenant B task, but cannot access Tenant A tasks.
 
-Compare their lists and mutations, including a direct task URL. The current
-policy permits Alex to view and edit assigned Tenant A work, gives Mina the
-owner actions in Tenant A, and isolates Sam's Tenant B work. Browser state
-cannot grant an operation that the server denies.
+Try the [direct API request](docs/tutorials.md#create-a-task-as-alex)
+as well as the visible controls. A hidden button alone does not prove that
+the server enforces permission.
 
 ## Commands
 
