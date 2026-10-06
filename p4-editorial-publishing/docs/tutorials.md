@@ -10,75 +10,82 @@ lastVerified: 2026-10-01T09:46:20Z
 
 # Secure Editorial Publishing with Cedarling
 
-<details>
-<summary>Project source and prerequisites</summary>
+Welcome! Our example is an editorial app where Riley writes articles and Ana
+reviews and publishes them. We'll use Cedarling to check permissions as an
+article moves from draft to review and publication.
 
-- [Complete P4 project](https://github.com/GluuFederation/cedarling-tutorials/tree/p4-editorial-publishing-v1.0.0/p4-editorial-publishing) and [starting checkpoint](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing).
-- Install Docker with Compose, or Node.js 24.21+ within 24.x and pnpm 10.17.1. The project supplies its own tutorial identity provider.
-- Local HTTP and the bundled IdP are for learning only. Production requires HTTPS and a configured OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/), Gluu, Auth0, or Okta.
-- I prepared these steps on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+What does an approval cover when the author changes the article afterward?
+Our editorial app accepts the old approval. It also lets an editor approve
+their own writing and accepts approvals from reviewers whose review permission has since been revoked.
+
+We'll start with self-approval and use Cedarling to close all three gaps:
+require a different reviewer, tie approval to the exact revision, and check
+that reviewer's current permission before publication. Existing tenant, author,
+and publisher restrictions will move into the same policy store. By the end,
+Riley and Ana will still be able to publish reviewed work together, with server
+checks on article creation, reads, edits, submission, review, and publication.
+
+## Build the integration or try the finished app
+
+- To build the integration, start with [Run the starting application](#run-the-starting-application), then add the policies and server checks.
+- To try the finished app, run the [complete tagged project](https://github.com/GluuFederation/cedarling-tutorials/tree/p4-editorial-publishing-v1.0.1/p4-editorial-publishing) using its README, then go to [Check approvals and publication](#check-approvals-and-publication). This version already uses Cedarling.
+
+<details>
+<summary>What you'll need</summary>
+
+- Git, Node.js 24.21+ within 24.x, and pnpm 10.17.1 for the coding steps. The project supplies its own tutorial identity provider (IdP).
+- Docker with Compose is optional for running the starting or finished application. Use native Node.js for the coding steps.
+- Familiarity with TypeScript, Next.js Server Actions, sessions, and basic HTTP requests.
 - New to Cedarling? [Read the short introduction](https://cedarling.dev/learn/what-is-cedarling) when you need it.
-- Keep the official [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy for the policy-store steps.
+- Keep the [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy while editing policies.
 
 </details>
 
-Paths are relative to `p4-editorial-publishing/` unless stated otherwise. Use
-fresh synthetic records for each exercise so earlier edits do not change its
-expected result.
+Copy whole files from GitHub's raw-file view into your baseline checkout; don't
+switch to the finished tag. The short examples aren't complete replacements.
+Create missing parent directories. Paths and commands are relative to
+`p4-editorial-publishing/`; repository-level `shared/` files go one directory above it.
 
-## When is an earlier approval still valid?
+## Meet the authors and editors
 
 ![Riley writes articles, Ana reviews and publishes, and Omar's editorial authority can be revoked.](./assets/meet-the-users-v2.webp)
 
-_The author, reviewer, and revocable editor exercise different editorial decisions._
-
-An editor approves a draft. The author changes it. A publisher clicks Publish.
-Should the earlier approval cover the new words?
-
-We'll test that question on a real revision, then tie permission to the content
-and authority that still exist when Publish is clicked.
+_Riley writes; Ana reviews and publishes. Omar lets us test what happens when a reviewer loses permission._
 
 P4 is a small Next.js App Router application for creating articles,
-reviewing immutable revisions, and publishing approved content. We will use
-Cedarling to make permission depend on the exact revision and current authority,
-not merely on whether an approval once existed.
+reviewing fixed versions of their content, and publishing approved work.
 
-- **Riley** authors and submits articles, but has no editorial review authority.
-- **Ana** can review other authors' work and publish eligible revisions.
-- **Omar** can review work until his editor authority is revoked.
+- **Riley** writes and submits articles, but has no permission to review them.
+- **Ana** can review other authors' work and publish approved revisions.
+- **Omar** can review work until his permission is revoked.
 
-All three can create articles in their tenant. Authorship, editorial authority,
-and publication authority are separate facts. Being an editor does not allow
-someone to approve their own content.
+All three can create articles in their tenant. Writing, reviewing, and publishing
+require separate permissions. Editors cannot approve their own content.
 
-```text
-Browser form --> Next.js Server Action (PEP)
-                          |
-                  authenticate + validate
-                          |
-                  load current SQLite facts
-                  actor / revision / approval / authority
-                          |
-                  embedded Cedarling PDP <-- policy store
-                          |
-                DENY or failure --> no mutation
-                          |
-                        ALLOW
-                          v
-                  SQLite transaction
-                  recheck authorized facts --> commit effect
+```mermaid
+flowchart TD
+    accTitle: Server authorization for editorial changes
+    accDescr: A Next.js Server Action authenticates the caller and loads current facts. Cedarling evaluates them, then the service either rejects the change or rechecks the facts in a database transaction.
+    Form["Browser form"] --> Action["Next.js Server Action: authenticate and validate"]
+    Action --> Facts["Load actor, revision, approval and authority from SQLite"]
+    Facts --> PDP["Embedded Cedarling: unsigned evaluation"]
+    PDP --> Check["Editorial service enforces decision"]
+    Check -->|"DENY or failure"| Stop["No mutation"]
+    Check -->|"ALLOW"| Transaction["SQLite transaction: recheck authorized facts"]
+    Transaction -->|"Facts still match"| Save["Commit change"]
 ```
 
-Cedarling runs on the server using `authorizeUnsigned()`. “Unsigned” describes
-the authorization request, not an unauthenticated user. OIDC authenticates the
-session first; the server constructs the principal and facts from trusted state.
-The browser receives guidance, not authority over publication.
+Cedarling runs on the server using `authorizeUnsigned()`. The bundled Node.js
+`oidc-provider` authenticates the user first. The server then loads the current
+user, revision, and authority records from SQLite for Cedarling to evaluate.
+"Unsigned" describes this authorization request; it does not skip sign-in.
+The browser uses the server's decisions to enable or disable controls.
 
-## Observe the unsafe workflow first
+## Try the workflow before adding Cedarling
 
 ![Before authorization, an earlier approval can be reused after the article changes, and self-approval is possible.](./assets/missing-authorization-v2.webp)
 
-_The baseline lacks a decision tied to independent approval of the current revision._
+_The starting app does not require a different person to approve the current revision._
 
 ### Run the starting application
 
@@ -98,8 +105,7 @@ Select Riley; the development IdP usually prefills `riley`, so enter it only
 if the field is empty. Use a non-empty password such as `cedarling-is-awesome` on the
 development IdP, and approve access.
 
-For native startup instead, use Node.js 24.21 or newer within 24.x and pnpm
-10.17.1, then run from the project directory:
+For native startup, run these commands from the project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
@@ -112,12 +118,12 @@ pnpm dev
 This starts the IdP and Next.js together. Do not run native and Docker instances
 on the same ports.
 
-### Show self-approval and stale approval
+### Approve your own work, then reuse an old approval
 
 As Riley, open **Launch brief**, select **Submit for review**, then **Approve
 revision**. The baseline reports that the exact revision was approved, despite
-Riley being its author without review authority. Authentication and the workflow
-state check succeeded; the missing condition is independent, authorized review.
+Riley being its author without permission to review. Sign-in and workflow
+checks passed; the app failed to require a different, authorized reviewer.
 
 Two further exercises show why publication needs its own decision:
 
@@ -139,19 +145,20 @@ pnpm admin revoke-omar
 docker compose exec cedarpress node --env-file=/run/config/app.env scripts/admin.ts revoke-omar
 ```
 
-Capture the author/reviewer, revision evidence, and published outcome. The baseline
-`e2e/editorial-gaps.e2e.ts` records these same gaps. Use separate seeded articles
-for each exercise. Stop the baseline before integrating, using `Ctrl+C` and,
-for Docker, `docker compose down` without removing its volume.
+Capture the reviewer, revision details, and publication result.
+Use a separate sample article for each exercise. Stop the baseline
+with `Ctrl+C` before editing; for Docker, also run `docker compose down` without
+removing its volume. If you started with Docker, install the native dependencies
+using the commands above before the coding steps.
 
-## Prepare the existing editorial workflow for authorization
+## Where should we check permission?
 
-No new article feature needs building before Cedarling. The starting application
-already has the New article form, authenticated Server Actions, revision and
-approval records, CSRF checks, and database version guards. Its service calls a
-baseline authorization gateway before each effect, but that gateway still
-permits publication from the presence of an approval rather than evidence for
-the current revision:[^3]
+Open the baseline's
+[`src/server/service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing/src/server/service.ts)
+and find `publish()`. It calls the authorization function before writing to the
+database. In
+[`src/server/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing/src/server/authorization.ts),
+that check only asks whether the user may publish and an approval exists:
 
 ```ts
 // src/server/authorization.ts (starting checkpoint)
@@ -159,17 +166,17 @@ case "publication.publish":
   return fact("publisherAuthorityCurrent") && fact("approvalPresent");
 ```
 
-Keep the existing workflow and write integrity. Replace this incomplete
-decision at the service boundary; do not make the button or a historical
-approval the authority for a new publication.
+Nothing here checks which revision was approved or whether its reviewer still
+has permission to review. We'll replace this check with Cedarling. The existing New article
+form, authentication, CSRF checks, and database version guards stay in place.
 
-## Model permission for exact content
+## Decide who can review and publish
 
 ![Publication depends on the current revision digest, independent approval, and current editorial authority.](./assets/authorization-model-v2.webp)
 
-_A publish decision needs current content, an independent review, and current authority._
+_The current revision needs approval from a different person who still has review permission._
 
-### Answer the policy-store questions
+### Create the policy store
 
 Create the readable [directory-based store](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
 
@@ -181,50 +188,56 @@ policy-store/
     editorial.cedar
 ```
 
-Create these three files from the completed policy store.[^4]
+Create the complete policy-store files from the pinned version:
+
+- [`policy-store/metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/metadata.json)
+- [`policy-store/schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/schema.cedarschema)
+- [`policy-store/policies/editorial.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar)
+
 Use the store's metadata and version `1.0.0`. Identity comes from the application's
-OIDC session, so this policy store needs no trusted-issuer mapping. Principal,
-revision, and authority facts arrive with each request; no default entities,
+verified OIDC session and current database user, so Cedarling needs no
+trusted-issuer mapping for these unsigned requests. Principal, revision, and
+permission records arrive with each request; no default entities,
 templates, or custom issuers are needed.
 
-| Design question                         | P4 answer                                                                                             |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Who acts?                               | `P4EditorialPublishing::Principal`: database user ID and tenant                                       |
-| Where does a new article belong?        | `Tenant`, selected from the authenticated user                                                        |
-| What may be read?                       | An `Article` in that tenant                                                                           |
-| What does review or publication target? | One `Revision`, with its ID, tenant, author, version, digest, and state                               |
-| What makes review legitimate?           | Current editor authority and a different author                                                       |
-| What makes publication legitimate?      | Current publisher authority plus exact approval evidence from a still-authorized independent reviewer |
-| Which facts change per request?         | Revision state, approval evidence, and current authority                                              |
-| What remains outside policy?            | Input bounds, CSRF, state transitions, immutable content, and atomic writes                           |
+| Design question                         | P4 answer                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Who acts?                               | `P4EditorialPublishing::Principal`: database user ID and tenant                                   |
+| Where does a new article belong?        | `Tenant`, selected from the authenticated user                                                    |
+| What may be read?                       | An `Article` in that tenant                                                                       |
+| What does review or publication target? | One `Revision`, with its ID, tenant, author, version, digest, and state                           |
+| Who may review?                         | A current editor who is not the author                                                            |
+| Who may publish?                        | A current publisher with exact approval from a different reviewer who still has review permission |
+| Which facts change per request?         | Revision state, approval evidence, and current authority                                          |
+| What remains outside policy?            | Input limits, CSRF, valid state changes, fixed content, and all-or-nothing writes                 |
 
-The digest[^1] binds evidence to normalized content. A digest is not permission:
-it helps compare the content that was reviewed with the content being published.
-Keep article version and revision version distinct. The former protects the
-workspace against stale mutations; the latter identifies the approved revision.
+The digest[^1] is a content fingerprint: it lets us compare what was reviewed
+with what is being published. Permission is checked separately.
+Keep article version and revision version separate. The article version stops
+outdated writes; the revision version identifies the approved content.
 
-### Define the request boundaries
+### Choose an action and resource for each operation
 
-All requests use the current server-resolved principal. All action identifiers
-have the form `P4EditorialPublishing::Action::"CreateArticle"`.
+Each request uses the current user loaded by the server and an action
+such as `P4EditorialPublishing::Action::"CreateArticle"`.
 
-| Capability            | Action            | Resource                 | Additional context                                | Effect waiting for ALLOW              |
-| --------------------- | ----------------- | ------------------------ | ------------------------------------------------- | ------------------------------------- |
-| `article.create`      | `CreateArticle`   | Authenticated tenant     | Empty                                             | Insert article and first draft        |
-| `article.read`        | `ReadArticle`     | Current article          | Empty                                             | Return article and revision evidence  |
-| `revision.edit`       | `EditRevision`    | Current revision         | Empty                                             | Save owned draft or create next draft |
-| `revision.submit`     | `SubmitRevision`  | Current revision         | Empty                                             | Submit owned content for review       |
-| `revision.approve`    | `ApproveRevision` | Exact submitted revision | Current editor authority                          | Record independent approval           |
-| `revision.reject`     | `RejectRevision`  | Exact submitted revision | Current editor authority                          | Record independent rejection          |
-| `publication.publish` | `PublishRevision` | Exact current revision   | Current publisher authority and approval evidence | Publish that revision                 |
+| Capability            | Action                                                                                                                                                                                                             | Resource                 | Additional context                                | Effect waiting for ALLOW              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------- | ------------------------------------- |
+| `article.create`      | [`CreateArticle`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar#L51 "create-tenant-article")             | Authenticated tenant     | Empty                                             | Insert article and first draft        |
+| `article.read`        | [`ReadArticle`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar#L2 "read-tenant-article")                  | Current article          | Empty                                             | Return article and revision evidence  |
+| `revision.edit`       | [`EditRevision`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar#L10 "author-revision")                    | Current revision         | Empty                                             | Save owned draft or create next draft |
+| `revision.submit`     | [`SubmitRevision`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar#L10 "author-revision")                  | Current revision         | Empty                                             | Submit owned content for review       |
+| `revision.approve`    | [`ApproveRevision`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar#L21 "independent-review")              | Exact submitted revision | Current editor authority                          | Record independent approval           |
+| `revision.reject`     | [`RejectRevision`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar#L21 "independent-review")               | Exact submitted revision | Current editor authority                          | Record independent rejection          |
+| `publication.publish` | [`PublishRevision`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/policy-store/policies/editorial.cedar#L34 "publish-exact-approved-revision") | Exact current revision   | Current publisher authority and approval evidence | Publish that revision                 |
 
 Creating an article targets the tenant because the article does not yet exist.
 Its author and tenant are set by the server, not accepted from the form.
 
-### Write independent review and exact-publication rules
+### Require an independent reviewer and approval of the current revision
 
-In `policies/editorial.cedar`, independent review requires both authority and
-separation from the author:
+In `policies/editorial.cedar`, a reviewer must have permission and must not be
+the author:
 
 ```cedar
 // policy-store/policies/editorial.cedar
@@ -241,7 +254,12 @@ permit (
 };
 ```
 
-Publication has a separate permit:
+For Riley's submitted article, Riley fails two conditions: there is no current
+permission to review, and `principal.id` equals `resource.author_id`. Ana belongs to
+the same tenant, has permission to review, and is not the author, so she can review
+that submitted revision.
+
+Publication needs another rule:
 
 ```cedar
 // policy-store/policies/editorial.cedar
@@ -263,19 +281,24 @@ permit (
 };
 ```
 
+If Ana publishes content approved by Omar, the approval must match the current
+revision's ID, version, and digest. Revoking Omar's editor authority makes
+`context.approval.reviewer_authority_current` false even when the content hasn't
+changed. That approval can no longer permit publication.
+
 The same file contains `read-tenant-article`, `author-revision`, and
 `create-tenant-article`: tenant members read their articles, authors edit/submit
 their own revisions, and tenant members create articles in their tenant.
-No matching permit means DENY. State and write integrity remain enforced by SQLite
-even after an authorization succeeds.
+No matching permit means DENY. SQLite still checks workflow state and guards
+against conflicting writes after authorization succeeds.
 
-## Integrate Cedarling with the server-owned workflow
+## Add Cedarling to the server
 
 ![The Next.js Server Action enforces an embedded Cedarling decision and rechecks state before committing a change.](./assets/enforcement-v2.webp)
 
-_The server checks authorization and rechecks mutable facts before committing a change._
+_The server checks permission, then checks that the facts still match before saving a change._
 
-### Prepare the archive and initialize the SDK
+### Build the archive and load Cedarling
 
 From P4, install exact versions:
 
@@ -284,20 +307,25 @@ pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0
 ```
 
-Add the integration's repository-level `shared/policy-store.mjs` and
-`shared/policy-store.d.mts`. Run the shared builder to create the archive:
+Save the repository-level archive builder and its declaration:
+
+- [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/shared/policy-store.mjs)
+- [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/shared/policy-store.d.mts)
+
+Run the shared builder to create the archive:
 
 ```bash
 node ../shared/policy-store.mjs
 ```
 
-It validates source and produces ignored `.local/policy-store.cjar`. Use the same
-artifact preparation in Docker; keep the source directory readable in Git.
+The command must finish without validation errors and create `.local/policy-store.cjar`.
+Keep the readable source directory in Git; we'll include the generated archive
+in the Docker image later.
 
-Replace the permissive implementation in `src/server/authorization.ts` with
-direct [SDK calls](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468).
-Initialize once through the existing server runtime. This excerpt assumes
-`archivePath` is the server-resolved path to the generated archive:
+We'll replace `src/server/authorization.ts` using the complete file in the next
+step. It initializes [Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468)
+once through the server runtime. Here, `archivePath` resolves to the generated
+`.local/policy-store.cjar`:
 
 ```ts
 // src/server/authorization.ts
@@ -316,18 +344,30 @@ const cedarling = await initFromArchiveBytes(
 );
 ```
 
-Log the store version and SHA-256 at initialization. The module exposes
-`close: () => cedarling.shutDown()` for controlled lifecycle owners such as tests.
+The complete module logs the store version and SHA-256 at startup. It
+also returns `close: () => cedarling.shutDown()` for callers, such as tests,
+that explicitly stop the runtime.
 
-### Construct the publication request from current records
+### Pass the current revision and approval to Cedarling
 
-`src/server/service.ts` parses form candidates, loads the current article and
-revision, loads the latest approval, and loads the publisher's current authority.
-The authorization module maps those trusted records into Cedarling's request.
-The following expanded publication request illustrates what that function
-constructs from `principal`, `article`, `approval`, and
-`publisherAuthorityCurrent`; the completed source uses a shared capability
-mapping and a bounded failure handler:
+Save these complete files together to connect the permission checks:
+
+- [`src/server/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/src/server/authorization.ts)
+- [`src/server/models.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/src/server/models.ts)
+- [`src/server/errors.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/src/server/errors.ts)
+- [`src/server/database.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/src/server/database.ts)
+- [`src/server/service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/src/server/service.ts)
+- [`src/server/runtime.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/src/server/runtime.ts)
+- [`app/actions.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/app/actions.ts)
+- [`app/action-button.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/app/action-button.tsx)
+- [`app/articles/[articleId]/page.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/app/articles/[articleId]/page.tsx)
+- [`next.config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/next.config.ts)
+
+`src/server/service.ts` validates form input and loads the current article,
+revision, latest approval, and publisher permission. The authorization module
+turns these into a Cedarling request using `principal`, `article`, `approval`, and
+`publisherAuthorityCurrent`. The full file shares this mapping across operations
+and handles failures:
 
 ```ts
 // src/server/authorization.ts
@@ -377,21 +417,21 @@ if (result.response.diagnostics.errors.length > 0) throw unavailable();
 return result.decision === true;
 ```
 
-`authorizeUnsigned()` expects a JSON string; `JSON.stringify()` serializes the
-current principal, resource, and context for that Cedarling call.[^2] The
+`authorizeUnsigned()` expects a JSON string; `JSON.stringify()` converts the
+current principal, resource, and context to that format.[^2] The
 formatted log call makes nested reasons readable in this local exercise.
 
 `unavailable()` is the existing application error from `src/server/errors.ts`.
-The surrounding catch maps SDK failures to that bounded error without printing
-raw request data. False becomes `FORBIDDEN` in the service. Neither path writes.
+The catch handler maps Cedarling failures to that error without printing raw
+request data. A false decision becomes `FORBIDDEN` in the service.
 
-For other capabilities, map the corresponding resource and context from the
-request table. Use current database authority, never a form field claiming that
-an editor or approval is still valid.
+The other capabilities use the resources and context in the request table.
+Permission always comes from the database, never a form field claiming that an
+editor or approval is still valid.
 
-### Keep ALLOW tied to the committed effect
+### Check permission before saving the publication
 
-In the publication service, the protected sequence is:
+In `publish()`, `this.allow()` must succeed before `this.database.publish()` runs:
 
 ```ts
 // src/server/service.ts
@@ -418,33 +458,52 @@ this.database.publish(
 );
 ```
 
-Here `article` was already resolved at the submitted expected article version.
-Inside the write transaction, recheck the article and authority/approval snapshots.
-If content or authority changed while awaiting Cedarling, reject with
-`STATE_CONFLICT`. Do not turn an ALLOW for earlier facts into permission for a
-new state. Apply the same principle to draft, submit, and review operations.
+`this.allow()` throws `forbidden()` when authorization returns false. A failed
+evaluation also throws, so neither outcome reaches the database write.
 
-Keep authentication, same-origin and CSRF verification inside the Server Action
-path in `app/actions.ts`. `"use server"` is not an access-control rule: these
-functions are reachable by network requests.
+Here `article` has already been loaded at the expected article version.
+Inside the write transaction, the database rechecks the article, approval, and
+permission records. A change while waiting for Cedarling causes `STATE_CONFLICT`
+instead of an outdated write. Draft, submit, and review operations also check
+whether another request changed the records.
 
-Apply the same pattern to creation: the **New article** form at
-`app/articles/new/` calls `createArticle` and `EditorialService.create()`.
-Enforce `CreateArticle` against the session tenant before saving the article
-and first draft. The author and tenant come from the authenticated session.
+The Server Actions in `app/actions.ts` keep authentication, same-origin and
+CSRF verification. `"use server"` does not restrict who may call an action;
+these functions are reachable by network requests.
 
-Page rendering requests permission previews for controls. Keep denied controls
-disabled with a short explanation; do not duplicate policy as client role checks.
-Every actual action reloads facts and authorizes again. OAuth tokens and raw
-policy diagnostics stay on the server. Successful forms show readable outcomes,
-not internal request IDs.[^5]
+Page rendering uses server permission previews to disable denied controls with
+a short explanation. Each submitted action reloads facts and authorizes again.
+OAuth tokens and raw policy diagnostics stay on the server; successful forms
+show readable outcomes without internal request IDs.
 
-## Finish the runnable editorial application
+## Finish setup and restart the app
 
-Make the same archive available to development, production builds, and Docker.
-`scripts/setup.ts` builds it; the build script runs the shared builder before
-Next.js compilation. Docker includes the archive in the completed application
-image.[^6]
+Save the runtime preparation and packaging files:
+
+- [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/scripts/setup.ts)
+- [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/Dockerfile)
+- [`app/auth/callback/route.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/app/auth/callback/route.ts)
+- [`app/error.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/app/error.tsx)
+- [`app/styles.css`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/app/styles.css)
+
+Apply the `build` entry shown below to your existing
+[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.1/p4-editorial-publishing/package.json), keeping
+the other dependencies and scripts.
+
+Replace the `exclude` list in `tsconfig.json` with the following. The baseline's
+test files still reference the authorization gateway we replaced, so exclude
+them from this runtime build while keeping application type checking enabled.
+We'll use the finished checkout for the current test suite:
+
+```json
+{
+  "exclude": ["node_modules", "test", "e2e"]
+}
+```
+
+`scripts/setup.ts` builds the archive for development. The build script runs
+the shared builder before Next.js compilation, and the Dockerfile includes
+the archive in the application image:
 
 ```json
 {
@@ -454,23 +513,54 @@ image.[^6]
 }
 ```
 
-The server runtime also needs `serverExternalPackages` for
-`@janssenproject/cedarling_wasm` in `next.config.ts`; this is packaging for the
-server-only WASM dependency, not a browser PDP.[^7] The existing New article
-path remains one of the seven capabilities to enforce, not a separate feature
-to recreate.
+The `next.config.ts` copied earlier sets `serverExternalPackages` for
+`@janssenproject/cedarling_wasm`. This keeps the WASM dependency on the server;
+P4 does not run Cedarling in the browser.
 
-## Prove that approval is evidence, not permanent permission
+Stop the baseline development stack completely before restarting; the
+server runtime is cached and must not keep its old authorization implementation.
+Run:
+
+```bash
+pnpm run setup
+pnpm build
+pnpm dev
+```
+
+The app is available at `http://localhost:17004`. We'll check
+that Riley cannot self-approve and Ana can still review and publish his work.
+
+## Check approvals and publication
 
 ![Self-approval, stale revision approval, and revoked reviewer authority are denied; a valid current approval is allowed.](./assets/expected-outcomes-v2.webp)
 
-_The same article can become ineligible to publish when its revision or reviewer authority changes._
+_Changing an article's revision or its reviewer's permission can block publication._
 
-### Repeat the original attempt by bypassing the button
+Reset the exercise database first: restarting does not undo the article changes
+or restore Omar's revoked permission. Reset clears editorial records, sessions,
+and pending sign-ins, then restores the sample articles and Omar's review
+permission. Do not reset data you want to keep.
+
+In another terminal, from `p4-editorial-publishing/`, run the command matching
+your startup method:
+
+```bash
+# Native
+pnpm reset
+```
+
+```bash
+# Docker
+docker compose exec cedarpress node --env-file=/run/config/app.env scripts/reset.ts
+```
+
+Sign in again as Riley before continuing.
+
+### Try self-approval without the button restriction
 
 Use a fresh article for this exercise. As Riley, create an article, submit its
 draft for review, and confirm that its current revision says **submitted**.
-The **Approve revision** button is disabled. To prove the server boundary,
+The **Approve revision** button is disabled. To check the server also denies approval,
 open developer tools on that article's local page and run:
 
 ```js
@@ -486,15 +576,18 @@ Expect “This action is not allowed.” Reload: the revision remains submitted
 and no approval was recorded. This modifies only the local control and submits
 the real framework form; it does not grant authority.
 
-For a direct HTTP proof, capture that actual Server Action POST in the Network
+For a direct HTTP check, capture that Server Action POST in the Network
 panel and replay it using the same authenticated local session. Preserve its
 current action header, body, and CSRF value. Do not invent or hard-code a Next.js
-action ID, and do not publish the captured credentials. The automated browser
-check performs this replay. The transport can return HTTP 200 with an
-`x-action-redirect` containing `error-forbidden`; judge the application outcome
-and unchanged record, not the transport status alone.
+action ID, and do not publish the captured credentials. The response can return
+HTTP 200 with an `x-action-redirect` containing `error-forbidden`; judge the
+application outcome and unchanged record, not the HTTP status alone.
 
-### Complete legitimate work, then invalidate its evidence
+### Publish reviewed work, then change its content or authority
+
+If Omar's authority is revoked after approval but the content stays unchanged,
+can Ana still publish it? Check the publication policy, then compare your
+answer with the revocation row below.
 
 | Exercise                                                         | Expected integrated outcome                                  |
 | ---------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -507,34 +600,31 @@ and unchanged record, not the transport status alone.
 
 Use **Customer migration guide** for the new-revision scenario and **Partner
 announcement** for revocation, following the same steps as before integration.
-Use **Editorial handbook** as Ana's valid approval/publication control, or finish
+Use **Editorial handbook** to check Ana can approve and publish, or finish
 the article Riley created during this exercise.
 
-For reproducible fresh data, use `pnpm reset` in native mode or
-`docker compose exec cedarpress node --env-file=/run/config/app.env scripts/reset.ts`
-in Docker. Reset deliberately clears editorial records, sessions, and pending
-sign-ins in this exercise database; sign in again afterward.
-
-### Read decisions separately from completed actions
+### Read the decision and publication logs
 
 `authorization.context` links the application `requestId`, actor, capability,
-and `preview` or `enforcement` phase to a native `cedarlingRequestId`. Native JSON
+and `preview` or `enforcement` phase to the Cedarling request ID in `cedarlingRequestId`. Cedarling's JSON
 prints all policy reasons and errors. An allowed publication cites
 `publish-exact-approved-revision`.
 
-A self-approval DENY can have empty `diagnostics.reason` and `errors`: no permit
-matched, rather than the engine malfunctioning. Explain it using the trusted
-author and editor facts. A preview ALLOW may be followed by enforcement DENY
-after revocation; the preview was guidance for an earlier state.
+A self-approval DENY can have empty `diagnostics.reason` and `errors` because no
+permit matched. Use the author and editor facts to explain the denial. A preview
+ALLOW may be followed by enforcement DENY after revocation; the preview was
+guidance for an earlier state.
 
-`editorial.action.completed` appears after the effect commits.
-`editorial.action.failed` identifies a controlled failure. Pair these with the
-revision evidence and logs; an ALLOW alone does not establish publication.
-Memory logs expire after five minutes and are not a durable audit store.
+`editorial.action.completed` appears after the change is saved.
+`editorial.action.failed` records a handled failure. Compare these logs with the
+revision details; an ALLOW alone does not prove publication.
+Logs kept in memory expire after five minutes, so they are not a lasting audit record.
 
-### Check stale state and failures
+### Check concurrent changes and unavailable decisions
 
-Stop the learner app to free ports 17004 and 18004 before running:
+The coding steps update runtime files, not the baseline's historical tests.
+For the full automated checks, use a separate checkout of the [finished tag](https://github.com/GluuFederation/cedarling-tutorials/tree/p4-editorial-publishing-v1.0.1/p4-editorial-publishing) and install its locked project and shared IdP dependencies.
+Stop your learner stack to free ports 17004 and 18004, then run:
 
 ```bash
 pnpm exec playwright install chromium
@@ -545,53 +635,46 @@ On Linux, use `pnpm exec playwright install --with-deps chromium` if browser
 libraries are missing. The check includes formatting, lint, types, tests, and
 a production build/browser workflow with disposable data.
 
-`test/authorization.test.ts` evaluates the real policies. `test/service.test.ts`
-checks self-review, changed revisions, revoked authority, and unavailable
-Cedarling without effects. It also introduces concurrent changes while decisions
-are pending. `e2e/editorial-authorization.e2e.ts` uses the real IdP and browser,
-including button tampering and direct Server Action replay.
+The checks evaluate real policies and verify that self-review, stale approvals,
+revoked authority, and unavailable Cedarling cannot change protected records.
+They also change facts while decisions are pending and repeat button tampering
+and direct Server Action requests through the real IdP and browser.
 
-Record one failed self-approval before and after integration, and one legitimate
-publication showing the exact approved revision. Keep tokens, cookies, and CSRF
-values out of recordings.
+Record the same self-approval attempt before and after integration: it succeeds
+in the baseline and is denied afterward. Also record an allowed publication
+of the exact approved revision. Keep tokens, cookies, and CSRF values out of
+recordings.
 
-## Apply the pattern to other approval workflows
+## Use the same checks in your own approval workflow
 
 ![Use current revision, independent approval, and current authority to decide, then recheck before committing.](./assets/reusable-pattern-v2.webp)
 
 _Bind approval to the exact content being published, then enforce the current decision._
 
-Treat approval as evidence about a specific resource version. Before the next
-protected effect, check both that evidence and the authority that still exists.
-Then commit only if the facts authorized by Cedarling remain current.
+Treat approval as a record for a specific version of the content. Before using
+it, check that it still matches and that the reviewer still has permission.
+Save the change only if the facts checked by Cedarling remain current.
 
 Follow `src/server/authorization.ts`, `src/server/service.ts`,
 `src/server/database.ts`, `app/actions.ts`, `policy-store/`, and the tests in the
-[completed P4 project](https://github.com/GluuFederation/cedarling-tutorials/tree/p4-editorial-publishing-v1.0.0/p4-editorial-publishing).
-
-Production needs a real identity provider, governed authority changes, secure
-transport, protected sessions, and durable audit retention. Policy decisions do
-not replace transaction integrity or the workflow's content-version rules.
+[completed P4 project](https://github.com/GluuFederation/cedarling-tutorials/tree/p4-editorial-publishing-v1.0.1/p4-editorial-publishing).
 
 For a production stack, consider Agama Lab Policy Designer for policy authoring,
-Jans Auth for token issuance, and Lock Server for centralized decision logs.
+Jans Auth for issuing tokens, and Lock Server for centralized decision logs.
 See [Cedarling production solutions](https://cedarling.dev/solutions).
 
-Next, P5 applies current-fact authorization to a different form of disclosure:
-fields, aggregates, and CSV exports that must not inherit broad page access.
+In P5, we'll check access to individual fields, aggregates, and CSV exports
+instead of granting it to everyone who can open a page.
 
----
+<details>
+<summary>Warning: This setup is for local practice</summary>
+
+- Local HTTP and the bundled IdP are for learning only. Production requires HTTPS and a configured OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/), Gluu, Auth0, or Okta.
+- Control who can change editorial permissions, protect sessions, and store audit logs. Keep database transaction and content-version checks alongside policy decisions.
+- These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+
+</details>
 
 [^1]: A digest is a reproducible fingerprint of the normalized revision content. P4 compares it with the approval's digest, while current reviewer authority and revision state remain separate requirements.
 
-[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468) accepts a JSON-string request. Serialization does not authenticate the values; P4 loads them from its trusted server state.
-
-[^3]: Starting-checkpoint source: [`src/server/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing/src/server/authorization.ts) defines the baseline gateway; [`src/server/service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing/src/server/service.ts) calls it before service effects.
-
-[^4]: Complete tagged store: [`metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/policy-store/metadata.json), [`schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/policy-store/schema.cedarschema), and [`editorial.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/policy-store/policies/editorial.cedar).
-
-[^5]: Complete enforcement source: [`src/server/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/src/server/authorization.ts), [`src/server/service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/src/server/service.ts), [`src/server/database.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/src/server/database.ts), and [`app/actions.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/app/actions.ts).
-
-[^6]: Archive build and distribution: [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/shared/policy-store.mjs), [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/scripts/setup.ts), [`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/package.json), and [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/Dockerfile).
-
-[^7]: Completed [`next.config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p4-editorial-publishing-v1.0.0/p4-editorial-publishing/next.config.ts) keeps the Cedarling WASM package server-side.
+[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468) accepts a JSON-string request. Converting to JSON does not verify the values; P4 loads them from its trusted server state.
