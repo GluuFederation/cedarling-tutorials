@@ -5,7 +5,7 @@ summary: Authorize fields, tenant-bound queries, aggregate disclosure, and CSV e
 order: 60
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Hono API checks query plans with embedded Cedarling before releasing rows, aggregates, or CSV exports.
-lastVerified: 2026-10-01T09:46:20Z
+lastVerified: 2026-10-07T19:56:00Z
 ---
 
 # Protect Sensitive Data Exports with Cedarling
@@ -28,7 +28,11 @@ Leah's allowed finance reports and exports should keep working.
 ## Build the integration or try the finished app
 
 - To build the integration, start with [Run the starting application](#run-the-starting-application), then add the policies and server checks.
-- To try the finished app, run the [complete tagged project](https://github.com/GluuFederation/cedarling-tutorials/tree/p5-dataguard-v1.0.1/p5-dataguard) using its README, then go to [Check queries and exports for each user](#check-queries-and-exports-for-each-user). This version already uses Cedarling.
+- To try the finished app, run the [finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p5-dataguard) using its README, then go to [Check queries and exports for each user](#check-queries-and-exports-for-each-user). This version already uses Cedarling.
+
+If you're building from the starting project, open each **Required step** section
+and complete its instructions before continuing. These sections contain the files
+and changes we'll need.
 
 <details>
 <summary>What you'll need</summary>
@@ -41,9 +45,10 @@ Leah's allowed finance reports and exports should keep working.
 
 </details>
 
-Copy whole files from GitHub's raw-file view into your baseline checkout; don't
-switch to the finished tag. The short examples aren't complete replacements.
-Create missing parent directories. Paths and commands are relative to
+At each copying step, open the linked file on GitHub, choose **Raw**, and copy
+its full contents into the stated destination in your baseline checkout. The
+short examples explain the parts we'll focus on. Create missing parent
+directories first. Paths and commands are relative to
 `p5-dataguard/`; repository-level `shared/` files go one directory above it.
 
 ## Who should see which data?
@@ -66,19 +71,6 @@ rows or aggregates[^1], such as a count of employees by department.
 An aggregate must include at least five records in every returned group.
 This minimum applies even when the purpose and role are allowed.
 
-```mermaid
-flowchart TD
-    accTitle: Query and export authorization in the completed API
-    accDescr: Each query or export operation loads current facts and asks server-side Cedarling. The API enforces the decision and rechecks facts before releasing data or changing an export.
-    Query["React: query or create export"] --> Plan["API: validate plan and load current analyst, fields and group counts"]
-    Export["Download or revoke request"] --> Saved["API: reload analyst and saved export"]
-    Plan --> PDP["Embedded Cedarling: unsigned evaluation"]
-    Saved --> PDP
-    PDP --> Check["API enforces decision"]
-    Check -->|"DENY or failure"| Stop["No protected result or change"]
-    Check -->|"ALLOW"| Effect["Recheck facts and perform the authorized operation"]
-```
-
 Cedarling runs only on the server, using `authorizeUnsigned()`. The bundled
 Node.js `oidc-provider` authenticates the user first; SQLite supplies the
 current analyst's role and tenant. "Unsigned" describes the authorization
@@ -87,9 +79,8 @@ permissions.
 
 ## Request salary data as a support analyst
 
-![Amina sends a same-origin salary and bonus request directly to the baseline Hono API, which returns the fields after FAKE ALLOW.](./assets/missing-authorization-v2.webp)
-
-_The starting app lists Salary and Bonus; a direct API request checks access without using the field picker._
+Let's use Amina's session to request compensation fields directly. This lets
+us check the API without relying on which fields the interface offers.
 
 ### Run the starting application
 
@@ -156,7 +147,8 @@ the commands above before the coding steps.
 
 ## Where should we check permission?
 
-Open the baseline's
+Amina received protected values. To stop that disclosure, we need a check before
+the query runs. Open the baseline's
 [`src/server/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p5-dataguard/src/server/app.ts)
 and find `evaluatePlan()`. After authentication, CSRF, and input validation,
 it executes the query here:
@@ -177,13 +169,14 @@ wait for `ALLOW`.
 
 ## Decide which queries and exports to allow
 
-![Field metadata, row results, aggregates, and exports enter the Hono API, which requests a Cedarling decision before releasing or withholding an effect.](./assets/authorization-model-v2.webp)
-
-_Queries and exports need separate decisions, even when they use the same data._
+We'll start by expressing which fields Amina may use, then apply the same plan
+rules to queries, aggregates, and export creation. Saved exports will have their
+own ownership rule when someone downloads or revokes them.
 
 ### Create the policy store
 
-Use the [directory-based policy-store format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
+Let's create `policy-store/` at the project root, following the
+[directory-based policy-store format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
 
 ```text
 policy-store/
@@ -195,13 +188,18 @@ policy-store/
     exports.cedar
 ```
 
-Create the complete policy-store files from the pinned version:
+<details>
+<summary>Required step: Create the five policy-store files</summary>
 
-- [`policy-store/metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/metadata.json)
-- [`policy-store/schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/schema.cedarschema)
-- [`policy-store/policies/fields.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/fields.cedar)
-- [`policy-store/policies/plans.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/plans.cedar)
-- [`policy-store/policies/exports.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/exports.cedar)
+Create these files and copy their complete linked contents:
+
+- [`policy-store/metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/metadata.json) identifies the store and version.
+- [`policy-store/schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/schema.cedarschema) defines analysts, fields, datasets, exports, and request context.
+- [`policy-store/policies/fields.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/fields.cedar) controls field metadata visibility.
+- [`policy-store/policies/plans.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/plans.cedar) checks queries, aggregates, and export creation.
+- [`policy-store/policies/exports.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/exports.cedar) checks downloads and revocation of saved exports.
+
+</details>
 
 Use the store's metadata and version `1.0.0`. Namespace `P5DataGuard` contains
 four entity types: `Analyst`, `Dataset`, `Field`, and `Export`. OIDC and SQLite
@@ -233,16 +231,17 @@ the `P5DataGuard::Action` namespace.
 
 | Capability        | Action                                                                                                                                                                             | Resource             | Context                                               | Effect waiting for ALLOW                |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------- | --------------------------------------- |
-| `dataset.inspect` | [`InspectDataset`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/fields.cedar#L2 "inspect-fields")             | Each candidate field | Empty                                                 | Return field metadata to React          |
-| `data.query`      | [`Query`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")                      | Workforce dataset    | Validated row-plan facts                              | Return rows within the plan's limit     |
-| `data.aggregate`  | [`Aggregate`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")                  | Workforce dataset    | Plan facts and current minimum group size             | Return aggregate values                 |
-| `data.export`     | [`CreateExport`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")               | Workforce dataset    | Saved candidate plan facts; group size for aggregates | Create CSV within the plan's limits     |
-| `export.download` | [`DownloadExport`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/exports.cedar#L2 "manage-own-finance-export") | Current saved export | Empty                                                 | Prepare CSV response                    |
-| `export.revoke`   | [`RevokeExport`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/policy-store/policies/exports.cedar#L2 "manage-own-finance-export")   | Current saved export | Empty                                                 | Commit revocation and clean up its file |
+| `dataset.inspect` | [`InspectDataset`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/fields.cedar#L2 "inspect-fields")             | Each candidate field | Empty                                                 | Return field metadata to React          |
+| `data.query`      | [`Query`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")                      | Workforce dataset    | Validated row-plan facts                              | Return rows within the plan's limit     |
+| `data.aggregate`  | [`Aggregate`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")                  | Workforce dataset    | Plan facts and current minimum group size             | Return aggregate values                 |
+| `data.export`     | [`CreateExport`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")               | Workforce dataset    | Saved candidate plan facts; group size for aggregates | Create CSV within the plan's limits     |
+| `export.download` | [`DownloadExport`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/exports.cedar#L2 "manage-own-finance-export") | Current saved export | Empty                                                 | Prepare CSV response                    |
+| `export.revoke`   | [`RevokeExport`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/exports.cedar#L2 "manage-own-finance-export")   | Current saved export | Empty                                                 | Commit revocation and clean up its file |
 
 ### Check the plan when querying or exporting
 
-The rule in `policies/plans.cedar` checks tenant, fields, purpose, and group size
+Let's trace Amina's request through the plan rule. In `policies/plans.cedar`,
+it checks tenant, fields, purpose, and group size
 for exports as well as queries:
 
 ```cedar
@@ -311,9 +310,21 @@ integrity, and whether the export is still active. No matching permit gives DENY
 
 ## Add Cedarling to the API
 
-![The Hono API validates current facts and uses embedded Cedarling before rechecking and releasing rows or CSV; denial releases nothing.](./assets/enforcement-v2.webp)
+We have separate rules for each disclosure. Now we'll call Cedarling from the
+API and keep the protected result behind its decision.
 
-_The API enforces the decision; browser controls are guidance, not authority._
+```mermaid
+flowchart TD
+    accTitle: Separate decisions for each data disclosure
+    accDescr: The Hono API loads current analyst facts for every request. Field metadata, query plans, and saved exports use distinct Cedarling actions before the API releases data or changes an export.
+    Fields["Inspect field metadata"] --> API["Hono: current analyst and resource facts"]
+    Plan["Query or create export"] --> API
+    Saved["Download or revoke export"] --> API
+    API --> PDP["Embedded Cedarling"]
+    PDP --> Check{"API decision"}
+    Check -->|"ALLOW"| Effect["Recheck facts, then perform operation"]
+    Check -->|"DENY or failure"| Stop["No protected result or export change"]
+```
 
 ### Build the archive and load Cedarling
 
@@ -324,10 +335,18 @@ pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0
 ```
 
-Save the repository-level archive builder and its declaration:
+We'll use a shared builder to validate the policy files and package them for Cedarling.
 
-- [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/shared/policy-store.mjs)
-- [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/shared/policy-store.d.mts)
+<details>
+<summary>Required step: Create the shared archive builder</summary>
+
+Create these files in the repository-level `shared/` directory and copy their
+complete linked contents:
+
+- [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.mjs) validates and packages the policy store.
+- [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.d.mts) provides its TypeScript declarations.
+
+</details>
 
 Run the builder to create the archive:
 
@@ -364,19 +383,30 @@ functions, passes them to `buildApp()`, and calls `shutDown()` when shutting dow
 
 ### Pass the analyst and query facts to Cedarling
 
-Save these complete files together to connect the permission checks:
+With the archive ready, let's connect Cedarling to the query and export routes.
+Copy the files below together, then follow how they build a request for Amina.
 
-- [`src/server/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/authorization.ts)
-- [`src/server/errors.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/errors.ts)
-- [`src/server/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/app.ts)
-- [`src/server/database.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/database.ts)
-- [`src/server/query.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/query.ts)
-- [`src/server/export-service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/export-service.ts)
-- [`src/server/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/main.ts)
-- [`src/server/config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/config.ts)
-- [`src/shared/contracts.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/shared/contracts.ts)
+<details>
+<summary>Required step: Add authorization and update the query and export service</summary>
 
-Remove `src/server/permissive-trace.ts`; the completed handlers no longer use it.
+Create these files and copy their complete linked contents:
+
+- [`src/server/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/authorization.ts) builds Cedarling requests and records decisions.
+- [`src/server/errors.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/errors.ts) defines bounded errors for denied or unavailable authorization.
+
+Replace these existing files with their complete linked contents:
+
+- [`src/server/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/app.ts) checks permission at each API boundary.
+- [`src/server/database.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/database.ts) rechecks current sessions and query facts within transactions.
+- [`src/server/query.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/query.ts) validates plans and compiles bounded SQL.
+- [`src/server/export-service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/export-service.ts) creates CSV files and checks saved export references.
+- [`src/server/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/main.ts) starts and closes Cedarling with the API.
+- [`src/server/config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/config.ts) supplies the policy archive location.
+- [`src/shared/contracts.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/shared/contracts.ts) defines query, export, and permission-preview types.
+
+Remove `src/server/permissive-trace.ts`; authorization now records the actual decisions.
+
+</details>
 
 Before authorization, the server checks that the plan uses only supported forms.
 It collects fields used in selected columns, calculations, grouping, and filters.
@@ -448,7 +478,8 @@ no unchecked fields.
 
 ### Check permission before running the query
 
-Row queries, aggregates, and export creation use `executePlan()` in
+We can now build and evaluate the request. The next step is to make the query
+wait for its result. Row queries, aggregates, and export creation use `executePlan()` in
 `src/server/app.ts`. It requires permission before `database.execute()`:
 
 ```ts
@@ -492,7 +523,7 @@ changed, it throws `409 authorization_state_changed` without running the query.
 
 `effect` uses the allowed rows to build the response or create the CSV.
 The SQL compiler continues to use fixed identifiers and bound values in
-[`src/server/query.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/server/query.ts).
+[`src/server/query.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/query.ts).
 
 Download and revoke routes reload the saved export and authorize it separately,
 using its stored owner. They recheck expiry, state, and current facts before
@@ -501,12 +532,20 @@ CSV file then fails; failed cleanup must not restore access.
 
 ### Show which actions are available
 
-Save the matching React controls and API client:
+The API protects the results. Let's also give users controls that reflect what
+the server currently permits.
 
-- [`src/web/App.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/web/App.tsx)
-- [`src/web/api.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/web/api.ts)
-- [`src/web/Icon.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/web/Icon.tsx)
-- [`src/web/styles.css`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/src/web/styles.css)
+<details>
+<summary>Required step: Update the query form and export controls</summary>
+
+Replace these existing files with their complete linked contents:
+
+- [`src/web/App.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/web/App.tsx) applies permission previews to the form and export actions.
+- [`src/web/api.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/web/api.ts) requests previews and handles bounded API errors.
+- [`src/web/Icon.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/web/Icon.tsx) supplies icons used by those controls.
+- [`src/web/styles.css`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/web/styles.css) lays out controls, results, and permission messages.
+
+</details>
 
 `POST /api/authorization` previews the exact selected plan and export operations.
 It returns which actions are allowed, not rows or a CSV. React ignores outdated preview
@@ -519,18 +558,26 @@ there is no browser Cedarling instance or separate client permission table.
 
 ## Finish setup and restart the app
 
-Save the runtime preparation and packaging files:
+The server and controls are connected. Before testing them, let's make sure
+native startup and Docker both build the policy archive.
 
-- [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/scripts/setup.ts)
-- [`scripts/reset.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/scripts/reset.ts)
-- [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/Dockerfile)
+<details>
+<summary>Required step: Update setup, reset, and Docker packaging</summary>
+
+Replace these existing files with their complete linked contents:
+
+- [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/scripts/setup.ts) prepares configuration, builds the archive, and seeds data.
+- [`scripts/reset.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/scripts/reset.ts) restores sample data and clears sessions and exports.
+- [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/Dockerfile) includes the archive in the runtime image.
+
+</details>
 
 Apply the `build` entry shown below to your existing
-[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/package.json), keeping
+[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/package.json), keeping
 the other dependencies and scripts.
 
 The setup script builds the archive; the production build must too. The existing
-[`scripts/dev.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p5-dataguard-v1.0.1/p5-dataguard/scripts/dev.mjs)
+[`scripts/dev.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/scripts/dev.mjs)
 runs both steps before starting the IdP and API, so `pnpm dev` needs no further
 change:
 
@@ -561,9 +608,8 @@ We'll retry her salary request, then check the allowed queries and exports.
 
 ## Check queries and exports for each user
 
-![Amina's compensation request is denied but support rows are allowed; Theo gets bounded counts but not rows or small groups; Leah can use finance data and her own exports.](./assets/expected-outcomes-v2.webp)
-
-_The allowed response depends on the requested fields, result type, and caller._
+We'll compare the same salary request before and after integration, then check
+that Amina, Theo, and Leah can still do their permitted work.
 
 ### Retry Amina's salary request
 
@@ -628,7 +674,8 @@ same-origin request. Never publish actual session or download credentials.
 
 ### Read the query and export logs
 
-`authorization.context` connects the application request, actor, capability,
+Let's use the logs to distinguish a permission decision from a completed query
+or export. `authorization.context` connects the application request, actor, capability,
 and preview/enforcement phase with a Cedarling request ID. Cedarling's decision
 JSON includes full `diagnostics.reason` and `errors`. Field inspection has one
 decision per field; seeing both ALLOW and DENY in that batch is normal.
@@ -650,8 +697,10 @@ memory expire after five minutes, so they are not a lasting audit record.
 
 ### Check changed permissions and unavailable decisions
 
-The coding steps update runtime files, not the baseline's historical tests.
-For the full automated checks, use a separate checkout of the [finished tag](https://github.com/GluuFederation/cedarling-tutorials/tree/p5-dataguard-v1.0.1/p5-dataguard) and install its locked project and shared IdP dependencies.
+We've checked the visible results and logs. The automated suite also covers
+changes while authorization is pending. Use a separate checkout of the
+[finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p5-dataguard),
+which includes the integration tests, and install its locked project and shared IdP dependencies.
 Stop your learner stack to free ports 17005 and 18005, then run:
 
 ```bash
@@ -675,41 +724,42 @@ records, exports, and sessions; sign in again. In Docker use
 Do not reset a database you want to keep. Capture the identical unauthorized
 compensation request before and after, and Leah's allowed finance export.
 
-## Protect data in your own application
+<details>
+<summary>Warning: Before deploying this application</summary>
 
-![The Hono API uses embedded Cedarling decisions for field metadata, rows, aggregates, and CSV exports, then rechecks saved exports at download and revoke.](./assets/reusable-pattern-v2.webp)
+Replace local HTTP and the bundled learning IdP with HTTPS and a configured
+OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/),
+Gluu, Auth0, or Okta.
 
-_Authorization remains necessary when a generated export is downloaded later._
-
-Opening a dashboard, seeing a field name, reading a row, releasing an aggregate,
-and downloading a generated file are different capabilities. Check each one
-where the server releases the data, using current trusted facts.
-
-The same approach can protect a GraphQL API: authorize each sensitive field,
-row set, aggregate, or export at the resolver or service boundary that releases
-it, not just at the query entry point. P5 itself uses Hono, not GraphQL;
-see [GraphQL's authorization guidance](https://graphql.org/learn/authorization/).
-
-Follow `src/server/authorization.ts`, `src/server/app.ts`, `src/server/query.ts`,
-`src/server/export-service.ts`, `policy-store/`, and the tests in the
-[completed P5 project](https://github.com/GluuFederation/cedarling-tutorials/tree/p5-dataguard-v1.0.1/p5-dataguard).
+Control permission changes, secure stored data, and store audit logs. Keep
+parameterized SQL, transactions, expiry, and file cleanup alongside authorization.
+A five-record minimum is a teaching example: users can still learn sensitive
+facts by combining repeated queries.
 
 For a production stack, consider Agama Lab Policy Designer for policy authoring,
 Jans Auth for issuing tokens, and Lock Server for centralized decision logs.
 See [Cedarling production solutions](https://cedarling.dev/solutions).
 
-Next, P6 moves to field-inspection workflows and authorization over submitted
-work rather than query results.
-
-<details>
-<summary>Warning: This setup is for local practice</summary>
-
-- Local HTTP and the bundled IdP are for learning only. Production requires HTTPS and a configured OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/), Gluu, Auth0, or Okta.
-- Control permission changes, secure stored data, and store audit logs. Keep parameterized SQL, transactions, expiry, and file cleanup alongside authorization.
-- A five-record minimum is a teaching example. Users can still learn sensitive facts through repeated queries; this rule alone cannot prevent that.
-- These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
+on macOS and Windows. If a platform-specific step fails,
+[open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
 
 </details>
+
+## What we've learned
+
+Amina's salary request now fails, while her support queries still work. We've
+given Theo bounded aggregates and kept Leah's finance reports and exports
+available. Each disclosure has its own check: field metadata, query results,
+aggregate values, export creation, and access to a saved export. Current tenant,
+role, purpose, and ownership facts decide access; an earlier allowed query
+does not grant every later operation.
+
+For your own reporting service, follow the data to each point where it leaves
+the server. Check permission there and recheck facts that may have changed
+while waiting. We can use the same approach in a GraphQL API by enforcing
+field and data permissions in the resolvers or services that release them;
+see [GraphQL's authorization guidance](https://graphql.org/learn/authorization/).
 
 [^1]: An aggregate reports a calculation over multiple records, such as a count by department, without returning the individual rows. Small groups and repeated queries can still reveal sensitive facts, so P5 treats aggregate release as its own authorization boundary.
 

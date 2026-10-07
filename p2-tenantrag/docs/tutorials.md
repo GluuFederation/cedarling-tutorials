@@ -5,7 +5,7 @@ summary: Authorize corpus search and each candidate document before protected te
 order: 30
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Fastify RAG service checks corpus and documents with Cedarling before sending text to an AI model.
-lastVerified: 2026-10-01T09:46:20Z
+lastVerified: 2026-10-07T19:56:00Z
 ---
 
 # Prevent Cross-Tenant RAG Leaks with Cedarling
@@ -29,7 +29,11 @@ documents remain available. The model must never decide access.
 ## Build the integration or try the finished app
 
 - To build the integration, start with [Run the starting application](#run-the-starting-application), then add policies and retrieval checks.
-- To try the finished app, run the [complete tagged project](https://github.com/GluuFederation/cedarling-tutorials/tree/p2-tenantrag-v1.0.1/p2-tenantrag) using its README, then go to [Check which documents each user can retrieve](#check-which-documents-each-user-can-retrieve). This version already uses Cedarling.
+- To try the finished app, run the [finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p2-tenantrag) using its README, then go to [Check which documents each user can retrieve](#check-which-documents-each-user-can-retrieve). This version already uses Cedarling.
+
+If you're building from the starting project, open each **Required step** section
+and complete its instructions before continuing. These sections contain the files
+and changes we'll need.
 
 <details>
 <summary>What you'll need</summary>
@@ -43,9 +47,10 @@ documents remain available. The model must never decide access.
 
 </details>
 
-Copy whole files from GitHub's raw-file view into your baseline checkout; don't
-switch to the finished tag. The short examples aren't complete replacements.
-Create missing parent directories. Paths and commands are relative to
+At each copying step, open the linked file on GitHub, choose **Raw**, and copy
+its full contents into the stated destination in your baseline checkout. The
+short examples explain the parts we'll focus on. Create missing parent
+directories first. Paths and commands are relative to
 `p2-tenantrag/`; repository-level `shared/` files go one directory above it.
 
 ## Meet the service and its users
@@ -68,28 +73,15 @@ The bundled Node.js `oidc-provider` handles sign-in and issues access tokens.
 The API verifies a token, then looks up the caller's tenant in its repository;
 the document metadata lists who may read confidential content.
 
-```mermaid
-flowchart TD
-    accTitle: Permission checks in the completed retrieval service
-    accDescr: The API enforces a corpus decision before search and document decisions before loading text for generation.
-    Caller["Caller: access token and question"] --> Corpus["API enforces Cedarling SearchCorpus"]
-    Corpus -->|"DENY"| Stop["Stop before search"]
-    Corpus -->|"ALLOW"| Search["Voyage query embedding and Orama search"]
-    Search --> Documents["API enforces Cedarling RetrieveDocument batch"]
-    Documents -->|"DENY"| Filter["Exclude document text"]
-    Documents -->|"ALLOW"| Text["Load selected authorized text"]
-    Text --> Model["OpenRouter: generate answer with citations"]
-```
-
 Cedarling is the policy decision point (PDP). The retrieval service enforces
 its decisions as the policy enforcement point (PEP). It checks both corpus and
 document access with the same embedded Cedarling instance.
 
 ## Reproduce the leak before adding Cedarling
 
-![Before authorization, a Tenant B caller can reach Tenant A evidence through the retrieval API.](./assets/missing-authorization.webp)
-
-_In the baseline, authentication alone does not stop Mallory's cross-tenant retrieval._
+Let's try Mallory's cross-tenant question before adding those checks. We'll
+inspect the citations as well as the answer, because model wording alone
+cannot tell us which documents the service used.
 
 ### Run the starting application
 
@@ -173,20 +165,28 @@ its volume, and install the native dependencies above for the coding steps.
 
 ## Give the server the document permissions it needs
 
-Open the baseline's
+Mallory's request shows why checking sign-in is not enough. To add the missing
+permission checks, open the baseline's
 [`src/rag/retrieval.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p2-tenantrag/src/rag/retrieval.ts).
 It looks up the corpus before embedding the question and loads document metadata
 before reading text. Those are the two places we'll ask Cedarling for a decision.
 The confidential-document rule also needs a list of permitted readers.
 
-Save these complete fact-source files before defining the rules:
+We'll first make the document's reader permissions available to retrieval.
 
-- [`src/rag/fixtures.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/fixtures.ts)
-- [`src/rag/types.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/types.ts)
-- [`src/rag/pdf.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/pdf.ts)
-- [`src/rag/repository.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/repository.ts)
-- [`src/rag/corpus.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/corpus.ts)
-- [`src/rag/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/setup.ts)
+<details>
+<summary>Required step: Update document metadata and index preparation</summary>
+
+Replace these existing files with their complete linked contents:
+
+- [`src/rag/fixtures.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/fixtures.ts) assigns users to tenants and adds confidential readers to documents.
+- [`src/rag/types.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/types.ts) defines the permission metadata types.
+- [`src/rag/pdf.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/pdf.ts) carries that metadata through PDF extraction.
+- [`src/rag/repository.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/repository.ts) resolves current document and caller facts.
+- [`src/rag/corpus.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/corpus.ts) binds the search index to its text and metadata.
+- [`src/rag/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/setup.ts) rebuilds and verifies the corpus.
+
+</details>
 
 These files add reader permissions to the index without changing the fictional
 PDF content. They map Ada and Leo to Tenant A and Mallory to Tenant B. Only Ada
@@ -203,13 +203,13 @@ the integration files are in place so the new metadata reaches retrieval.
 
 ## Decide which evidence each caller may use
 
-![Tenant A and Tenant B evidence are separated by corpus and document decisions defined in the policy store.](./assets/authorization-model-v2.webp)
-
-_The corpus rule controls search; the document rule controls which text can be loaded._
+The server can now supply tenant and reader facts. We'll use them in two rules:
+one for searching a corpus, and another for loading each candidate document.
 
 ### Create the policy store
 
-Use the [directory-based policy-store format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
+Let's create `policy-store/` at the project root, following the
+[directory-based policy-store format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
 
 ```text
 policy-store/
@@ -221,12 +221,17 @@ policy-store/
     tutorial-idp.json
 ```
 
-Create the complete policy-store files from the pinned version:
+<details>
+<summary>Required step: Create the four policy-store files</summary>
 
-- [`policy-store/metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/policy-store/metadata.json)
-- [`policy-store/schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/policy-store/schema.cedarschema)
-- [`policy-store/policies/server-access.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/policy-store/policies/server-access.cedar)
-- [`policy-store/trusted-issuers/tutorial-idp.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/policy-store/trusted-issuers/tutorial-idp.json)
+Create these files and copy their complete linked contents:
+
+- [`policy-store/metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/policy-store/metadata.json) identifies the store and version.
+- [`policy-store/schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/policy-store/schema.cedarschema) defines token, corpus, document, and context types.
+- [`policy-store/policies/server-access.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/policy-store/policies/server-access.cedar) contains the corpus and document permission rules.
+- [`policy-store/trusted-issuers/tutorial-idp.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/policy-store/trusted-issuers/tutorial-idp.json) maps tokens from P2's IdP.
+
+</details>
 
 The metadata identifies this store and version `1.0.0`. The schema defines the
 request types. Both rules live in one policy file with distinct `@id`
@@ -256,7 +261,8 @@ The copied `trusted-issuers/tutorial-idp.json` sets `openid_configuration_endpoi
 
 ### Check the tenant and document's readers
 
-This complete policy from `policies/server-access.cedar` checks verified token
+Let's follow the document rule, where Ada's and Leo's permissions differ.
+This policy from `policies/server-access.cedar` checks verified token
 claims against current application facts:
 
 ```cedar
@@ -306,8 +312,8 @@ handled as failures.
 
 | Capability          | Identity            | Action                                                                                                                                                                                                | Resource                       | Context                                        | Effect waiting for ALLOW               |
 | ------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------- | -------------------------------------- |
-| `corpus.search`     | Caller access token | [`SearchCorpus`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/policy-store/policies/server-access.cedar#L2 "server-search-tenant-corpus")              | Resolved corpus                | Current user, selected corpus, server boundary | Query embedding and vector search      |
-| `document.retrieve` | Same token          | [`RetrieveDocument`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/policy-store/policies/server-access.cedar#L25 "server-retrieve-authorized-document") | Each unique candidate document | Same trusted context                           | Load text for generation and citations |
+| `corpus.search`     | Caller access token | [`SearchCorpus`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/policy-store/policies/server-access.cedar#L2 "server-search-tenant-corpus")              | Resolved corpus                | Current user, selected corpus, server boundary | Query embedding and vector search      |
+| `document.retrieve` | Same token          | [`RetrieveDocument`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/policy-store/policies/server-access.cedar#L25 "server-retrieve-authorized-document") | Each unique candidate document | Same trusted context                           | Load text for generation and citations |
 
 The route chooses actions; the repository supplies tenants, classification, and
 reader permissions. Neither the question nor model output supplies trusted facts.
@@ -315,9 +321,22 @@ Look up search results by document ID in the repository before building requests
 
 ## Put Cedarling in the retrieval path
 
-![The API enforces Cedarling corpus and document decisions before loading allowed text for the model.](./assets/enforcement-v2.webp)
+We have the rules. Next we'll load Cedarling and make retrieval wait for its
+decisions in this order:
 
-_A corpus DENY stops retrieval; a document DENY filters that document from the batch._
+```mermaid
+flowchart TD
+    accTitle: Two checks before evidence reaches the model
+    accDescr: The API asks embedded Cedarling about the corpus before embedding or searching. It then checks each candidate document before loading text. Denied documents are filtered, and authorization failures stop retrieval.
+    Request["API: token and corpus facts"] --> Corpus{"Cedarling: corpus check"}
+    Corpus -->|"DENY or failure"| Stop["Stop retrieval"]
+    Corpus -->|"ALLOW"| Search["Embed question; search Orama"]
+    Search --> Documents{"Cedarling: document batch"}
+    Documents -->|"Each DENY"| Filter["Skip denied text"]
+    Documents -->|"Allowed set"| Text["API loads allowed chunks"]
+    Text -->|"Generate if chunks remain"| Result["Answer and citations"]
+    Documents -->|"Failed or incomplete batch"| Stop
+```
 
 ### Build the archive and load Cedarling
 
@@ -328,10 +347,18 @@ pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0
 ```
 
-Save the repository-level archive builder and its declaration:
+We'll use a shared builder to validate the policy files and package them for Cedarling.
 
-- [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/shared/policy-store.mjs)
-- [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/shared/policy-store.d.mts)
+<details>
+<summary>Required step: Create the shared archive builder</summary>
+
+Create these files in the repository-level `shared/` directory and copy their
+complete linked contents:
+
+- [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.mjs) validates and packages the policy store.
+- [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.d.mts) provides its TypeScript declarations.
+
+</details>
 
 Run the shared builder to create the archive:
 
@@ -376,18 +403,27 @@ shutdown. `src/runtime.ts` supplies these authorization functions to retrieval.
 
 ### Check the corpus before searching
 
-Save these complete files together to connect the permission checks:
+Let's connect the initialized instance to retrieval. Copy these files together;
+then we'll trace the corpus check and the document batch through them.
 
-- [`src/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/authorization.ts)
-- [`src/runtime.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/runtime.ts)
-- [`src/rag/retrieval.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/retrieval.ts)
-- [`src/rag/trace.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/rag/trace.ts)
-- [`src/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/app.ts)
-- [`src/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/main.ts)
-- [`src/config/project-config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/config/project-config.ts)
-- [`src/openapi.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/openapi.ts)
-- [`src/auth/cli.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/src/auth/cli.ts)
-- [`tsconfig.build.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/tsconfig.build.json)
+<details>
+<summary>Required step: Add authorization and update the retrieval service</summary>
+
+Create [`src/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/authorization.ts)
+and copy its full contents to load Cedarling, build requests, and collect decisions.
+Replace these existing files with their complete linked contents:
+
+- [`src/runtime.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/runtime.ts) connects authorization to retrieval and shutdown.
+- [`src/rag/retrieval.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/retrieval.ts) enforces corpus and document decisions before loading text.
+- [`src/rag/trace.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/rag/trace.ts) records retrieval counts without document text.
+- [`src/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/app.ts) handles HTTP requests and bounded errors.
+- [`src/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/main.ts) starts and closes the runtime.
+- [`src/config/project-config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/config/project-config.ts) supplies the policy archive location.
+- [`src/openapi.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/openapi.ts) describes the retrieval responses and errors.
+- [`src/auth/cli.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/src/auth/cli.ts) handles CLI sign-in and its diagnostics.
+- [`tsconfig.build.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/tsconfig.build.json) keeps source-run setup scripts out of the compiled build.
+
+</details>
 
 Inside the corpus authorization function, `principal` is the authenticated
 caller, `profile` holds its stored permissions, and `corpus` is the stored record.
@@ -460,6 +496,7 @@ Neither case reaches `voyage.embed()` or the following `corpusSearch.search()`.
 
 ### Check each document before loading its text
 
+An allowed corpus search can still return a document the caller may not read.
 The retrieval service removes duplicate documents from the search results. Its document check
 reuses the token set and context, submitting one item per document. In
 `src/authorization.ts`, the expanded batch request looks like this:
@@ -522,18 +559,29 @@ also require rebuilding the index, as in the next step.
 
 ## Rebuild the index and restart the app
 
-Save the runtime preparation and packaging files:
+The request path now enforces both decisions. Before we retry Mallory's request,
+we need the archive in our startup paths and the reader grants in the index.
 
-- [`scripts/prepare.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/scripts/prepare.ts)
-- [`scripts/preflight.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/scripts/preflight.ts)
-- [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/scripts/setup.ts)
-- [`scripts/dev.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/scripts/dev.mjs)
-- [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/Dockerfile)
-- [`compose.yaml`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/compose.yaml)
-- [`shared/dev-supervisor.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/shared/dev-supervisor.mjs)
+<details>
+<summary>Required step: Update index preparation and startup</summary>
+
+Create these files and copy their complete linked contents:
+
+- [`scripts/prepare.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/scripts/prepare.ts) prepares identity configuration and the policy archive without provider requests.
+- [`scripts/preflight.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/scripts/preflight.ts) checks the index before startup.
+- [`scripts/dev.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/scripts/dev.mjs) starts the IdP and API together.
+
+Replace these existing files with their complete linked contents:
+
+- [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/scripts/setup.ts) prepares configuration and verifies the live-provider corpus.
+- [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/Dockerfile) includes the archive in the API image.
+- [`compose.yaml`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/compose.yaml) starts the configured services with their readiness checks.
+- [`shared/dev-supervisor.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/dev-supervisor.mjs), at repository root, manages native processes and readiness checks.
+
+</details>
 
 Apply the `build` entry shown below to your existing
-[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p2-tenantrag-v1.0.1/p2-tenantrag/package.json), keeping
+[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p2-tenantrag/package.json), keeping
 the other dependencies and scripts. Also set `dev` to `node scripts/dev.mjs`.
 
 The build runs the shared archive builder before TypeScript; the copied
@@ -570,9 +618,8 @@ when the PDF/index needs rebuilding.
 
 ## Check which documents each user can retrieve
 
-![Ada may read confidential Tenant A evidence; Leo may read its public evidence but not confidential evidence; Mallory cannot search Tenant A.](./assets/expected-outcomes-v2.webp)
-
-_Permission to search a corpus does not grant access to every document in it._
+Let's check the two rules separately: Mallory should stop at the corpus check,
+while Ada and Leo should reach document checks with different results.
 
 ### Retry Mallory's request, then compare Ada and Leo
 
@@ -636,7 +683,8 @@ Don't rerun `pnpm run setup` to retry generation: it rebuilds the corpus using V
 
 ### Read the retrieval and decision logs
 
-The response's `requestId` appears in `authorization.context`. Its
+To explain those differences, find the response's `requestId` in
+`authorization.context`. Its
 `cedarlingRequestId` matches Cedarling's `request_id`; document decisions also share
 `batch_id`. For Leo's confidential-document attempt, the main Cedarling log fields
 look like this:
@@ -665,8 +713,9 @@ Capture only fictional data and remove tokens and secrets from recordings.
 
 ### Check denied text stays out of the result
 
-For automated checks, use a separate checkout of the
-[finished tag](https://github.com/GluuFederation/cedarling-tutorials/tree/p2-tenantrag-v1.0.1/p2-tenantrag), install its locked project and shared IdP dependencies, then run:
+We've checked live responses and their decisions. To verify that denied text
+never reaches generation, use the automated checks in a separate checkout of the
+[finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p2-tenantrag), install its locked project and shared IdP dependencies, then run:
 
 ```bash
 pnpm check
@@ -685,36 +734,44 @@ Approve the Ada, Leo, and Mallory sign-ins. This consumes provider quota and
 checks document access, not identical model answers. Record Mallory's request
 before and after integration, plus one successful authorized search.
 
-## Protect retrieved evidence in your own service
+<details>
+<summary>Warning: Before deploying this application</summary>
 
-![The application enforces Cedarling corpus and per-document decisions before allowed evidence reaches the model.](./assets/reusable-pattern-v2.webp)
+Replace local HTTP and the bundled learning IdP with HTTPS and a configured
+OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/),
+Gluu, Auth0, or Okta.
 
-_A denied corpus stops the question; a denied document is filtered while other allowed documents may continue._
-
-Check access to the collection before expensive work, then check each document before
-loading its content. Keep this order wherever search results feed a model,
-report, or another service.
-
-Follow `src/authorization.ts`, `src/rag/retrieval.ts`, `src/rag/repository.ts`,
-`policy-store/`, and the tests in the
-[completed P2 project](https://github.com/GluuFederation/cedarling-tutorials/tree/p2-tenantrag-v1.0.1/p2-tenantrag).
+Use trusted user and permission records, review how providers handle data, and
+protect logs. Setup sends the fictional corpus for embedding to build the index;
+it does not check a caller's access to those documents. Cedarling controls access
+to documents, not answer accuracy or prompt injection. A public document
+containing instructions is still allowed content.
 
 For a production stack, consider Agama Lab Policy Designer for policy authoring,
 Jans Auth for issuing tokens, and Lock Server for centralized decision logs.
 See [Cedarling production solutions](https://cedarling.dev/solutions).
 
-Next, P3 puts authorization at an MCP server, where a model can request a change
-to incident state as well as information.
-
-<details>
-<summary>Warning: This setup is for local practice</summary>
-
-- Local HTTP and the bundled IdP are for learning only. Production requires HTTPS and a configured OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/), Gluu, Auth0, or Okta.
-- Use trusted user and permission records, review how providers handle data, and protect logs. Setup sends the fictional corpus for embedding to build the index; it does not check a caller's access to those documents.
-- Cedarling controls access to documents. It does not guarantee correct model answers or prevent prompt injection; a public document containing instructions is still allowed content.
-- These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
+on macOS and Windows. If a platform-specific step fails,
+[open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
 
 </details>
+
+## What we've learned
+
+Mallory's cross-tenant request now stops before embedding or search. Within
+Tenant A, Ada can use confidential evidence while Leo receives only documents
+he may read. We've separated permission to search a collection from permission
+to load each document, and used the allowed chunks for both generation and
+citations. A model failure remains a different outcome from a denied document.
+
+For your own retrieval service, keep that order: check the collection, search,
+check candidate documents against trusted metadata, then load allowed content.
+The same checks apply when the destination is a report or another service
+instead of an AI model.
+
+In [P3](https://cedarling.dev/learn/govern-mcp-capabilities), we'll protect MCP
+operations that let an assistant read information and change incident state.
 
 [^1]: P2's confidential-reader rule uses the current document's `confidential_reader_subjects` set. Ada's subject is listed; Leo's is not. The application supplies this relationship for each authorization request.
 
