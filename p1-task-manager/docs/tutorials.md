@@ -5,7 +5,7 @@ summary: Secure a task manager with token-based server decisions and conservativ
 order: 20
 socialImage: ./assets/social-card.webp
 socialImageAlt: Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.
-lastVerified: 2026-10-01T09:46:20Z
+lastVerified: 2026-10-07T19:56:00Z
 ---
 
 # Protect a Node.js REST API with Cedarling
@@ -29,7 +29,11 @@ the controls; direct API requests will face the same server checks.
 ## Build the integration or try the finished app
 
 - To build the integration, start with [Start the baseline app](#start-the-baseline-app). We'll add policies and server enforcement, then browser controls.
-- To try the finished app, clone and run the [complete tagged project](https://github.com/GluuFederation/cedarling-tutorials/tree/p1-task-manager-v1.0.1/p1-task-manager) using its README, then go to [Check allowed and denied operations](#check-allowed-and-denied-operations). This version should already deny the operation we'll reproduce in the baseline.
+- To try the finished app, clone and run the [finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p1-task-manager) using its README, then go to [Check allowed and denied operations](#check-allowed-and-denied-operations). This version should already deny the operation we'll reproduce in the baseline.
+
+If you're building from the starting project, open each **Required step** section
+and complete its instructions before continuing. These sections contain the files
+and changes we'll need.
 
 <details>
 <summary>What you'll need</summary>
@@ -41,8 +45,10 @@ the controls; direct API requests will face the same server checks.
 
 </details>
 
-Copy whole files from GitHub's raw-file view; the short examples aren't complete
-replacements. Create missing parent directories. Code paths and commands are
+At each copying step, open the linked file on GitHub, choose **Raw**, and copy
+its full contents into the stated destination in your baseline checkout. The
+short examples explain the parts we'll focus on. Create missing parent
+directories first. Code paths and commands are
 relative to `p1-task-manager/`; repository-level `shared/` files go one directory
 above it.
 
@@ -69,20 +75,6 @@ assurance standard has been met. We'll use three sample accounts:
 _Each decision depends on the user's facts and the action and resource involved.
 A role or tenant label alone doesn't settle it._
 
-```mermaid
-flowchart TD
-    accTitle: Task authorization in the completed application
-    accDescr: The API asks its embedded Cedarling instance before accessing tasks. Browser evaluation guides controls but cannot grant server permission.
-    IdP["Tutorial IdP"] -->|"Signed token in server session"| API["Fastify API: current user and task facts"]
-    UI["React task board"] -->|"Task request"| API
-    API --> PDP["Embedded Cedarling instance"]
-    PDP --> Check["API enforces decision"]
-    Check -->|"ALLOW"| Data["Read or write SQLite tasks"]
-    Check -->|"DENY or error"| Stop["No protected effect"]
-    API -->|"Safe facts, ceiling and policy archive"| Browser["Browser Cedarling: unsigned evaluation"]
-    Browser -->|"Available controls"| UI
-```
-
 Cedarling is the policy decision point (PDP). The API handlers are the policy
 enforcement points (PEPs): they act on Cedarling's decisions. The browser also
 evaluates rules to show the right controls, but the server checks permission
@@ -90,9 +82,8 @@ again before releasing data or changing a task.
 
 ## Try the app before adding Cedarling
 
-![In the permissive starting application, Alex creates a task successfully.](./assets/missing-authorization.webp)
-
-_Alex's creation request succeeds in the starting app. We'll reproduce it below._
+Let's first see what Alex can do without those permission checks. We'll send
+a creation request directly to the API, then keep it for comparison after integration.
 
 ### Start the baseline app
 
@@ -134,7 +125,8 @@ password, such as `cedarling-is-awesome`, then approve access.
 
 ### Create a task as Alex
 
-Open developer tools on the task manager page and run this in the console:
+With Alex signed in, open developer tools on the task manager page and run this
+in the console:
 
 ```js
 const session = await fetch("/api/session").then((r) => r.json());
@@ -165,7 +157,7 @@ the first-terminal commands above before continuing.
 
 ## Where should we check permission?
 
-Open the baseline's
+Alex's task was saved, so let's find the point that should have stopped it. Open the baseline's
 [`src/server/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p1-task-manager/src/server/app.ts)
 and find `POST /api/tasks`. It authenticates the session, checks request
 integrity, validates the input, then calls `database.createTask()`. None of
@@ -182,10 +174,8 @@ permissions for each operation.
 
 ## Decide who can do what
 
-![Mina creates a task inside Tenant A; Alex edits an existing task assigned to him in the same tenant.](./assets/authorization-model.webp)
-
-_`Create` targets the existing tenant; `Edit` targets a current task.[^2] The policy
-store defines the request types and rules used for both decisions._
+We know where the check belongs. Now we'll define what it should allow, starting
+with creation and extending the rules to the other task operations.
 
 ### List the rules for each task action
 
@@ -194,12 +184,12 @@ For existing tasks, "related" means the user owns the task or is its assignee.
 
 | Capability      | Action                                                                                                                                                                                              | Resource | Additional conditions                                                     |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
-| `task.view`     | [`View`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/server-access.cedar#L8 "server-view-related-task")                 | `Task`   | Related user                                                              |
-| `task.create`   | [`Create`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/server-access.cedar#L33 "server-owner-create-task")              | `Tenant` | Owner role, assurance at least 2                                          |
-| `task.edit`     | [`Edit`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/server-access.cedar#L58 "server-edit-related-task")                | `Task`   | Related user                                                              |
-| `task.assign`   | [`Assign`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/server-access.cedar#L83 "server-owner-assign-task")              | `Task`   | Task owner, owner role, assurance at least 2, assignee in the same tenant |
-| `task.complete` | [`Complete`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/server-access.cedar#L111 "server-owner-complete-related-task") | `Task`   | Related user, owner role, assurance at least 2                            |
-| `task.delete`   | [`Delete`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/server-access.cedar#L138 "server-owner-delete-task")             | `Task`   | Task owner, owner role, assurance at least 2                              |
+| `task.view`     | [`View`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/server-access.cedar#L8 "server-view-related-task")                 | `Task`   | Related user                                                              |
+| `task.create`   | [`Create`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/server-access.cedar#L33 "server-owner-create-task")              | `Tenant` | Owner role, assurance at least 2                                          |
+| `task.edit`     | [`Edit`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/server-access.cedar#L58 "server-edit-related-task")                | `Task`   | Related user                                                              |
+| `task.assign`   | [`Assign`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/server-access.cedar#L83 "server-owner-assign-task")              | `Task`   | Task owner, owner role, assurance at least 2, assignee in the same tenant |
+| `task.complete` | [`Complete`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/server-access.cedar#L111 "server-owner-complete-related-task") | `Task`   | Related user, owner role, assurance at least 2                            |
+| `task.delete`   | [`Delete`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/server-access.cedar#L138 "server-owner-delete-task")             | `Task`   | Task owner, owner role, assurance at least 2                              |
 
 The complete action identifier is, for example, `Task::Action::"Create"`.
 Creation targets `Task::Tenant`: the tenant exists before the new task does.[^2]
@@ -209,7 +199,7 @@ An owner role is a tenant role; a task owner is the user in the task's
 
 ### Create the policy-store files
 
-Create the policy-store source using Cedarling's
+Let's create a `policy-store/` directory at the project root using Cedarling's
 [directory-based format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
 
 ```text
@@ -223,13 +213,20 @@ policy-store/
     tutorial-idp.json
 ```
 
-Create the five files above using the complete linked versions:
-[`metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/metadata.json),
-[`schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/schema.cedarschema),
-[`tutorial-idp.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/trusted-issuers/tutorial-idp.json),
-[`server-access.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/server-access.cedar), and
-[`browser-shadow-access.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/policy-store/policies/browser-shadow-access.cedar).
-The examples below explain these files; do not append a second `Create` policy.
+<details>
+<summary>Required step: Create the five policy-store files</summary>
+
+Create each file at the path shown above and copy its complete linked contents:
+
+- [`metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/metadata.json) identifies the policy store and version.
+- [`schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/schema.cedarschema) defines actions, entities, and request context.
+- [`trusted-issuers/tutorial-idp.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/trusted-issuers/tutorial-idp.json) defines the trusted token mapping.
+- [`policies/server-access.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/server-access.cedar) holds the six server permission rules.
+- [`policies/browser-shadow-access.cedar`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/policies/browser-shadow-access.cedar) holds the matching browser guidance rules.
+
+</details>
+
+We'll look at the schema, issuer mapping, and `Create` policy from those files next.
 
 `metadata.json` records the store's stable ID, name, Cedar version, and policy
 version `1.0.0`. The version identifies the reviewed rules; the generated
@@ -298,7 +295,8 @@ operation; the policy must allow it too.
 
 ### Set the conditions for `Create`
 
-In `policies/server-access.cedar`, the `Create` policy matches the token's subject
+With the request types and trusted issuer defined, we can express the creation
+rule. In `policies/server-access.cedar`, the `Create` policy matches the token's subject
 to the current database user and checks its audience and scope. It also requires
 a matching tenant, the owner role, and the required assurance level:
 
@@ -385,10 +383,21 @@ the application.
 
 ## Add Cedarling to the app
 
-![Browser Cedarling guides controls using a safe user projection; the Fastify API enforces a fresh Cedarling decision before a protected database effect.](./assets/enforcement.webp)
+The policies now describe the permissions. Let's connect them to the API first
+and prove that Alex cannot create a task. Then we'll update the browser controls.
 
-_Cedarling checks the signed token and current database facts before the API
-returns or changes task data._
+```mermaid
+flowchart TD
+    accTitle: Server enforcement and browser guidance
+    accDescr: Fastify loads the session token and current database facts, asks its embedded Cedarling instance, and enforces the decision. Browser evaluation only guides controls within the server ceiling.
+    Request["Task request: browser or direct HTTP"] --> API["Fastify: token and current facts"]
+    API --> PDP["Server Cedarling"]
+    PDP --> Check{"API decision"}
+    Check -->|"ALLOW"| Data["Read or write with version checks"]
+    Check -->|"DENY or failure"| Stop["No protected read or write"]
+    API -->|"Safe facts and allowed actions"| Browser["Browser Cedarling: unsigned request"]
+    Browser --> Controls["Controls within server ceiling"]
+```
 
 ### Install Cedarling and build the policy archive
 
@@ -403,9 +412,19 @@ The Cedar package checks source syntax; the Cedarling SDK makes application
 decisions. The examples follow the
 [pinned SDK README](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468).
 
-Add the complete repository-level
-[`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/shared/policy-store.mjs) builder and
-[`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/shared/policy-store.d.mts) declaration.
+We'll use a shared builder to validate the policy files and package them for Cedarling.
+
+<details>
+<summary>Required step: Create the shared archive builder</summary>
+
+Create these files in the repository-level `shared/` directory and copy their
+complete linked contents:
+
+- [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.mjs) validates and packages the policy store.
+- [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.d.mts) supplies the builder's TypeScript declarations.
+
+</details>
+
 The builder validates source paths, JSON, schema/policy syntax, and policy IDs,
 then creates `.local/policy-store.cjar`, a ZIP-format archive ignored by Git:
 
@@ -419,15 +438,25 @@ Keep `policy-store/` in Git. Rebuild and restart after policy edits.
 
 ### Create one Cedarling instance for the server
 
-Replace these files with the complete linked versions:
-[`src/server/authorization-trace.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/server/authorization-trace.ts),
-[`src/server/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/server/app.ts),
-[`src/server/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/server/main.ts),
-[`src/server/config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/server/config.ts), and
-[`tsconfig.server.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/tsconfig.server.json).
-Add [`src/shared/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/shared/authorization.ts)
-and remove the replaced `src/server/capabilities.ts`. These files wire up all six
-server operations, including the imports, function calls, and response types.
+With the archive built, we'll load it once and connect the decisions to all six
+server operations. Copy the complete files together so their imports and types agree.
+
+<details>
+<summary>Required step: Update server authorization and its shared types</summary>
+
+Replace these existing files with their complete linked contents:
+
+- [`src/server/authorization-trace.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/server/authorization-trace.ts) loads Cedarling, builds requests, and records decisions.
+- [`src/server/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/server/app.ts) enforces decisions in routes and serves browser permission data.
+- [`src/server/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/server/main.ts) starts and closes the server's Cedarling instance.
+- [`src/server/config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/server/config.ts) supplies server configuration.
+- [`tsconfig.server.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/tsconfig.server.json) includes the shared types in the server build.
+
+Create [`src/shared/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/shared/authorization.ts)
+and copy its full contents for the shared actions, resources, and permission
+envelope types. Remove `src/server/capabilities.ts`, which it replaces.
+
+</details>
 
 `createServerAuthorization()` loads the archive relative to `options.projectRoot`.
 It registers the archive and initializes Cedarling:
@@ -463,7 +492,8 @@ when the app closes. With strict schema validation, an invalid model prevents st
 
 ### Check permission before saving a task
 
-Inside `createServerAuthorization()`'s returned
+Now let's follow a creation request through the code we copied. Inside
+`createServerAuthorization()`'s returned
 `authorize(requestId, session, target)` function, `session` is trusted server
 state and `target` describes the action and resource. This expanded `Create`
 request shows what `tokenSet(session)` and `requestItem(session, target)` produce:
@@ -576,12 +606,22 @@ offer operations the API now denies. We'll fix that next.
 
 ### Show the actions each user can take
 
-Replace these browser files with the complete linked versions:
-[`src/web/authorization-trace.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/web/authorization-trace.ts),
-[`src/web/api.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/web/api.ts),
-[`src/web/types.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/web/types.ts),
-[`src/web/App.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/web/App.tsx), and
-[`tsconfig.web.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/tsconfig.web.json).
+The API now protects task creation. Let's make the controls reflect those
+permissions too.
+
+<details>
+<summary>Required step: Update browser authorization and controls</summary>
+
+Replace these existing files with their complete linked contents:
+
+- [`src/web/authorization-trace.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/web/authorization-trace.ts) checks the archive and evaluates browser permissions.
+- [`src/web/api.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/web/api.ts) fetches tasks and their authorization envelope.
+- [`src/web/types.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/web/types.ts) connects browser data to the shared types.
+- [`src/web/App.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/web/App.tsx) updates controls as permissions or task versions change.
+- [`tsconfig.web.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/tsconfig.web.json) includes shared types in browser checks.
+
+</details>
+
 The server returns a list of actions it currently allows: its **decision ceiling**.
 For Alex, that includes editing his assigned brief, but not creating a task.
 Browser Cedarling can remove actions from this list, but cannot add permission to create.
@@ -653,15 +693,23 @@ show unsigned Cedarling decisions. Alex's direct
 
 ## Update startup and Docker builds
 
-We still need startup and Docker builds to prepare the policy archive. Replace
-these files with the complete linked versions:
-[`scripts/setup.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/scripts/setup.mjs),
-[`scripts/dev.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/scripts/dev.mjs), and
-[`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/Dockerfile), and update
-[`shared/dev-supervisor.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/shared/dev-supervisor.mjs)
-at repository root. Both startup paths will use the same policy archive.
+We have checked the API and browser separately. Let's finish by making native
+startup and Docker builds prepare the same policy archive automatically.
+
+<details>
+<summary>Required step: Update setup, development startup, and Docker packaging</summary>
+
+Replace these existing files with their complete linked contents:
+
+- [`scripts/setup.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/scripts/setup.mjs) prepares configuration and builds the archive.
+- [`scripts/dev.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/scripts/dev.mjs) starts the IdP, browser watcher, and API together.
+- [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/Dockerfile) builds and includes the policy archive in the image.
+- [`shared/dev-supervisor.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/dev-supervisor.mjs), at repository root, manages development processes and readiness checks.
+
+</details>
+
 Update only these two entries in
-[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/package.json)'s existing `scripts` object;
+[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/package.json)'s existing `scripts` object;
 retain the other scripts and installed dependencies:
 
 ```json
@@ -694,15 +742,13 @@ two-terminal startup.
 
 ## Check allowed and denied operations
 
-![Alex's creation succeeds in the starting application and is denied after Cedarling integration; his assigned-task edit and Mina's creation remain allowed.](./assets/expected-outcomes.webp)
-
-_Alex's creation request should fail. His assigned-task edit and Mina's creation
-should succeed. We'll check responses and logs._
+Both startup paths now load the integration. We'll repeat Alex's original request
+with fresh data, then check the remaining actions and their decision logs.
 
 ### Retry Alex's request, then edit his assigned task
 
 <details>
-<summary>Reset the sample data in this checkout</summary>
+<summary>If needed: Reset the sample data in this checkout</summary>
 
 Stop the exercise services first. For native execution, run `pnpm reset`, then
 `pnpm dev` from this checkout's `p1-task-manager/`. Reset removes `.data`,
@@ -743,7 +789,8 @@ workflow checks separate from permission denials.
 
 ### Read the decision logs
 
-Formatted JSON lets us read nested reasons in the server logs. Match the
+We've checked the responses; the logs let us connect them to the policies.
+Formatted JSON keeps nested reasons readable. Match the
 application record's `cedarlingRequestId` to Cedarling's `request_id`. One HTTP
 request can produce several decisions, each with its own Cedarling ID.
 
@@ -782,13 +829,13 @@ before sharing them.
 
 ### Test stale permissions and authorization failures
 
-Run tests from the finished checkout: the baseline's tests expect operations to
-be allowed and aren't updated by copying runtime files. No new tests are needed
-for this exercise. Stop P1 services to free ports 17001 and
+The finished project's tests also cover permissions that change while a request
+is pending. Run them in a separate checkout, which includes the integration
+tests alongside the runtime code. Stop P1 services to free ports 17001 and
 18001, then use a separate directory for the finished example:
 
 ```bash
-git clone --branch p1-task-manager-v1.0.1 https://github.com/GluuFederation/cedarling-tutorials.git cedarling-p1-finished
+git clone --branch main https://github.com/GluuFederation/cedarling-tutorials.git cedarling-p1-finished
 cd cedarling-p1-finished/p1-task-manager
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
 pnpm install --frozen-lockfile
@@ -813,22 +860,8 @@ A runtime failure needs its own error event, distinct from a policy denial, and
 must stop the protected operation. Stopping the IdP alone won't reliably simulate
 a PDP failure because signing keys and valid tokens may already be cached.
 
-## Use the same checks in your own app
-
-![Authenticate, load current facts, ask Cedarling, then let the application gate the effect. ALLOW permits the effect; DENY or failure leaves it untouched.](./assets/reusable-pattern.webp)
-
-_Use this sequence around reads and writes that need permission._
-
-Choose one operation in your own app, such as creating a task. Authenticate the
-user and load current facts, then ask Cedarling whether the operation may
-proceed. Put that check in the server route that returns or changes the data.
-
-Follow `policy-store/`, the two `authorization-trace.ts` files, and the tests
-in the [completed P1 project](https://github.com/GluuFederation/cedarling-tutorials/tree/p1-task-manager-v1.0.1/p1-task-manager)
-to see where each decision controls a read or write.
-
 <details>
-<summary>Warning: This setup is for local practice</summary>
+<summary>Warning: Before deploying this application</summary>
 
 Local HTTP and the bundled IdP's sample passwords are for learning only.
 Production needs real authentication and assurance, HTTPS, protected secrets,
@@ -837,6 +870,10 @@ development IdP and console output are not a production identity or audit system
 
 Use a configured OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/),
 Gluu, Auth0, or Okta, rather than deploying the tutorial IdP.
+
+For a production stack, consider Agama Lab Policy Designer for policy authoring,
+Jans Auth for issuing tokens, and Lock Server for centralized decision logs.
+See [Cedarling production solutions](https://cedarling.dev/solutions).
 
 These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
 on macOS and Windows. If a platform-specific step fails,
@@ -848,14 +885,24 @@ For further reference, use the official
 
 </details>
 
-For a production stack, consider Agama Lab Policy Designer for policy authoring,
-Jans Auth for issuing tokens, and Lock Server for centralized decision logs.
-See [Cedarling production solutions](https://cedarling.dev/solutions).
+## What we've learned
 
-Next, P2 applies the same approach to retrieval: authorize the corpus and
-candidate documents before loading protected text or sending it to an AI model.
+We started with Alex creating tasks meant to be created by Mina. We've now
+blocked that request while keeping his assigned-task edits working. The API
+checks the token and current tenant, role, assurance, and task relationships
+before each protected read or write. Browser decisions guide the controls
+within the server's allowed actions; they cannot grant API permission.
 
-[^1]: The bundled IdP's [`provider.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/shared/identity-provider/src/provider.ts) configures sign-in and tokens; [`accounts.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/shared/identity-provider/src/accounts.ts) supplies identity claims. P1's login callback in [`app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/server/app.ts) maps the verified issuer and subject to a local user. [`database.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/src/server/database.ts) seeds and loads the role, tenant, and assurance values used here.
+To use this in your own app, choose one operation and find where the server
+returns or changes its data. Load trusted facts there, ask Cedarling, and let
+the operation proceed only after an allowed decision. Check both a denied
+request and legitimate work, including requests that bypass the interface.
+
+In [P2](https://cedarling.dev/learn/prevent-cross-tenant-rag-data-leaks-with-cedarling),
+we'll apply that order to retrieval, checking the corpus and documents before
+their text reaches an AI model.
+
+[^1]: The bundled IdP's [`provider.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/identity-provider/src/provider.ts) configures sign-in and tokens; [`accounts.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/identity-provider/src/accounts.ts) supplies identity claims. P1's login callback in [`app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/server/app.ts) maps the verified issuer and subject to a local user. [`database.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/src/server/database.ts) seeds and loads the role, tenant, and assurance values used here.
 
 [^2]: Cedar recommends authorizing creation against an existing resource container because the new resource does not yet exist. Here, the tenant is that container. See [Cedar's resource-container guidance](https://docs.cedarpolicy.com/bestpractices/bp-resources-containers.html).
 
@@ -867,4 +914,4 @@ candidate documents before loading protected text or sending it to an AI model.
 
 [^6]: Cedar returns an empty list of determining policies when no policy permits or forbids the request. A matched `forbid` would instead appear as a determining policy. See [How Cedar authorization works](https://docs.cedarpolicy.com/auth/authorization.html).
 
-[^7]: Full verification examples: [`test/policy-store.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/test/policy-store.test.ts), [`test/app.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/test/app.test.ts), [`test/browser-authorization.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/test/browser-authorization.test.ts), and [`e2e/task-authorization.e2e.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/p1-task-manager-v1.0.1/p1-task-manager/e2e/task-authorization.e2e.ts).
+[^7]: Full verification examples: [`test/policy-store.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/test/policy-store.test.ts), [`test/app.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/test/app.test.ts), [`test/browser-authorization.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/test/browser-authorization.test.ts), and [`e2e/task-authorization.e2e.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/e2e/task-authorization.e2e.ts).
