@@ -9,14 +9,13 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 import sharp from "sharp";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import { tutorialProjects } from "./changed-projects.mjs";
 
-export const tutorialLimits = Object.freeze({
+const tutorialLimits = Object.freeze({
   assetBytes: 2 * 1024 * 1024,
   assetPixels: 25_000_000,
   assetTotalBytes: 10 * 1024 * 1024,
   assets: 32,
-  bundleBytes: 12 * 1024 * 1024,
-  bundleEntries: 40,
   markdownBytes: 1024 * 1024,
 });
 
@@ -45,7 +44,6 @@ const metadataSchema = z
   })
   .strict();
 const safeAssetPathPattern = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const bundleBaseEntries = 2;
 const mebibyte = 1024 * 1024;
 const dom = new JSDOM("");
 const purifier = createDOMPurify(dom.window);
@@ -287,7 +285,6 @@ function validateSvg(bytes, path) {
 export async function validateTutorialProject(
   repositoryRoot,
   project,
-  tutorialProjects,
 ) {
   if (!tutorialProjects.includes(project)) {
     fail(`unknown tutorial project: ${project}`);
@@ -343,19 +340,9 @@ export async function validateTutorialProject(
       fail(`${sourcePath}: missing asset ./assets/${reference}`);
     }
   }
-  if (bundleBaseEntries + assets.length > tutorialLimits.bundleEntries) {
-    fail(
-      `${project}: tutorial bundle exceeds ${tutorialLimits.bundleEntries} files`,
-    );
-  }
   if (assetBytes > tutorialLimits.assetTotalBytes) {
     fail(
       `${project}: tutorial assets exceed ${mebibytes(tutorialLimits.assetTotalBytes)}`,
-    );
-  }
-  if (tutorialStats.size + assetBytes > tutorialLimits.bundleBytes) {
-    fail(
-      `${project}: tutorial bundle exceeds ${mebibytes(tutorialLimits.bundleBytes)} expanded`,
     );
   }
   return { assets, markdown };

@@ -1,8 +1,7 @@
-// Verifies tutorial validation, staging, and release metadata behavior.
+// Verifies tutorial source validation and the portfolio validation command.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -10,20 +9,12 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
-import {
-  finalizeRelease,
-  parseReleaseTag,
-  prepareRelease,
-  validateTutorialProject,
-} from "./tutorial-release.mjs";
+import { validateTutorialProject } from "./tutorial-contract.mjs";
 import { tutorialProjects } from "./changed-projects.mjs";
-import { tutorialLimits } from "./tutorial-contract.mjs";
 
 const project = "p1-task-manager";
-const tag = `${project}-v1.0.0`;
-const sourceCommit = "a".repeat(40);
-const releaseScript = fileURLToPath(
-  new URL("./tutorial-release.mjs", import.meta.url),
+const validationScript = fileURLToPath(
+  new URL("./validate-tutorials.mjs", import.meta.url),
 );
 const socialCard = await sharp({
   create: {
@@ -37,7 +28,7 @@ const socialCard = await sharp({
   .toBuffer();
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "cedarling-tutorial-release-"));
+  const root = await mkdtemp(join(tmpdir(), "cedarling-tutorial-validation-"));
   const assetRoot = join(root, project, "docs", "assets");
   await mkdir(assetRoot, { recursive: true });
   await writeFile(
@@ -77,42 +68,12 @@ async function portfolioFixture(withTutorial = false) {
   return root;
 }
 
-test("validates and stages the current tutorial source contract", async (context) => {
+test("validates the current tutorial source contract", async (context) => {
   const root = await fixture();
   context.after(() => rm(root, { force: true, recursive: true }));
-
   const validated = await validateTutorialProject(root, project);
   assert.deepEqual(validated.assets, ["boundary.svg", "social-card.webp"]);
-
-  const prepared = spawnSync(
-    process.execPath,
-    [releaseScript, "prepare", "--tag", tag, "--source-commit", sourceCommit],
-    { cwd: root, encoding: "utf8" },
-  );
-  assert.equal(prepared.status, 0, prepared.stderr);
-  assert.deepEqual(
-    JSON.parse(
-      await readFile(join(root, ".release", "stage", "manifest.json"), "utf8"),
-    ),
-    { schemaVersion: 1, project, releaseTag: tag, sourceCommit },
-  );
-  assert.equal(
-    await readFile(
-      join(root, ".release", "stage", "docs", "assets", "boundary.svg"),
-      "utf8",
-    ),
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10z"/></svg>',
-  );
-  assert.deepEqual(
-    await readFile(
-      join(root, ".release", "stage", "docs", "assets", "social-card.webp"),
-    ),
-    socialCard,
-  );
-  assert.equal(
-    await readFile(join(root, ".release", "release.env"), "utf8"),
-    `ARCHIVE=${project}-tutorial.zip\n`,
-  );
+  assert.equal(validated.markdown, await readFile(join(root, project, "docs", "tutorials.md"), "utf8"));
 });
 
 test("rejects a tutorial whose referenced asset is unavailable", async (context) => {
@@ -350,113 +311,39 @@ test("rejects SVG content changed by sanitization", async (context) => {
   }
 });
 
-test("writes the archive checksum and Cedarling.dev registry entry", async (context) => {
-  const root = await fixture();
-  context.after(() => rm(root, { force: true, recursive: true }));
-  const output = join(root, ".release");
-  await mkdir(output, { recursive: true });
-  const archive = `${project}-tutorial.zip`;
-  const bytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x66, 0x69, 0x78]);
-  await writeFile(join(output, archive), bytes);
-
-  const finalized = spawnSync(
-    process.execPath,
-    [releaseScript, "finalize", "--tag", tag, "--source-commit", sourceCommit],
-    { cwd: root, encoding: "utf8" },
-  );
-  assert.equal(finalized.status, 0, finalized.stderr);
-  const digest = createHash("sha256").update(bytes).digest("hex");
-  assert.equal(
-    await readFile(join(output, `${archive}.sha256`), "utf8"),
-    `${digest}  ${archive}\n`,
-  );
-  assert.deepEqual(
-    JSON.parse(await readFile(join(output, "registry-entry.json"), "utf8")),
-    {
-      project,
-      releaseTag: tag,
-      sourceCommit,
-      archiveSha256: digest,
-    },
-  );
-});
-
-test("accepts only explicit project semantic-version tags", () => {
-  assert.equal(parseReleaseTag(tag), project);
-  assert.throws(() => parseReleaseTag(`${project}-latest`), /vX\.Y\.Z/);
-  assert.throws(() => parseReleaseTag(`${project}-v01.0.0`), /vX\.Y\.Z/);
-  assert.throws(() => parseReleaseTag("unknown-v1.0.0"), /known project/);
-});
-
-test("rejects invalid release inputs before writing output", async (context) => {
-  const root = await fixture();
-  context.after(() => rm(root, { force: true, recursive: true }));
-
-  await assert.rejects(
-    prepareRelease({ repositoryRoot: root, sourceCommit: "invalid", tag }),
-    /40-character lowercase SHA/,
-  );
-
-  const output = join(root, ".release");
-  await mkdir(output, { recursive: true });
-  await writeFile(
-    join(output, `${project}-tutorial.zip`),
-    Buffer.alloc(tutorialLimits.bundleBytes + 1),
-  );
-  await assert.rejects(
-    finalizeRelease({ repositoryRoot: root, sourceCommit, tag }),
-    new RegExp(
-      `exceeds ${tutorialLimits.bundleBytes / (1024 * 1024)} MiB compressed`,
-    ),
-  );
-});
-
-test("rejects a release artifact without a ZIP header", async (context) => {
-  const root = await fixture();
-  context.after(() => rm(root, { force: true, recursive: true }));
-  const output = join(root, ".release");
-  await mkdir(output, { recursive: true });
-  await writeFile(join(output, `${project}-tutorial.zip`), "not a zip");
-
-  await assert.rejects(
-    finalizeRelease({ repositoryRoot: root, sourceCommit, tag }),
-    /does not have a ZIP header/,
-  );
-});
-
-test("validate-all accepts a portfolio with no published tutorials", async (context) => {
+test("validation accepts a portfolio with no published tutorials", async (context) => {
   const root = await portfolioFixture();
   context.after(() => rm(root, { force: true, recursive: true }));
 
   const result = spawnSync(
     process.execPath,
-    [releaseScript, "validate-all", "--repository", root],
+    [validationScript, "--repository", root],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "No published tutorial sources found.\n");
 });
 
-test("validate-all validates the available tutorial sources", async (context) => {
+test("validation validates the available tutorial sources", async (context) => {
   const root = await portfolioFixture(true);
   context.after(() => rm(root, { force: true, recursive: true }));
 
   const result = spawnSync(
     process.execPath,
-    [releaseScript, "validate-all", "--repository", root],
+    [validationScript, "--repository", root],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "Validated 1 tutorial source.\n");
 });
 
-test("validate-all rejects a path outside the tutorial repository", async (context) => {
+test("validation rejects a path outside the tutorial repository", async (context) => {
   const root = await mkdtemp(join(tmpdir(), "not-a-tutorial-repository-"));
   context.after(() => rm(root, { force: true, recursive: true }));
 
   const result = spawnSync(
     process.execPath,
-    [releaseScript, "validate-all", "--repository", root],
+    [validationScript, "--repository", root],
     { encoding: "utf8" },
   );
   assert.notEqual(result.status, 0);
@@ -466,7 +353,7 @@ test("validate-all rejects a path outside the tutorial repository", async (conte
 test("reports missing values and unknown CLI options", () => {
   const missingValue = spawnSync(
     process.execPath,
-    [releaseScript, "prepare", "--tag"],
+    [validationScript, "--repository"],
     { encoding: "utf8" },
   );
   assert.notEqual(missingValue.status, 0);
@@ -474,7 +361,7 @@ test("reports missing values and unknown CLI options", () => {
 
   const unknownOption = spawnSync(
     process.execPath,
-    [releaseScript, "validate-all", "--unknown"],
+    [validationScript, "--unknown"],
     { encoding: "utf8" },
   );
   assert.notEqual(unknownOption.status, 0);
