@@ -6,7 +6,7 @@ order: 50
 socialImage: ./assets/social-card.webp
 socialImageAlt: Next.js Server Actions check current editorial facts with Cedarling before protected publishing effects.
 lastVerified: 2026-10-09T12:21:40Z
-lastUpdated: 2026-10-09T17:20:05Z
+lastUpdated: 2026-10-09T17:29:36Z
 ---
 
 # Secure Editorial Publishing with Cedarling
@@ -89,8 +89,8 @@ git switch --detach 21b0832be4b31271320df992d04e9d97667d0e38
 cd p4-editorial-publishing
 
 # Prepare the tutorial steps.
-git restore --source=858d9a43cd47925d612ba292d0d35ba6b288952e --worktree -- ../shared/tools/step
-node ../shared/tools/step/run.mjs p4 init --source 858d9a43cd47925d612ba292d0d35ba6b288952e
+git restore --source=850e38fd5dc4758848e3fcb05af40f3a9c68760c --worktree -- ../shared/tools/step
+node ../shared/tools/step/run.mjs p4 init --source 850e38fd5dc4758848e3fcb05af40f3a9c68760c
 ```
 
 For the coding path, install the dependencies and start the app from this directory:
@@ -721,10 +721,11 @@ the real framework form; it does not grant authority.
 
 For a direct HTTP check, capture that Server Action POST in the Network
 panel and replay it using the same authenticated local session. Preserve its
-current action header, body, and CSRF value. Do not invent or hard-code a Next.js
-action ID, and do not publish the captured credentials. The response can return
-HTTP 200 with an `x-action-redirect` containing `error-forbidden`; judge the
-application outcome and unchanged record, not the HTTP status alone.
+headers, body, and CSRF value. Do not invent or hard-code a Next.js action ID,
+and do not publish the captured credentials. With client JavaScript active, the
+response can return HTTP 200 with an `x-action-redirect`. A native form submission
+returns HTTP 303 with a `Location` header instead. Both redirects contain
+`error-forbidden`; check the application outcome and unchanged record as well.
 
 ### Publish reviewed work, then change its content or authority
 

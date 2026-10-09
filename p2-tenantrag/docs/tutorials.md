@@ -6,7 +6,7 @@ order: 30
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Fastify RAG service checks corpus and documents with Cedarling before sending retrieved evidence to the answer model.
 lastVerified: 2026-10-09T10:23:54Z
-lastUpdated: 2026-10-09T17:20:05Z
+lastUpdated: 2026-10-09T17:29:36Z
 ---
 
 # Prevent Cross-Tenant RAG Leaks with Cedarling
@@ -99,8 +99,8 @@ git switch --detach 21b0832be4b31271320df992d04e9d97667d0e38
 cd p2-tenantrag
 
 # Prepare the tutorial steps.
-git restore --source=858d9a43cd47925d612ba292d0d35ba6b288952e --worktree -- ../shared/tools/step
-node ../shared/tools/step/run.mjs p2 init --source 858d9a43cd47925d612ba292d0d35ba6b288952e
+git restore --source=850e38fd5dc4758848e3fcb05af40f3a9c68760c --worktree -- ../shared/tools/step
+node ../shared/tools/step/run.mjs p2 init --source 850e38fd5dc4758848e3fcb05af40f3a9c68760c
 ```
 
 Put `P2_VOYAGE_API_KEY` and `P2_OPENROUTER_API_KEY` in the ignored project `.env`.

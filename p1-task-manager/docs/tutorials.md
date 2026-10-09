@@ -6,7 +6,7 @@ order: 20
 socialImage: ./assets/social-card.webp
 socialImageAlt: Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.
 lastVerified: 2026-10-09T13:42:36Z
-lastUpdated: 2026-10-09T17:20:05Z
+lastUpdated: 2026-10-09T17:29:36Z
 ---
 
 # Protect a Node.js REST API with Cedarling
@@ -96,8 +96,8 @@ git switch --detach 21b0832be4b31271320df992d04e9d97667d0e38
 cd p1-task-manager
 
 # Prepare the tutorial steps.
-git restore --source=858d9a43cd47925d612ba292d0d35ba6b288952e --worktree -- ../shared/tools/step
-node ../shared/tools/step/run.mjs p1 init --source 858d9a43cd47925d612ba292d0d35ba6b288952e
+git restore --source=850e38fd5dc4758848e3fcb05af40f3a9c68760c --worktree -- ../shared/tools/step
+node ../shared/tools/step/run.mjs p1 init --source 850e38fd5dc4758848e3fcb05af40f3a9c68760c
 ```
 
 For the coding path, start Node.js in two terminals.[^7] In the first:
