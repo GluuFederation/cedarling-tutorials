@@ -5,13 +5,15 @@ import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { buildPolicyStore } from "../../shared/policy-store.mjs";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const entry = fileURLToPath(new URL("../src/server/main.ts", import.meta.url));
-const loader = createRequire(import.meta.url).resolve("tsx");
+const loader = pathToFileURL(
+  createRequire(import.meta.url).resolve("tsx"),
+).href;
 let root: string;
 let issuer: Server | undefined;
 

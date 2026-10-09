@@ -11,9 +11,8 @@ import {
   rename,
   unlink,
 } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { pathToFileURL } from "node:url";
 
 const toolPath = "shared/tools/step";
 const statePath = ".local/step";
@@ -689,10 +688,7 @@ export async function runTutorial(
   return options.dryRun ? action() : exclusive(root, cwd, action);
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (import.meta.main) {
   runTutorial(process.argv.slice(2)).catch((error) => {
     if (error instanceof ConfirmationInterrupted) {
       process.stdout.write(`${error.message}\n`);

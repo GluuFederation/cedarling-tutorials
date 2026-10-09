@@ -657,6 +657,39 @@ test("requires ignored, untracked state before initialization", async (t) => {
   await assert.rejects(f.init(), /ignored and untracked/);
 });
 
+test("CLI initializes and applies steps through a symlinked checkout path", async (t) => {
+  const f = await fixture(t);
+  const directory = await mkdtemp(join(tmpdir(), "cedarling-step-alias-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const alias = join(directory, "checkout");
+  await symlink(
+    f.root,
+    alias,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  const cli = join(alias, toolPath, "run.mjs");
+  const options = { cwd: join(alias, "example-one"), encoding: "utf8" };
+
+  const initialized = spawnSync(
+    process.execPath,
+    [cli, "p1", "init", "--source", f.source],
+    options,
+  );
+  assert.equal(initialized.status, 0, initialized.stderr);
+  assert.deepEqual((await f.state()).completed, []);
+
+  const applied = spawnSync(
+    process.execPath,
+    [cli, "p1", "server", "--yes"],
+    options,
+  );
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.match(applied.stdout, /Completed server/);
+  assert.equal(await f.read("example-one/src/app.js"), "integrated\n");
+  assert.deepEqual((await f.state()).completed, ["server"]);
+  assert.equal(git(f.root, "rev-parse", "HEAD"), f.baseline);
+});
+
 test("CLI requires explicit confirmation in non-interactive use and handles unknown arguments", async (t) => {
   const f = await fixture(t);
   await f.init();
