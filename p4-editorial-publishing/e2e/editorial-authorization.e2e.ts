@@ -42,6 +42,40 @@ async function bypassDisabledButton(page: Page, name: string): Promise<void> {
   await button.click();
 }
 
+async function replayForbiddenApproval(page: Page): Promise<void> {
+  const articlePath = new URL(page.url()).pathname;
+  const [action] = await Promise.all([
+    page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === articlePath,
+      { timeout: 10_000 },
+    ),
+    bypassDisabledButton(page, "Approve revision"),
+  ]);
+  await expect(page.getByRole("status")).toContainText(
+    "This action is not allowed",
+  );
+  // Replay the actual framework request, not a fabricated action identifier.
+  const body = action.postDataBuffer();
+  if (!body) throw new Error("Missing action form data");
+  const actionHeader = action.headers()["next-action"];
+  const response = await page.request.post(action.url(), {
+    data: body,
+    headers: {
+      "content-type": action.headers()["content-type"],
+      ...(actionHeader ? { "next-action": actionHeader } : {}),
+      origin: new URL(page.url()).origin,
+    },
+    maxRedirects: 0,
+  });
+  // Hydrated actions use an RSC redirect; native forms use an HTTP redirect.
+  expect(response.status()).toBe(actionHeader ? 200 : 303);
+  expect(
+    response.headers()[actionHeader ? "x-action-redirect" : "location"],
+  ).toContain("error-forbidden");
+}
+
 test("denies the three unsafe editorial workflows and permits valid publication", async ({
   browser,
 }) => {
@@ -97,36 +131,24 @@ test("denies the three unsafe editorial workflows and permits valid publication"
     await expect(riley.getByRole("status")).toContainText(
       "This action is not allowed",
     );
-    const submittedApproval = riley.waitForRequest(
-      (request) =>
-        request.method() === "POST" &&
-        Boolean(request.headers()["next-action"]),
-    );
-    await bypassDisabledButton(riley, "Approve revision");
-    await expect(riley.getByRole("status")).toContainText(
-      "This action is not allowed",
-    );
-    // Replay the actual framework request, not a fabricated action identifier.
-    const action = await submittedApproval;
-    const body = action.postData();
-    if (!body) throw new Error("Missing action form data");
-    const response = await riley.request.post(action.url(), {
-      data: body,
-      headers: {
-        "content-type": action.headers()["content-type"],
-        "next-action": action.headers()["next-action"],
-        origin: new URL(riley.url()).origin,
-      },
-      maxRedirects: 0,
-    });
-    expect(response.status()).toBe(200);
-    expect(response.headers()["x-action-redirect"]).toContain(
-      "error-forbidden",
-    );
+    await replayForbiddenApproval(riley);
     await bypassDisabledButton(riley, "Publish current revision");
     await expect(riley.getByRole("status")).toContainText(
       "This action is not allowed",
     );
+
+    // The same Server Action can be submitted before client hydration finishes.
+    const nativeContext = await browser.newContext({
+      javaScriptEnabled: false,
+      storageState: await rileyContext.storageState(),
+    });
+    try {
+      const nativePage = await nativeContext.newPage();
+      await nativePage.goto(riley.url());
+      await replayForbiddenApproval(nativePage);
+    } finally {
+      await nativeContext.close();
+    }
 
     const ana = await anaContext.newPage();
     await signIn(ana, "Ana", "ana");
