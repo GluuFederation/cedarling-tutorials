@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { createHash, webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import type { AuthorizationEnvelope } from "../src/shared/authorization";
+import type { AuthorizationEnvelope } from "../src/shared/authorization.js";
 import type { Task, User } from "../src/web/types";
 
 const sdk = vi.hoisted(() => ({ initFromArchiveBytes: vi.fn() }));
@@ -148,6 +148,19 @@ describe("P1 browser Cedarling boundary", () => {
     warning.mockRestore();
   });
 
+  test("does not fall back to a ceiling that expired during initialization", async () => {
+    const current = envelope();
+    const now = vi.spyOn(Date, "now");
+    sdk.initFromArchiveBytes.mockImplementation(async () => {
+      now.mockReturnValue(Date.parse(current.expiresAt));
+      throw new Error("Browser initialization failed after expiry");
+    });
+
+    expect(
+      await authorizePresentation({ envelope: current, tasks: [task], user }),
+    ).toEqual({ stale: true, ceiling: { tasks: {} } });
+  });
+
   test("skips browser evaluation when the server ceiling denies every control", async () => {
     const current = envelope();
     const denied = {
@@ -163,6 +176,30 @@ describe("P1 browser Cedarling boundary", () => {
     ).toEqual({ stale: false, ceiling: denied.ceiling });
     expect(sdk.initFromArchiveBytes).not.toHaveBeenCalled();
   });
+
+  test.each(["initialization", "evaluation"])(
+    "discards permissions that expire during successful %s",
+    async (stage) => {
+      const current = envelope();
+      const now = vi.spyOn(Date, "now");
+      const runtime = cedarling([true, true, true]);
+      const evaluate = runtime.authorizeUnsignedBatch.getMockImplementation()!;
+      runtime.authorizeUnsignedBatch.mockImplementation(async () => {
+        if (stage === "evaluation")
+          now.mockReturnValue(Date.parse(current.expiresAt));
+        return evaluate();
+      });
+      sdk.initFromArchiveBytes.mockImplementation(async () => {
+        if (stage === "initialization")
+          now.mockReturnValue(Date.parse(current.expiresAt));
+        return runtime;
+      });
+
+      expect(
+        await authorizePresentation({ envelope: current, tasks: [task], user }),
+      ).toEqual({ stale: true, ceiling: { tasks: {} } });
+    },
+  );
 
   test("rejects an envelope whose resource version is stale", async () => {
     const result = await authorizePresentation({

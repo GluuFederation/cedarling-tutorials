@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "id": "p4",
+  "directory": "p4-editorial-publishing",
+  "baseline": "21b0832be4b31271320df992d04e9d97667d0e38",
+  "steps": [
+    {
+      "id": "policy-store",
+      "files": [
+        "p4-editorial-publishing/policy-store/metadata.json",
+        "p4-editorial-publishing/policy-store/schema.cedarschema",
+        "p4-editorial-publishing/policy-store/policies/editorial.cedar"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "archive-builder",
+      "files": ["shared/policy-store.mjs", "shared/policy-store.d.mts"],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "server",
+      "files": [
+        "p4-editorial-publishing/src/server/authorization.ts",
+        "p4-editorial-publishing/src/server/models.ts",
+        "p4-editorial-publishing/src/server/errors.ts",
+        "p4-editorial-publishing/src/server/database.ts",
+        "p4-editorial-publishing/src/server/service.ts",
+        "p4-editorial-publishing/src/server/runtime.ts",
+        "p4-editorial-publishing/app/actions.ts",
+        "p4-editorial-publishing/app/articles/[articleId]/page.tsx",
+        "p4-editorial-publishing/next.config.ts",
+        "p4-editorial-publishing/app/action-button.tsx"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "startup",
+      "files": [
+        "p4-editorial-publishing/scripts/setup.ts",
+        "p4-editorial-publishing/Dockerfile",
+        "p4-editorial-publishing/app/auth/callback/route.ts",
+        "p4-editorial-publishing/app/error.tsx",
+        "p4-editorial-publishing/app/styles.css"
+      ],
+      "remove": [],
+      "scripts": ["build"]
+    },
+    {
+      "id": "checks",
+      "files": [
+        "p4-editorial-publishing/test/authorization.test.ts",
+        "p4-editorial-publishing/test/database.test.ts",
+        "p4-editorial-publishing/test/service.test.ts",
+        "p4-editorial-publishing/test/support.ts",
+        "p4-editorial-publishing/playwright.config.ts",
+        "shared/dev-supervisor.mjs",
+        "p4-editorial-publishing/test/config.test.ts",
+        "p4-editorial-publishing/e2e/editorial-authorization.e2e.ts",
+        "shared/browser-test-stack.mjs"
+      ],
+      "remove": ["p4-editorial-publishing/e2e/editorial-gaps.e2e.ts"],
+      "scripts": ["test", "check"]
+    }
+  ]
+}

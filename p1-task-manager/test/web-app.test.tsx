@@ -183,6 +183,7 @@ describe("P1 task UI", () => {
 
   afterEach(() => {
     act(() => root.unmount());
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false });
     vi.restoreAllMocks();
@@ -267,6 +268,168 @@ describe("P1 task UI", () => {
     expect(button("Save changes").disabled).toBe(false);
     expect(button("Assign to Mina").disabled).toBe(false);
     expect(button("Delete").disabled).toBe(false);
+  });
+
+  it("removes expired creation permission when list refresh fails", async () => {
+    vi.useFakeTimers();
+    const mina = tutorialSessions[1]![1];
+    api.session.mockResolvedValue(mina);
+    authorizeSession(mina, { view: true, edit: true }, true);
+    renderApp(root);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(button("New task").disabled).toBe(false);
+
+    api.tasks.mockRejectedValue(new Error("List refresh failed"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(document.body.textContent).toContain("Task service unavailable");
+    expect(
+      Array.from(document.querySelectorAll("button")).some(
+        (item) => item.textContent.trim() === "New task",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not restore permissions from an older task-list response", async () => {
+    const mina = tutorialSessions[1]![1];
+    api.session.mockResolvedValue(mina);
+    api.tasks.mockRejectedValueOnce(new Error("Retry the list"));
+    renderApp(root);
+    await settle();
+    const older = {
+      tasks: [task],
+      authorization: envelope(mina, { view: true }, true),
+    };
+    let finishOlder!: (result: typeof older) => void;
+    api.tasks.mockReturnValueOnce(
+      new Promise<typeof older>((resolve) => {
+        finishOlder = resolve;
+      }),
+    );
+    api.tasks.mockResolvedValueOnce({
+      tasks: [],
+      authorization: envelope(mina, {}, false),
+    });
+    const retry = button("Retry");
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await settle();
+    await act(async () => {
+      finishOlder(older);
+    });
+
+    expect(
+      Array.from(document.querySelectorAll("button")).some(
+        (item) => item.textContent.trim() === "New task",
+      ),
+    ).toBe(false);
+    expect(document.body.textContent).not.toContain(task.title);
+  });
+
+  it("disables an already-open create form when its permission expires", async () => {
+    vi.useFakeTimers();
+    const mina = tutorialSessions[1]![1];
+    api.session.mockResolvedValue(mina);
+    authorizeSession(mina, { view: true }, true);
+    renderApp(root);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => button("New task").click());
+    api.tasks.mockRejectedValue(new Error("List refresh failed"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(button("Create task").disabled).toBe(true);
+    act(() => {
+      document
+        .querySelector<HTMLFormElement>(".modal-panel form")!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+    });
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it("ignores browser evaluation from an older list refresh", async () => {
+    vi.useFakeTimers();
+    const mina = tutorialSessions[1]![1];
+    api.session.mockResolvedValue(mina);
+    authorizeSession(mina, { view: true }, true);
+    renderApp(root);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const older = envelope(mina, { view: true }, true);
+    let finishOlder!: (result: {
+      ceiling: AuthorizationEnvelope["ceiling"];
+      stale: boolean;
+    }) => void;
+    browserAuthorization.authorizePresentation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOlder = resolve;
+      }),
+    );
+    api.tasks.mockResolvedValueOnce({ tasks: [task], authorization: older });
+    api.create.mockResolvedValueOnce({ task });
+    act(() => button("New task").click());
+    await act(async () => {
+      document
+        .querySelector<HTMLFormElement>(".modal-panel form")!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    api.tasks.mockResolvedValueOnce({
+      tasks: [],
+      authorization: envelope(mina, {}, false),
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await act(async () => {
+      finishOlder({ ceiling: older.ceiling, stale: false });
+    });
+    expect(document.body.textContent).not.toContain("New task");
+    expect(document.querySelector(".task-ledger")?.textContent).not.toContain(
+      task.title,
+    );
+  });
+
+  it("does not carry a pending list response into a new session", async () => {
+    const mina = tutorialSessions[1]![1];
+    api.session.mockResolvedValue(mina);
+    const older = {
+      tasks: [task],
+      authorization: envelope(mina, { view: true }, true),
+    };
+    let finishOlder!: (result: typeof older) => void;
+    api.tasks.mockReturnValueOnce(
+      new Promise<typeof older>((resolve) => {
+        finishOlder = resolve;
+      }),
+    );
+    renderApp(root);
+    await settle();
+    act(() => root.render(null));
+    api.session.mockResolvedValue(alex);
+    authorizeSession(alex, { view: true }, false);
+    renderApp(root);
+    await settle();
+    await act(async () => {
+      finishOlder(older);
+    });
+    expect(document.body.textContent).not.toContain("New task");
+    expect(document.querySelector(".identity-copy")?.textContent).toContain(
+      "Alex Morgan",
+    );
   });
 
   it("preserves a failed create form and requires confirmation before delete", async () => {

@@ -208,6 +208,8 @@ export async function authorizePresentation(
 
   try {
     const { cedarling } = await loadPolicy(envelope.policy);
+    if (!isCurrent(envelope, tasks, user, options.expectedSubjectEpoch))
+      return { ceiling: emptyCeiling(), stale: true };
     const batch = await cedarling.authorizeUnsignedBatch(
       JSON.stringify({
         principal: {
@@ -250,8 +252,12 @@ export async function authorizePresentation(
             Boolean(controls[destination.control]) && result.decision;
       }
     }
+    if (!isCurrent(envelope, tasks, user, options.expectedSubjectEpoch))
+      return { ceiling: emptyCeiling(), stale: true };
     return { ceiling, stale: false };
   } catch {
+    if (!isCurrent(envelope, tasks, user, options.expectedSubjectEpoch))
+      return { ceiling: emptyCeiling(), stale: true };
     console.warn(
       "P1 browser | authorization unavailable; using the current server ceiling",
     );

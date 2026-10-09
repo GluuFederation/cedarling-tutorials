@@ -205,6 +205,7 @@ function Workspace({
   const [detailExpiresAt, setDetailExpiresAt] = useState<number>();
   const createTriggerRef = useRef<HTMLButtonElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const listRequestRef = useRef(0);
 
   const replaceTask = useCallback((task: Task) => {
     setTasks((current) => {
@@ -217,15 +218,20 @@ function Workspace({
   }, []);
 
   const loadTasks = useCallback(async () => {
+    const request = ++listRequestRef.current;
+    const isCurrent = () => request === listRequestRef.current;
+    setCreateAllowed(false);
     setListState("loading");
     setListError("");
     try {
       const result = await api.tasks();
+      if (!isCurrent()) return;
       const presentation = await authorizePresentation({
         envelope: result.authorization,
         tasks: result.tasks,
         user: session.user,
       });
+      if (!isCurrent()) return;
       if (presentation.stale)
         throw new Error("The authorization state changed");
       const visibleTasks = result.tasks.filter(
@@ -242,6 +248,7 @@ function Workspace({
       );
       setListState("ready");
     } catch (error) {
+      if (!isCurrent()) return;
       if (error instanceof ApiError && error.status === 401) {
         onSessionExpired();
         return;
@@ -253,6 +260,9 @@ function Workspace({
 
   useEffect(() => {
     void loadTasks();
+    return () => {
+      listRequestRef.current += 1;
+    };
   }, [loadTasks]);
 
   useEffect(() => {
@@ -414,6 +424,7 @@ function Workspace({
     event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
   ) {
     event.preventDefault();
+    if (!createAllowed) return;
     setBusy(true);
     setCreateError("");
     try {
@@ -819,7 +830,7 @@ function Workspace({
                   >
                     Cancel
                   </button>
-                  <button className="primary" disabled={busy}>
+                  <button className="primary" disabled={busy || !createAllowed}>
                     Create task
                   </button>
                 </div>

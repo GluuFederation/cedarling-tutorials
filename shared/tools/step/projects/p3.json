@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "p3",
+  "directory": "p3-mcp-capability-governance",
+  "baseline": "21b0832be4b31271320df992d04e9d97667d0e38",
+  "steps": [
+    {
+      "id": "mcp-client",
+      "files": ["p3-mcp-capability-governance/scripts/mcp-request.ts"],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "policy-store",
+      "files": [
+        "p3-mcp-capability-governance/policy-store/metadata.json",
+        "p3-mcp-capability-governance/policy-store/schema.cedarschema",
+        "p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar",
+        "p3-mcp-capability-governance/policy-store/trusted-issuers/tutorial-idp.json"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "archive-builder",
+      "files": ["shared/policy-store.mjs", "shared/policy-store.d.mts"],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "server",
+      "files": [
+        "p3-mcp-capability-governance/src/mcp/authorization.ts",
+        "p3-mcp-capability-governance/src/mcp/server.ts",
+        "p3-mcp-capability-governance/src/mcp/availability.ts",
+        "p3-mcp-capability-governance/src/auth/token-verifier.ts",
+        "p3-mcp-capability-governance/src/incidents/types.ts",
+        "p3-mcp-capability-governance/src/incidents/repository.ts",
+        "p3-mcp-capability-governance/src/mcp/schemas.ts",
+        "p3-mcp-capability-governance/src/app.ts",
+        "p3-mcp-capability-governance/src/main.ts",
+        "p3-mcp-capability-governance/src/config/project-config.ts",
+        "p3-mcp-capability-governance/tsconfig.build.json"
+      ],
+      "remove": ["p3-mcp-capability-governance/src/mcp/trace.ts"],
+      "scripts": []
+    },
+    {
+      "id": "startup",
+      "files": [
+        "p3-mcp-capability-governance/sidecar-bootstrap.json",
+        "p3-mcp-capability-governance/src/chat/host.ts",
+        "p3-mcp-capability-governance/scripts/setup.mjs",
+        "p3-mcp-capability-governance/Dockerfile",
+        "p3-mcp-capability-governance/compose.yaml"
+      ],
+      "remove": ["p3-mcp-capability-governance/scripts/dev.mjs"],
+      "scripts": ["build", "dev", "start"]
+    },
+    {
+      "id": "checks",
+      "files": [
+        "p3-mcp-capability-governance/eslint.config.js",
+        "p3-mcp-capability-governance/test/config.test.ts",
+        "p3-mcp-capability-governance/test/helpers.ts",
+        "p3-mcp-capability-governance/test/protocol.test.ts",
+        "p3-mcp-capability-governance/test/scenario.test.ts",
+        "p3-mcp-capability-governance/test/setup.test.ts",
+        "p3-mcp-capability-governance/test/authorization.test.ts",
+        "p3-mcp-capability-governance/test/policy-store.test.ts",
+        "p3-mcp-capability-governance/test/mcp-request.test.ts",
+        "p3-mcp-capability-governance/scripts/test-e2e.ts",
+        "p3-mcp-capability-governance/scripts/verify-stack.ts"
+      ],
+      "remove": [],
+      "scripts": ["test:e2e"]
+    }
+  ]
+}

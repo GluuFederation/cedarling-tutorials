@@ -1,5 +1,6 @@
 /** Prepare and supervise P1's IdP, browser build watcher, and API together. */
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { issuerHealth, runDevStack } from "../../shared/dev-supervisor.mjs";
@@ -8,6 +9,7 @@ import { loadConfig } from "../src/server/config.ts";
 const root = resolve(import.meta.dirname, "..");
 const identityRoot = resolve(root, "../shared/identity-provider");
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const tsx = createRequire(import.meta.url).resolve("tsx/cli");
 
 try {
   await runDevStack({
@@ -44,8 +46,8 @@ try {
         },
         {
           name: "P1 application",
-          command: pnpm,
-          args: ["exec", "tsx", "watch", "src/server/main.ts"],
+          command: process.execPath,
+          args: [tsx, "watch", "src/server/main.ts"],
           cwd: root,
           env,
           health: {

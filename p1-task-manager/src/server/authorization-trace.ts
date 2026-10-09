@@ -180,7 +180,7 @@ export async function createServerAuthorization(
   );
   if (cedarling.loadedTrustedIssuersCount() < 1) {
     await cedarling.shutDown();
-    throw new Error("P1 trusted issuer did not load");
+    throw new Error("P1 requires at least one trusted issuer");
   }
 
   const policy = {

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, writeSync } from "node:fs";
 import path from "node:path";
 import { loadProjectEnvironment } from "./environment.js";
 import { buildApp } from "./app.js";
@@ -48,9 +48,43 @@ try {
 }
 console.log(`P1 Task Manager listening at ${config.baseUrl}`);
 
+let stopping = false;
+
 async function shutDown(signal: string): Promise<void> {
+  if (stopping) return;
+  stopping = true;
+  // Finish before the development supervisor's five-second shutdown limit.
+  const deadline = setTimeout(() => {
+    writeSync(2, "P1 shutdown timed out\n");
+    process.exit(1);
+  }, 4_000);
   console.log(`Received ${signal}; stopping P1 Task Manager`);
-  await app?.close();
+  let exitCode = 0;
+  try {
+    await app?.close();
+  } catch {
+    console.error("P1 shutdown failed");
+    exitCode = 1;
+  }
+  try {
+    await Promise.all(
+      [process.stdout, process.stderr].map(
+        (stream) =>
+          new Promise<void>((resolve, reject) => {
+            stream.write("", (error) => {
+              if (error) reject(error);
+              else resolve();
+            });
+          }),
+      ),
+    );
+  } catch {
+    exitCode = 1;
+  }
+  clearTimeout(deadline);
+  // The pinned WASM runtime can retain timers after shutDown() resolves.
+  // Only this executable exits; reusable authorization code just closes resources.
+  process.exit(exitCode);
 }
-process.once("SIGINT", () => void shutDown("SIGINT"));
-process.once("SIGTERM", () => void shutDown("SIGTERM"));
+process.on("SIGINT", () => void shutDown("SIGINT"));
+process.on("SIGTERM", () => void shutDown("SIGTERM"));
