@@ -1,11 +1,12 @@
 ---
 slug: protect-sensitive-data-exports
 title: Protect Sensitive Data Exports with Cedarling
-summary: Authorize fields, tenant-bound queries, aggregate disclosure, and CSV export access at their server boundaries.
+summary: Control access to sensitive fields, reports, and CSV exports with server-side Cedarling decisions.
 order: 60
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Hono API checks query plans with embedded Cedarling before releasing rows, aggregates, or CSV exports.
 lastVerified: 2026-10-07T19:56:00Z
+lastUpdated: 2026-10-09T17:29:36Z
 ---
 
 # Protect Sensitive Data Exports with Cedarling
@@ -25,7 +26,7 @@ five records per returned group. Creating an export needs a separate decision;
 downloading or revoking it requires its owner to still have the finance role.
 Leah's allowed finance reports and exports should keep working.
 
-## Build the integration or try the finished app
+## Build the data-access checks or run the complete example
 
 - To build the integration, start with [Run the starting application](#run-the-starting-application), then add the policies and server checks.
 - To try the finished app, run the [finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p5-dataguard) using its README, then go to [Check queries and exports for each user](#check-queries-and-exports-for-each-user). This version already uses Cedarling.
@@ -35,7 +36,7 @@ and complete its instructions before continuing. These sections contain the file
 and changes we'll need.
 
 <details>
-<summary>What you'll need</summary>
+<summary>Before you start</summary>
 
 - Git, Node.js 24.21+ within 24.x, and pnpm 10.17.1 for the coding steps. The project supplies its own tutorial identity provider (IdP).
 - Docker with Compose is optional for the baseline or finished example. Use native Node.js for the coding steps.
@@ -45,11 +46,8 @@ and changes we'll need.
 
 </details>
 
-At each copying step, open the linked file on GitHub, choose **Raw**, and copy
-its full contents into the stated destination in your baseline checkout. The
-short examples explain the parts we'll focus on. Create missing parent
-directories first. Paths and commands are relative to
-`p5-dataguard/`; repository-level `shared/` files go one directory above it.
+Run the commands from `p5-dataguard/`. Paths under `shared/` are relative to
+the repository root.
 
 ## Who should see which data?
 
@@ -58,8 +56,9 @@ directories first. Paths and commands are relative to
 _Amina, Leah, and Theo may see different parts of the same dataset._
 
 P5 is a React application with a Hono Node.js API and SQLite. The browser
-submits a query plan with limits on what it can request, not SQL. It can request
-rows or aggregates[^1], such as a count of employees by department.
+submits a query plan with limits on what it can request, not SQL. A plan can
+request individual rows or an aggregate: a calculation over several records,
+such as a count of employees by department.[^1]
 
 - **Amina**, Tenant A support analyst: operational fields and tenant ID for
   `support`; no personal or compensation fields and no exports.
@@ -84,22 +83,22 @@ us check the API without relying on which fields the interface offers.
 
 ### Run the starting application
 
-Use a new checkout with its own sample data:
+Use a separate checkout for P5, including if you've already followed another
+project. This keeps shared files and sample data separate:
 
 ```bash
 git clone https://github.com/GluuFederation/cedarling-tutorials.git cedarling-p5
 cd cedarling-p5
 git switch --detach 21b0832be4b31271320df992d04e9d97667d0e38
 cd p5-dataguard
-docker compose up --build
+
+# Prepare the tutorial steps.
+git restore --source=850e38fd5dc4758848e3fcb05af40f3a9c68760c --worktree -- ../shared/tools/step
+node ../shared/tools/step/run.mjs p5 init --source 850e38fd5dc4758848e3fcb05af40f3a9c68760c
 ```
 
-Open `http://localhost:17005`. The development IdP is at
-`http://localhost:18005`. Select Amina. The development IdP usually prefills
-`amina`; enter it if the field is empty. Use a non-empty password such as
-`cedarling-is-awesome`, and approve access.
-
-For native startup, run these commands from the project directory:
+For the build-along, install the dependencies and start the native development
+stack from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
@@ -108,7 +107,30 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Use only one startup method on these ports.
+`pnpm dev` prepares the sample data, builds the application, and starts the IdP
+and API together. Keep that terminal running while using the app.
+
+<details>
+<summary>Optional: Run the starting app with Docker</summary>
+
+Instead of the native commands above, run:
+
+```bash
+docker compose up --build
+```
+
+Native and Docker execution use the same ports; run only one at a time. Before
+the coding steps, stop Docker with `Ctrl+C`, then `docker compose down`, keeping
+its volume. Install the native dependencies with the first three commands above;
+wait until the server checkpoint to run `pnpm dev` again. Native execution uses
+its own sample database.
+
+</details>
+
+Open `http://localhost:17005`. The development IdP is at
+`http://localhost:18005`. Select Amina. The development IdP usually prefills
+`amina`; enter it if the field is empty. Use a non-empty password such as
+`cedarling-is-awesome`, and approve access.
 
 ### Request salary without using the field picker
 
@@ -140,10 +162,9 @@ separate from SQL instructions, but does not decide whether Amina may see salary
 The baseline also permits cross-tenant queries, small-group aggregates, and
 access to another user's exports. Keep this request to repeat after integration.
 
-Capture the response using fictional data only. Stop the baseline before
-integrating; for Docker use `Ctrl+C`, then `docker compose down` without deleting
-the volume. If you started with Docker, install the native dependencies using
-the commands above before the coding steps.
+Capture the response using fictional data only. Stop the native stack with
+`Ctrl+C` before editing. If you chose Docker, follow its stop and native-install
+instructions above.
 
 ## Where should we check permission?
 
@@ -155,7 +176,10 @@ it executes the query here:
 
 ```ts
 // src/server/app.ts (starting checkpoint)
+// Inside buildApp() > evaluatePlan():
+const compiled = compileQuery(plan);
 const evaluation = database.evaluate(compiled, compileCardinalityQuery(plan));
+// ... log the baseline ALLOW and return the evaluated result.
 ```
 
 The log printed afterward has not checked whether Amina may read
@@ -191,7 +215,11 @@ policy-store/
 <details>
 <summary>Required step: Create the five policy-store files</summary>
 
-Create these files and copy their complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p5 policy-store
+```
+
+New files:
 
 - [`policy-store/metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/metadata.json) identifies the store and version.
 - [`policy-store/schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/schema.cedarschema) defines analysts, fields, datasets, exports, and request context.
@@ -202,9 +230,9 @@ Create these files and copy their complete linked contents:
 </details>
 
 Use the store's metadata and version `1.0.0`. Namespace `P5DataGuard` contains
-four entity types: `Analyst`, `Dataset`, `Field`, and `Export`. OIDC and SQLite
-supply identity and current facts, so this store needs no trusted issuers,
-default entities, templates, or custom issuers.
+four entity types: `Analyst`, `Dataset`, `Field`, and `Export`. The server
+authenticates the user through OIDC and loads the current analyst from SQLite.
+Each unsigned request carries that analyst and the facts needed for its operation.
 
 | Design question                                  | P5 answer                                                                                  |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
@@ -229,8 +257,8 @@ filter does not meet the tenant requirement.
 All requests use the current database analyst as principal. Actions below use
 the `P5DataGuard::Action` namespace.
 
-| Capability        | Action                                                                                                                                                                             | Resource             | Context                                               | Effect waiting for ALLOW                |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------- | --------------------------------------- |
+| Capability        | Action                                                                                                                                                              | Resource             | Context                                               | Effect waiting for ALLOW                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------- | --------------------------------------- |
 | `dataset.inspect` | [`InspectDataset`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/fields.cedar#L2 "inspect-fields")             | Each candidate field | Empty                                                 | Return field metadata to React          |
 | `data.query`      | [`Query`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")                      | Workforce dataset    | Validated row-plan facts                              | Return rows within the plan's limit     |
 | `data.aggregate`  | [`Aggregate`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/policy-store/policies/plans.cedar#L2 "authorized-plan")                  | Workforce dataset    | Plan facts and current minimum group size             | Return aggregate values                 |
@@ -305,13 +333,14 @@ when {
 ```
 
 Knowing an export's download reference does not satisfy its ownership and finance
-conditions. The application also checks expiry, reference validity, file
-integrity, and whether the export is still active. No matching permit gives DENY.
+conditions. The application also checks expiry, reference validity, and whether
+the export is still active. No matching permit gives DENY.
 
 ## Add Cedarling to the API
 
-We have separate rules for each disclosure. Now we'll call Cedarling from the
-API and keep the protected result behind its decision.
+Field metadata, query plans, and saved exports reach different API routes.
+Each route supplies current facts to Cedarling, then rechecks those facts before
+releasing data or changing an export:
 
 ```mermaid
 flowchart TD
@@ -328,11 +357,11 @@ flowchart TD
 
 ### Build the archive and load Cedarling
 
-Install pinned dependencies from P5:
+From P5, install Cedarling and match the completed app's dependencies:
 
 ```bash
-pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
-pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0
+pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 hono@4.13.7
+pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
 ```
 
 We'll use a shared builder to validate the policy files and package them for Cedarling.
@@ -340,8 +369,11 @@ We'll use a shared builder to validate the policy files and package them for Ced
 <details>
 <summary>Required step: Create the shared archive builder</summary>
 
-Create these files in the repository-level `shared/` directory and copy their
-complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p5 archive-builder
+```
+
+The shared builder files are:
 
 - [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.mjs) validates and packages the policy store.
 - [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.d.mts) provides its TypeScript declarations.
@@ -358,53 +390,67 @@ The command must finish without validation errors and create
 `.local/policy-store.cjar`. Keep the readable policy source in Git and the
 generated archive ignored. The complete `src/server/authorization.ts` in the
 next step initializes one [Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468)
-instance:
+instance in `createDataAuthorization()`. Its `archivePath` defaults to the
+`.local/policy-store.cjar` we just built in the project directory:
 
 ```ts
 // src/server/authorization.ts
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { initFromArchiveBytes } from "@janssenproject/cedarling_wasm";
 
-const archive = new Uint8Array(await readFile(archivePath));
-const cedarling = await initFromArchiveBytes(
-  {
-    CEDARLING_APPLICATION_NAME: "P5 DataGuard",
-    CEDARLING_LOG_TYPE: "memory",
-    CEDARLING_LOG_TTL: 300,
-    CEDARLING_STRICT_SCHEMA_VALIDATION: "enabled",
-  },
-  archive,
-);
+// ... other imports and types omitted.
+export async function createDataAuthorization(
+  archivePath = resolve(".local/policy-store.cjar"),
+): Promise<DataAuthorization> {
+  const archive = new Uint8Array(await readFile(archivePath));
+  // ... validate metadata and log the policy version and archive digest.
+  const cedarling = await initFromArchiveBytes(
+    {
+      CEDARLING_APPLICATION_NAME: "P5 DataGuard",
+      CEDARLING_LOG_TYPE: "memory",
+      CEDARLING_LOG_TTL: 300,
+      CEDARLING_STRICT_SCHEMA_VALIDATION: "enabled",
+    },
+    archive,
+  );
+  // ... define log helpers and return inspect(), authorize(), and close().
+}
 ```
 
-`archivePath` defaults to `.local/policy-store.cjar` on the server. The module
-logs its version and SHA-256. `src/server/main.ts` creates the authorization
-functions, passes them to `buildApp()`, and calls `shutDown()` when shutting down.
+The module logs the archive's version and SHA-256. `src/server/main.ts` creates
+the authorization functions, passes them to `buildApp()`, and calls `shutDown()`
+when shutting down.
 
 ### Pass the analyst and query facts to Cedarling
 
 With the archive ready, let's connect Cedarling to the query and export routes.
-Copy the files below together, then follow how they build a request for Amina.
+We'll add the server files, then follow how they build a request for Amina.
 
 <details>
 <summary>Required step: Add authorization and update the query and export service</summary>
 
-Create these files and copy their complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p5 server
+```
+
+New files:
 
 - [`src/server/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/authorization.ts) builds Cedarling requests and records decisions.
 - [`src/server/errors.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/errors.ts) defines bounded errors for denied or unavailable authorization.
 
-Replace these existing files with their complete linked contents:
+Updated files:
 
 - [`src/server/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/app.ts) checks permission at each API boundary.
 - [`src/server/database.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/database.ts) rechecks current sessions and query facts within transactions.
 - [`src/server/query.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/query.ts) validates plans and compiles bounded SQL.
-- [`src/server/export-service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/export-service.ts) creates CSV files and checks saved export references.
+- [`src/server/export-service.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/export-service.ts) creates, reads, and removes CSV files. The API and database look up their references.
 - [`src/server/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/main.ts) starts and closes Cedarling with the API.
-- [`src/server/config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/config.ts) supplies the policy archive location.
+- [`src/server/config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/server/config.ts) supplies API, storage, identity, and session settings.
 - [`src/shared/contracts.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/shared/contracts.ts) defines query, export, and permission-preview types.
+- [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/scripts/setup.ts) prepares configuration and sample data using the updated server modules, and builds the policy archive.
 
-Remove `src/server/permissive-trace.ts`; authorization now records the actual decisions.
+The step removes `src/server/permissive-trace.ts`; authorization now records the actual decisions.
 
 </details>
 
@@ -413,41 +459,61 @@ It collects fields used in selected columns, calculations, grouping, and filters
 It gets their classifications from the server catalog and includes
 `tenant_id` only when the submitted filter is an exact tenant equality.
 
-In this call, `analyst` comes from the current database session; `action`,
-`resource`, and `context` follow the request table. The full file builds the
-principal with `principal(analyst)` and logs
-decisions through `logDecision()`:
+`createDataAuthorization()` returns an `authorize()` method. It receives
+the current database analyst and either a query plan or a saved export.
+The method builds `resource` and `context` for that operation, then evaluates
+the request:
 
 ```ts
 // src/server/authorization.ts
-const result = await cedarling.authorizeUnsigned(
-  JSON.stringify({
-    principal: {
-      cedar_entity_mapping: {
-        entity_type: "P5DataGuard::Analyst",
-        id: analyst.id,
-      },
-      id: analyst.id,
-      tenant_id: analyst.tenantId,
-      role: analyst.role,
-    },
-    action,
-    resource,
-    context,
-  }),
-);
-for (const log of cedarling.getLogsByRequestId(result.request_id)) {
-  console.info(JSON.stringify(log, null, 2));
-}
-if (result.response.diagnostics.errors.length > 0) {
-  throw new AuthorizationError(503, "authorization_unavailable");
-}
-return result.decision === true;
+// Returned object inside createDataAuthorization():
+return {
+  // ... inspect() omitted.
+  async authorize(request) {
+    const { analyst, capability, requestId } = request;
+    // ... build resource and context from the plan or saved export.
+    try {
+      const result = await cedarling.authorizeUnsigned(
+        JSON.stringify({
+          principal: principal(analyst),
+          action: `P5DataGuard::Action::"${actions[capability]}"`,
+          resource,
+          context,
+        }),
+      );
+      logDecision(
+        requestId,
+        analyst.id,
+        capability,
+        request.phase ?? "enforcement",
+        resource.cedar_entity_mapping,
+        result.request_id,
+      );
+      if (result.response.diagnostics.errors.length)
+        throw new Error("Policy evaluation failed");
+      return result.decision === true;
+    } catch {
+      logFailure(
+        requestId,
+        analyst.id,
+        capability,
+        request.phase ?? "enforcement",
+      );
+      throw new AuthorizationError(503, "authorization_unavailable");
+    }
+  },
+  close: () => cedarling.shutDown(),
+};
 ```
 
+The file's `principal(analyst)` helper maps the database user to
+`P5DataGuard::Analyst`, including `id`, `tenant_id`, and `role`.
+`logDecision()` links the application request to Cedarling's request ID and
+prints the matching Cedarling records with `JSON.stringify(log, null, 2)`.
+
 `authorizeUnsigned()` expects a JSON string, so `JSON.stringify()` converts
-the server-validated request to that format.[^2] The log formatting
-call prints nested reasons for this local exercise.
+the server-validated request to that format.[^2] The separate log formatting
+call makes nested reasons readable in this local exercise.
 
 `AuthorizationError` comes from `src/server/errors.ts`, copied above. The catch
 handler maps Cedarling failures to `503 authorization_unavailable`. A valid
@@ -478,48 +544,59 @@ no unchecked fields.
 
 ### Check permission before running the query
 
-We can now build and evaluate the request. The next step is to make the query
-wait for its result. Row queries, aggregates, and export creation use `executePlan()` in
-`src/server/app.ts`. It requires permission before `database.execute()`:
+Row queries, aggregates, and export creation share `executePlan()` in
+`src/server/app.ts`. We'll trace where it requires permission before
+`database.execute()`:
 
 ```ts
 // src/server/app.ts
-requireActiveRequest(context);
-const { cardinality, minimumGroupSize } = planFacts(plan);
-if (
-  !(await authorization.authorize({
-    requestId,
-    analyst: session.user,
-    capability,
-    plan,
-    ...(minimumGroupSize !== undefined ? { minimumGroupSize } : {}),
-  }))
-)
-  throw new AuthorizationError(403, "authorization_denied");
-return database.withCurrentSession(
-  getCookie(context, sessionCookie) ?? "",
-  config,
-  session,
-  () => {
-    // Only the bounded cardinality probe precedes ALLOW; protected values do not.
-    requireActiveRequest(context);
-    if (
-      cardinality &&
-      database.minimumGroupSize(cardinality) !== minimumGroupSize
-    )
-      throw new AuthorizationError(409, "authorization_state_changed");
-    const compiled = compileQuery(plan);
-    return effect(compiled.outputColumns, database.execute(compiled));
-  },
-);
+// Inside buildApp():
+async function executePlan<T>(
+  context: Context,
+  plan: QueryPlan,
+  capability: "data.query" | "data.aggregate" | "data.export",
+  session: Session,
+  requestId: string,
+  effect: (columns: string[], rows: QueryResponse["rows"]) => T,
+): Promise<T> {
+  requireActiveRequest(context);
+  const { cardinality, minimumGroupSize } = planFacts(plan);
+  if (
+    !(await authorization.authorize({
+      requestId,
+      analyst: session.user,
+      capability,
+      plan,
+      ...(minimumGroupSize !== undefined ? { minimumGroupSize } : {}),
+    }))
+  )
+    throw new AuthorizationError(403, "authorization_denied");
+  return database.withCurrentSession(
+    getCookie(context, sessionCookie) ?? "",
+    config,
+    session,
+    () => {
+      // Only the bounded cardinality probe precedes ALLOW; protected values do not.
+      requireActiveRequest(context);
+      if (
+        cardinality &&
+        database.minimumGroupSize(cardinality) !== minimumGroupSize
+      )
+        throw new AuthorizationError(409, "authorization_state_changed");
+      const compiled = compileQuery(plan);
+      return effect(compiled.outputColumns, database.execute(compiled));
+    },
+  );
+}
 ```
 
 `planFacts()` supplies the counts needed to check an aggregate. If authorization
 denies or throws, execution stops before the protected query. After `ALLOW`,
 `withCurrentSession()` checks the session and analyst's current permissions
-inside the transaction. The count is checked again there too. If the session or
-access token expired while waiting for the decision, or the analyst or count
-changed, it throws `409 authorization_state_changed` without running the query.
+inside the transaction and checks the minimum group size again. If the session
+or access token expired while waiting for the decision, or the analyst or minimum
+group size changed, it throws `409 authorization_state_changed` without running
+the query.
 
 `effect` uses the allowed rows to build the response or create the CSV.
 The SQL compiler continues to use fixed identifiers and bound values in
@@ -530,15 +607,35 @@ using its stored owner. They recheck expiry, state, and current facts before
 sending the file or revoking access. Revocation stays saved even if deleting the
 CSV file then fails; failed cleanup must not restore access.
 
+### Try the server check before updating the controls
+
+Start the app with the new server files and the existing browser interface:
+
+```bash
+pnpm dev
+```
+
+The setup file copied above builds the archive before startup. Sign in again as
+Amina and repeat the [salary request](#request-salary-without-using-the-field-picker)
+in the browser console. Expect **403**, `error: "authorization_denied"`, a
+request ID, and no rows. The API now blocks the same disclosure that returned
+200 in the baseline.
+
+Stop the stack with `Ctrl+C` before continuing with the browser files.
+
 ### Show which actions are available
 
-The API protects the results. Let's also give users controls that reflect what
-the server currently permits.
+We've denied the direct request. Now let's make the query and export controls
+reflect the server's decisions.
 
 <details>
 <summary>Required step: Update the query form and export controls</summary>
 
-Replace these existing files with their complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p5 browser
+```
+
+Updated files:
 
 - [`src/web/App.tsx`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/web/App.tsx) applies permission previews to the form and export actions.
 - [`src/web/api.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/src/web/api.ts) requests previews and handles bounded API errors.
@@ -548,68 +645,103 @@ Replace these existing files with their complete linked contents:
 </details>
 
 `POST /api/authorization` previews the exact selected plan and export operations.
-It returns which actions are allowed, not rows or a CSV. React ignores outdated preview
-responses and disables controls while checking or when decisions are unavailable.
-Each actual query/export request still authorizes again.
+It returns which actions are allowed, not rows or a CSV. React ignores outdated
+preview responses and disables controls while checking or when decisions are
+unavailable. Each actual query/export request still authorizes again.
 
-Export controls use the last completed query, so editing the form does not
-silently change the result being exported. These controls use server previews;
-there is no browser Cedarling instance or separate client permission table.
+Export creation submits the last successful query plan for a new authorization
+check and query. Editing the form does not change that plan until the user runs
+it. React uses the server's previews for these controls.
 
 ## Finish setup and restart the app
 
-The server and controls are connected. Before testing them, let's make sure
-native startup and Docker both build the policy archive.
+The development setup already builds the archive. Let's include it in standalone
+builds and Docker, and update the reset command for the new server files.
 
 <details>
-<summary>Required step: Update setup, reset, and Docker packaging</summary>
+<summary>Required step: Update reset and Docker packaging</summary>
 
-Replace these existing files with their complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p5 startup
+```
 
-- [`scripts/setup.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/scripts/setup.ts) prepares configuration, builds the archive, and seeds data.
+Updated files:
+
 - [`scripts/reset.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/scripts/reset.ts) restores sample data and clears sessions and exports.
 - [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/Dockerfile) includes the archive in the runtime image.
 
+The step also updates `build` to package policies before building the browser and server.
+
 </details>
 
-Apply the `build` entry shown below to your existing
-[`package.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/package.json), keeping
-the other dependencies and scripts.
-
-The setup script builds the archive; the production build must too. The existing
+The existing
 [`scripts/dev.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/scripts/dev.mjs)
-runs both steps before starting the IdP and API, so `pnpm dev` needs no further
-change:
+runs setup and build before starting the IdP and API. It stays unchanged.
 
-```json
-{
-  "scripts": {
-    "build": "node ../shared/policy-store.mjs && vite build && tsc -p tsconfig.server.json"
-  }
-}
-```
-
-The copied Dockerfile includes `.local/policy-store.cjar` in the runtime image.
-For compiled native startup, run `pnpm run setup` and `pnpm build`, keep
-`node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js`
-running in another terminal, and run `pnpm start`. Docker remains
-`docker compose up --build`.
-
-Stop the baseline development stack before restarting it. Run:
+Restart the development stack:
 
 ```bash
-pnpm run setup
-pnpm build
 pnpm dev
 ```
 
-Open `http://localhost:17005` and sign in again as Amina after the IdP restart.
-We'll retry her salary request, then check the allowed queries and exports.
+<details>
+<summary>Optional: Run the compiled app</summary>
+
+Stop the development stack first. For compiled native execution, run
+`pnpm run setup` and `pnpm build`. Keep
+`node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js`
+running in one terminal, then run `pnpm start` in another.
+
+</details>
+
+<details>
+<summary>Optional: Run the integrated app with Docker</summary>
+
+Stop the native stack first, then run:
+
+```bash
+docker compose up --build
+```
+
+Docker uses its own data volume. The copied Dockerfile includes
+`.local/policy-store.cjar` in its runtime image.
+
+</details>
 
 ## Check queries and exports for each user
 
-We'll compare the same salary request before and after integration, then check
-that Amina, Theo, and Leah can still do their permitted work.
+Open `http://localhost:17005` and sign in as Amina. We'll check the updated
+controls and direct requests, then try Theo's aggregates and Leah's exports.
+
+To change users, choose **Open account menu**, then **Change account**. Ordinary
+tabs share the app's session. Use separate browser profiles for simultaneous
+users, and fetch a fresh `/api/session` response for the CSRF token in each
+profile after signing in.
+
+<details>
+<summary>If needed: Reset the native sample data</summary>
+
+For native execution, run `pnpm reset` from this checkout's `p5-dataguard/`.
+Reset restores the sample records and clears sessions and exports. Sign in again
+afterward. Do not reset data you want to keep, or reset between creating an export
+and checking access to it.
+
+</details>
+
+<details>
+<summary>If using Docker: Reset the sample data</summary>
+
+This restores the Docker stack's sample records and clears sessions and exports.
+Do not reset data you want to keep, or reset between creating an export and
+checking access to it. Run:
+
+```bash
+docker compose exec dataguard node --env-file=/run/config/app.env scripts/reset.ts
+```
+
+Sign in again afterward.
+
+</details>
 
 ### Retry Amina's salary request
 
@@ -661,24 +793,69 @@ CSRF header as in the first example and POST this body to
 }
 ```
 
-For the export lifecycle, sign in as Leah, run an allowed finance plan, and create
-an export. Download it, inspect the fictional data, then revoke it. Download
-must fail afterward. Exports also expire ten minutes after creation.
+### Check access to a ready export, then revoke it
 
-Amina and Theo must not download or revoke Leah's export even with its reference
-or ID. Use separate sessions or the automated test to distinguish a role denial
-from a missing reference. The routes are
-`POST /api/exports/download` with `{ "downloadRef": "<reference>" }` and
-`POST /api/exports/<id>/revoke`. Both require that session's CSRF header and
-same-origin request. Never publish actual session or download credentials.
+Sign in as Leah, run an allowed finance plan, and create an export. Download it
+and inspect the fictional data. Keep it ready while testing other users;
+exports expire ten minutes after creation.
+
+<details>
+<summary>Required step: Try Leah's ready export as another user</summary>
+
+In Leah's browser Network panel, find the `POST /api/exports` response and note
+its `export.id` and `downloadRef` privately. Keep Leah's profile signed in.
+In separate browser profiles, sign in as Amina and Theo at
+`http://localhost:17005`. Run this in each authenticated app page's console,
+using Leah's export values when prompted:
+
+```js
+await (async () => {
+  const exportId = window.prompt("Leah's ready export ID");
+  const downloadRef = window.prompt("Leah's ready export reference");
+  if (!exportId || !downloadRef) return;
+  const session = await fetch("/api/session").then((response) =>
+    response.json(),
+  );
+  for (const [url, body] of [
+    ["/api/exports/download", { downloadRef }],
+    [`/api/exports/${encodeURIComponent(exportId)}/revoke`, undefined],
+  ]) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": session.csrfToken,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const result = await response.json();
+    console.log(response.status, result.error, result.requestId);
+  }
+})();
+```
+
+Both requests should return **403** with `authorization_denied`. The script
+prints only status, error, and request ID. Never publish the reference, cookies,
+or session credentials. If the download returns `410 export_expired` or
+`410 export_revoked`, create another export as Leah and retry while it is ready;
+that lifecycle response has not tested the other user's permission. A `404`
+means the reference or ID was not found.
+
+</details>
+
+Return to Leah's profile. Download the same export again to confirm the denied
+attempts left it available, then revoke it. A further download request should
+return **410** with `export_revoked`. To send it directly, use the console block
+above in Leah's profile with only its `/api/exports/download` entry. The UI also
+disables download after revocation.
 
 ### Read the query and export logs
 
 Let's use the logs to distinguish a permission decision from a completed query
-or export. `authorization.context` connects the application request, actor, capability,
-and preview/enforcement phase with a Cedarling request ID. Cedarling's decision
-JSON includes full `diagnostics.reason` and `errors`. Field inspection has one
-decision per field; seeing both ALLOW and DENY in that batch is normal.
+or export. `authorization.context` connects the application request, actor,
+capability, and preview/enforcement phase with a Cedarling request ID. Cedarling's
+decision JSON includes full `diagnostics.reason` and `errors`. Field inspection
+has one decision per field; seeing both ALLOW and DENY in that batch is normal.
 
 Amina's salary request can produce DENY with an empty reason and no errors:
 no permit matched. An allowed query or aggregate cites `authorized-plan`; an
@@ -697,11 +874,39 @@ memory expire after five minutes, so they are not a lasting audit record.
 
 ### Check changed permissions and unavailable decisions
 
-We've checked the visible results and logs. The automated suite also covers
-changes while authorization is pending. Use a separate checkout of the
-[finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p5-dataguard),
-which includes the integration tests, and install its locked project and shared IdP dependencies.
-Stop your learner stack to free ports 17005 and 18005, then run:
+The manual exercises check permissions with stable data. We'll use the matching
+integration tests to check changes while Cedarling is evaluating a request, in
+the same checkout we've been building.
+
+<details>
+<summary>Required step: Add the checks for this integration</summary>
+
+```bash
+node ../shared/tools/step/run.mjs p5 checks
+```
+
+Updated files:
+
+- [`test/app.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/test/app.test.ts) checks API decisions, export ownership and lifecycle, stale facts, and failures.
+- [`test/harness.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/test/harness.ts) supplies disposable data, sessions, and a real Cedarling instance for the tests.
+- [`test/query.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/test/query.test.ts) checks query validation and SQL compilation.
+- [`playwright.config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/playwright.config.ts) connects the browser checks to their isolated application stack.
+- Repository-level [`shared/dev-supervisor.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/dev-supervisor.mjs) manages those processes and detects occupied test ports.
+
+New files:
+
+- [`test/authorization.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/test/authorization.test.ts) exercises real policies and decision logging.
+- [`test/config.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/test/config.test.ts) checks configuration validation.
+- [`e2e/sensitive-data-authorization.e2e.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p5-dataguard/e2e/sensitive-data-authorization.e2e.ts) checks sign-in, controls, and direct API access in a browser.
+- Repository-level [`shared/browser-test-stack.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/browser-test-stack.mjs) builds and starts the disposable app and IdP used by Playwright.
+
+The step removes `e2e/sensitive-data-gaps.e2e.ts` and updates `test`
+to build the policy archive before running Vitest.
+
+</details>
+
+Stop the exercise stack to free ports 17005 and 18005, then run from this
+checkout's `p5-dataguard/`:
 
 ```bash
 pnpm exec playwright install chromium
@@ -718,27 +923,22 @@ returned group's minimum size, change permissions or counts while authorization
 is pending, and confirm that unavailable Cedarling releases no protected results
 or files. Browser checks use real sign-in and bypass the UI to call the API.
 
-For a fresh exercise, `pnpm reset` clears the sample
-records, exports, and sessions; sign in again. In Docker use
-`docker compose exec dataguard node --env-file=/run/config/app.env scripts/reset.ts`.
-Do not reset a database you want to keep. Capture the identical unauthorized
-compensation request before and after, and Leah's allowed finance export.
+Keep the before-and-after salary responses and Leah's allowed export as your
+exercise evidence. The [finished P5 project](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p5-dataguard)
+is available if you need to compare a file or run the complete example separately.
 
 <details>
-<summary>Warning: Before deploying this application</summary>
+<summary>Warning: Learning project only</summary>
 
-Replace local HTTP and the bundled learning IdP with HTTPS and a configured
-OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/),
-Gluu, Auth0, or Okta.
+This project is for learning only and is not intended for production use.
+Adapting it requires a separate security and operational review, including HTTPS,
+a production OIDC provider, data storage, and audit logging. The five-record
+minimum is a teaching rule; it does not prevent sensitive facts from being
+inferred across repeated queries.
 
-Control permission changes, secure stored data, and store audit logs. Keep
-parameterized SQL, transactions, expiry, and file cleanup alongside authorization.
-A five-record minimum is a teaching example: users can still learn sensitive
-facts by combining repeated queries.
-
-For a production stack, consider Agama Lab Policy Designer for policy authoring,
-Jans Auth for issuing tokens, and Lock Server for centralized decision logs.
-See [Cedarling production solutions](https://cedarling.dev/solutions).
+For components to consider, see [Cedarling production solutions](https://cedarling.dev/solutions):
+Agama Lab Policy Designer for policy authoring, Jans Auth for identity, and
+Lock Server for centralized decision logs.
 
 These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
 on macOS and Windows. If a platform-specific step fails,
@@ -746,7 +946,7 @@ on macOS and Windows. If a platform-specific step fails,
 
 </details>
 
-## What we've learned
+## Recap: queries and exports
 
 Amina's salary request now fails, while her support queries still work. We've
 given Theo bounded aggregates and kept Leah's finance reports and exports
@@ -761,6 +961,6 @@ while waiting. We can use the same approach in a GraphQL API by enforcing
 field and data permissions in the resolvers or services that release them;
 see [GraphQL's authorization guidance](https://graphql.org/learn/authorization/).
 
-[^1]: An aggregate reports a calculation over multiple records, such as a count by department, without returning the individual rows. Small groups and repeated queries can still reveal sensitive facts, so P5 treats aggregate release as its own authorization boundary.
+[^1]: Small groups and repeated aggregate queries can reveal sensitive facts without returning individual rows. P5 checks aggregate release separately from row access; its minimum group size is not a complete privacy guarantee.
 
 [^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468) accepts a JSON-string request. Converting to JSON does not validate the query plan; the server must do that before calling Cedarling.

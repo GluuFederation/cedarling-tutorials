@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "id": "p1",
+  "directory": "p1-task-manager",
+  "baseline": "21b0832be4b31271320df992d04e9d97667d0e38",
+  "steps": [
+    {
+      "id": "policy-store",
+      "files": [
+        "p1-task-manager/policy-store/metadata.json",
+        "p1-task-manager/policy-store/schema.cedarschema",
+        "p1-task-manager/policy-store/trusted-issuers/tutorial-idp.json",
+        "p1-task-manager/policy-store/policies/server-access.cedar",
+        "p1-task-manager/policy-store/policies/browser-shadow-access.cedar"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "archive-builder",
+      "files": ["shared/policy-store.mjs", "shared/policy-store.d.mts"],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "server",
+      "files": [
+        "p1-task-manager/src/server/authorization-trace.ts",
+        "p1-task-manager/src/server/app.ts",
+        "p1-task-manager/src/server/main.ts",
+        "p1-task-manager/src/server/config.ts",
+        "p1-task-manager/tsconfig.server.json",
+        "p1-task-manager/src/shared/authorization.ts"
+      ],
+      "remove": ["p1-task-manager/src/server/capabilities.ts"],
+      "scripts": []
+    },
+    {
+      "id": "browser",
+      "files": [
+        "p1-task-manager/src/web/authorization-trace.ts",
+        "p1-task-manager/src/web/api.ts",
+        "p1-task-manager/src/web/types.ts",
+        "p1-task-manager/src/web/App.tsx",
+        "p1-task-manager/tsconfig.web.json"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "startup",
+      "files": [
+        "p1-task-manager/scripts/setup.mjs",
+        "p1-task-manager/scripts/dev.mjs",
+        "p1-task-manager/Dockerfile",
+        "shared/dev-supervisor.mjs"
+      ],
+      "remove": [],
+      "scripts": ["build", "dev"]
+    },
+    {
+      "id": "checks",
+      "files": [
+        "p1-task-manager/test/app.test.ts",
+        "p1-task-manager/test/setup.test.ts",
+        "p1-task-manager/test/web-app.test.tsx",
+        "p1-task-manager/test/policy-store.test.ts",
+        "p1-task-manager/test/browser-authorization.test.ts",
+        "p1-task-manager/test/config.test.ts",
+        "p1-task-manager/test/server-lifecycle.test.ts",
+        "p1-task-manager/e2e/task-authorization.e2e.ts",
+        "p1-task-manager/playwright.config.ts",
+        "shared/browser-test-stack.mjs",
+        "p1-task-manager/tsconfig.json",
+        "p1-task-manager/tsconfig.lint.json",
+        "p1-task-manager/eslint.config.js",
+        "p1-task-manager/.prettierignore"
+      ],
+      "remove": [],
+      "scripts": ["check", "test:e2e"]
+    }
+  ]
+}

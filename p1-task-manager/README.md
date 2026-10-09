@@ -10,6 +10,9 @@ The application handles authentication, sessions, request integrity, validation,
 tenant-scoped lists, and optimistic concurrency. Follow the
 [tutorial](docs/tutorials.md) to add authorization to the [starting application](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p1-task-manager).
 
+The [tutorial helper](../shared/tools/step/README.md) copies the files
+needed at each integration step.
+
 ## Architecture
 
 ```mermaid
@@ -35,7 +38,7 @@ The commands work from PowerShell, macOS terminals, and Ubuntu shells.
 
 ## Run
 
-Start the application and its own IdP:
+From `p1-task-manager/`, start the application and its own IdP:
 
 ```bash
 docker compose up --build
@@ -65,15 +68,24 @@ The policy store trusts only issuer `http://localhost:18001` and audience
 
 ## Exercise
 
-Compare the task board using these accounts:
+Choose an account below. The sign-in page prefills its username; enter it if
+needed and use any non-empty password, such as `cedarling-is-awesome`.
+These credentials are for the local tutorial IdP only.
 
 - Alex can view and edit his assigned Tenant A task, but cannot create one.
 - Mina can create tasks in Tenant A and manage tasks she owns.
 - Sam can view and edit his own Tenant B task, but cannot access Tenant A tasks.
 
-Try the [direct API request](docs/tutorials.md#create-a-task-as-alex)
-as well as the visible controls. A hidden button alone does not prove that
-the server enforces permission.
+Try the [direct API request](docs/tutorials.md#retry-alexs-request-then-edit-his-assigned-task)
+as Alex: creating a task returns `403 forbidden`. He can still edit his assigned
+task. Compare these responses with the visible controls.
+
+To restore native fixtures, stop the app and IdP, run `pnpm reset`, then
+`pnpm dev` and sign in again. Reset deletes this project's `.data` directory,
+including tasks, sessions, and stored policy artifacts; configuration is preserved.
+Docker uses separate volumes. To reset that stack, run
+`docker compose down --volumes`, then `docker compose up --build`. This removes
+the stack's application data and generated configuration, so sign in again.
 
 ## Commands
 

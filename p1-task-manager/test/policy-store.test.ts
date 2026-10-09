@@ -639,6 +639,37 @@ describe("P1 browser shadow policy", () => {
 });
 
 describe("P1 server Cedarling boundary", () => {
+  test("rejects a policy archive without trusted issuer definitions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cedarling-p1-no-issuers-"));
+    let runtime:
+      Awaited<ReturnType<typeof createServerAuthorization>> | undefined;
+    try {
+      await cp(policyStoreSource, join(root, "policy-store"), {
+        recursive: true,
+        filter: (source) =>
+          source !== join(policyStoreSource, "trusted-issuers"),
+      });
+      await buildPolicyStore({
+        projectRoot: root,
+        dependencyRoot: projectRoot,
+      });
+      const initialization = createServerAuthorization({
+        projectRoot: root,
+        dataDirectory: join(root, "data"),
+      }).then((value) => {
+        runtime = value;
+        return value;
+      });
+
+      await expect(initialization).rejects.toThrow(
+        "P1 requires at least one trusted issuer",
+      );
+    } finally {
+      await runtime?.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("authorizes single and batch requests from the built archive", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

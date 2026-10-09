@@ -1,11 +1,12 @@
 ---
 slug: govern-mcp-capabilities
 title: Govern MCP Capabilities with Cedarling
-summary: Protect MCP tools, resources, and prompts with signed identity evidence and a private Cedarling sidecar.
+summary: Use Token-Based Access Control (TBAC) to authorize MCP tools, resources, and prompts through a private Cedarling sidecar.
 order: 40
 socialImage: ./assets/social-card.webp
 socialImageAlt: An MCP server checks incident capabilities with a private Cedarling sidecar before protected effects.
-lastVerified: 2026-10-07T19:56:00Z
+lastVerified: 2026-10-09T11:47:10Z
+lastUpdated: 2026-10-09T17:29:36Z
 ---
 
 # Govern MCP Capabilities with Cedarling
@@ -25,7 +26,7 @@ or the analyst's current assignment. Eve has no incident permissions and must
 not reach these operations. We'll retry Amir's update, then check his assigned
 work still succeeds, including calls without the chat interface.
 
-## Build the integration or try the finished app
+## Add MCP permissions or run the finished assistant
 
 - To build the integration, start with [Run the starting application](#run-the-starting-application), then add the policies and sidecar calls.
 - To try the finished app, run the [finished project on main](https://github.com/GluuFederation/cedarling-tutorials/tree/main/p3-mcp-capability-governance) using its README, then go to [Check assigned and unassigned incidents](#check-assigned-and-unassigned-incidents). This version already uses Cedarling.
@@ -35,7 +36,7 @@ and complete its instructions before continuing. These sections contain the file
 and changes we'll need.
 
 <details>
-<summary>What you'll need</summary>
+<summary>Before you start</summary>
 
 - Git, Node.js 24.21+ within 24.x, and pnpm 10.17.1.
 - Docker with Compose is required: the completed PDP runs in a containerized Flask sidecar.[^1] The pinned image is `linux/amd64`; ARM Docker Desktop needs amd64 emulation.
@@ -44,13 +45,14 @@ and changes we'll need.
 - New to Cedarling? [Read the short introduction](https://cedarling.dev/learn/what-is-cedarling) when you need it.
 - Keep the [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy while editing policies.
 
+These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
+on macOS and Windows. If a platform-specific step fails,
+[open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+
 </details>
 
-At each copying step, open the linked file on GitHub, choose **Raw**, and copy
-its full contents into the stated destination in your baseline checkout. The
-short examples explain the parts we'll focus on. Create missing parent
-directories first. Paths and commands are relative to
-`p3-mcp-capability-governance/`; repository-level `shared/` files go one directory above it.
+Run the commands from `p3-mcp-capability-governance/`. Paths under `shared/` are relative to
+the repository root.
 
 ## Meet the incident assistant and its users
 
@@ -71,8 +73,10 @@ unassigned audit incident in the mitigated state. Amir should not resolve the
 second incident just because the model selected its update tool.
 
 The bundled Node.js `oidc-provider` authenticates these users and issues their
-access tokens. The MCP server looks up roles in its account map and assignments
-in the incident repository; neither comes from the model.
+access tokens. Cedarling uses Token-Based Access Control (TBAC): policies evaluate
+signed tokens from trusted issuers together with the request's facts.[^6]
+In P3, the token identifies the caller. The MCP server looks up roles in its
+account map and assignments in the incident repository.
 
 The host and model request work. The MCP server controls data access and changes.
 Cedarling supplies decisions; it does not call tools or update incidents.
@@ -84,16 +88,35 @@ confirm an update to the incident that nobody assigned to him.
 
 ### Run the starting application
 
-Use a separate checkout with its own sample incidents:
+Use a separate checkout for P3, including if you've already followed another
+project. This keeps shared files and sample incidents separate:
 
 ```bash
 git clone https://github.com/GluuFederation/cedarling-tutorials.git cedarling-p3
 cd cedarling-p3
 git switch --detach 21b0832be4b31271320df992d04e9d97667d0e38
 cd p3-mcp-capability-governance
+
+# Prepare the tutorial steps.
+git restore --source=850e38fd5dc4758848e3fcb05af40f3a9c68760c --worktree -- ../shared/tools/step
+node ../shared/tools/step/run.mjs p3 init --source 850e38fd5dc4758848e3fcb05af40f3a9c68760c
 pnpm install --frozen-lockfile
 pnpm run setup
 ```
+
+<details>
+<summary>Required step: Add the direct MCP exercise</summary>
+
+```bash
+node ../shared/tools/step/run.mjs p3 mcp-client
+```
+
+[`scripts/mcp-request.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/scripts/mcp-request.ts) signs in through the same
+Device Flow and calls the MCP server without a model. It supports search and
+confirmed updates, keeps tokens in memory, and works before and after integration.
+We'll use it to check direct access and to continue if the chat provider fails.
+
+</details>
 
 Start the baseline server and its IdP with Docker Compose:
 
@@ -123,21 +146,55 @@ Confirm with `y` when asked. The baseline lets Amir find and change
 this unassigned incident. It validates identity, input, confirmation, and the
 state transition, but does not enforce the assignment rule.
 
-A free provider may fail before making an MCP call. Retry or choose another
-model; a provider failure does not prove authorization works. Answers and tool
-choices vary, so check the incident state. Capture Amir's unauthorized update,
-then stop the baseline with `docker compose down`. Restarting restores the sample incidents.
+Find the incident again to confirm it is `resolved`, version `2`.
+
+<details>
+<summary>If chat is unavailable</summary>
+
+The client defaults to `liquid/lfm-2.5-2.6b:free`. Free providers can return
+quota, timeout, or unavailable errors before making an MCP call. Retry later
+or set `P3_OPENROUTER_MODEL` in `.env` to another free tool-calling model.
+A paid model requires both a paid model ID and `P3_OPENROUTER_ALLOW_PAID=true`;
+enable this only if you intend to spend your paid credit.
+
+A provider failure proves no authorization result. To continue without a
+provider key, run these commands separately from another terminal:
+
+```bash
+pnpm exec tsx scripts/mcp-request.ts amir search INC-2001
+pnpm exec tsx scripts/mcp-request.ts amir update INC-2001 mitigated resolved
+pnpm exec tsx scripts/mcp-request.ts amir search INC-2001
+```
+
+Each command opens the same sign-in flow. Confirm the update with `y`.
+If the first search already shows `resolved`, the earlier chat request succeeded;
+skip the update. Otherwise, expect `mitigated`, version `1`, before the update
+and `resolved`, version `2`, afterward.
+
+</details>
+
+Model answers and tool choices vary, so use incident state as evidence.
+The provider may retain prompts and responses for training; use only fictional
+incident data. After capturing Amir's unauthorized update, stop the baseline:
+
+```bash
+docker compose down
+```
+
+The next startup restores the in-memory sample incidents. Configuration volumes
+remain in place.
 
 ## Where should we check permission?
 
-The update succeeded, so the missing check belongs on the server that changed
-the incident. Open the baseline's
+Once you've observed Amir resolve the unassigned incident, follow that change
+to the server. Open the baseline's
 [`src/mcp/server.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/21b0832be4b31271320df992d04e9d97667d0e38/p3-mcp-capability-governance/src/mcp/server.ts)
 and find the `update_incident_status` handler. After authentication and input
 validation, it logs an ALLOW without checking permission, then calls the repository:
 
 ```ts
-// src/mcp/server.ts (starting checkpoint)
+// src/mcp/server.ts (baseline), inside update_incident_status's callback > try
+// ... validate input, load the incident, and log the baseline ALLOW.
 const incident = services.incidents.updateStatus({
   incidentId,
   expectedStatus,
@@ -163,18 +220,16 @@ operations each role may use and when an incident assignment is required.
 Each action links to its policy. Requests use the signed caller token; roles and
 assignments come from the server.
 
-| Capability     | Identity            | Action                                                                                                                                                                                   | Resource                        | Trusted context                     | Protected effect                            |
-| -------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------- | ------------------------------------------- |
-| Discover       | Signed caller token | [`Discover`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L16 "operations-surface")      | `Service::"incident-assistant"` | Current caller subject and role     | Make MCP operations available to the caller |
-| Search         | Same token          | [`Search`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L16 "operations-surface")        | Same service                    | Same caller                         | Begin incident search                       |
-| Read result    | Same token          | [`Read`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L26 "incident-assignment")         | Each candidate `Incident`       | Same caller; assignment on resource | Return a matching incident summary          |
-| Read runbook   | Same token          | [`ReadRunbook`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L16 "operations-surface")   | `Runbook::"core"`               | Same caller                         | Return runbook content                      |
-| Prepare triage | Same token          | [`Triage`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L26 "incident-assignment")       | Current `Incident`              | Same caller; assignment on resource | Return an incident-specific prompt          |
-| Update status  | Same token          | [`UpdateStatus`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L26 "incident-assignment") | Current `Incident`              | Same caller; assignment on resource | Commit one valid transition                 |
+| Capability     | Action                                                                                                                                                                                   | Resource                        | Trusted context                     | Protected effect                            |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------- | ------------------------------------------- |
+| Discover       | [`Discover`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L16 "operations-surface")      | `Service::"incident-assistant"` | Current caller subject and role     | Make MCP operations available to the caller |
+| Search         | [`Search`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L16 "operations-surface")        | Same service                    | Same caller                         | Begin incident search                       |
+| Read result    | [`Read`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L26 "incident-assignment")         | Each candidate `Incident`       | Same caller; assignment on resource | Return a matching incident summary          |
+| Read runbook   | [`ReadRunbook`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L16 "operations-surface")   | `Runbook::"core"`               | Same caller                         | Return runbook content                      |
+| Prepare triage | [`Triage`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L26 "incident-assignment")       | Current `Incident`              | Same caller; assignment on resource | Return an incident-specific prompt          |
+| Update status  | [`UpdateStatus`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/policies/incident-operations.cedar#L26 "incident-assignment") | Current `Incident`              | Same caller; assignment on resource | Commit one valid transition                 |
 
-All types and actions use namespace `P3IncidentAssistant`. The model can suggest
-an incident ID; the server loads its assignment and the caller's role. Neither
-comes from the model or caller JSON. The app still checks status changes and retries.
+All types and actions use namespace `P3IncidentAssistant`.
 
 ### Create the policy store
 
@@ -194,7 +249,11 @@ policy-store/
 <details>
 <summary>Required step: Create the four policy-store files</summary>
 
-Create these files and copy their complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p3 policy-store
+```
+
+New files:
 
 - [`policy-store/metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/metadata.json) identifies the store and version.
 - [`policy-store/schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/policy-store/schema.cedarschema) defines the operations, resources, and token context.
@@ -208,10 +267,9 @@ Use the integration's metadata with policy version `1.0.0`. The schema defines
 `assigned_to` attribute. It also defines `Access_token`, `TrustedIssuer`, the
 issuer URL shape, and context containing `caller` and optional generated tokens.
 The actions use the token type as their principal type; the sidecar
-request supplies a signed token rather than another user entity.
+request supplies the caller's signed token.
 
-No default entities, templates, or custom issuers are needed. Current account and
-incident facts are supplied by the MCP server.
+The MCP server supplies current account and incident facts with each request.
 
 For the pinned sidecar, `policy-store/trusted-issuers/tutorial-idp.json` uses
 this exact shape:
@@ -325,18 +383,22 @@ package our policy files.
 <details>
 <summary>Required step: Create the shared archive builder</summary>
 
-Create these files in the repository-level `shared/` directory and copy their
-complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p3 archive-builder
+```
+
+The shared builder files are:
 
 - [`shared/policy-store.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.mjs) validates and packages the policy store.
 - [`shared/policy-store.d.mts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/shared/policy-store.d.mts) supplies its TypeScript declarations.
 
 </details>
 
-Install its build dependencies from P3:
+From P3, install the build dependencies and update the MCP client to match the completed app:
 
 ```bash
-pnpm add --save-dev --save-exact fflate@0.8.3 @cedar-policy/cedar-wasm@4.12.0
+pnpm add --save-exact @modelcontextprotocol/client@2.2.0
+pnpm add --save-dev --save-exact fflate@0.8.3 @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
 node ../shared/policy-store.mjs
 ```
 
@@ -359,18 +421,25 @@ then waits for Cedarling readiness before starting the MCP server.
 
 JWT validation establishes the request subject; it does not authenticate every
 service that can reach the sidecar. This local trust boundary includes the IdP.
+Across hosts, service connections also need authenticated transport, such as
+mTLS through a service mesh or reverse proxy.[^5]
 
 ### Send current facts to the Cedarling sidecar
 
-Now we'll build the sidecar request from facts the MCP server trusts. Copy the
-following files together, then follow the HTTP request below.
+Now we'll build the sidecar request from facts the MCP server trusts. Add the
+client and handlers, then follow the HTTP request below.
 
 <details>
 <summary>Required step: Add the sidecar client and update MCP handlers</summary>
 
-Create [`src/mcp/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/mcp/authorization.ts)
-and copy its full contents for the sidecar client and decision logging.
-Replace these existing files with their complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p3 server
+```
+
+The new [`src/mcp/authorization.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/mcp/authorization.ts)
+provides the sidecar client and decision logging.
+
+Updated files:
 
 - [`src/mcp/server.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/mcp/server.ts) enforces discovery and operation decisions.
 - [`src/mcp/availability.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/mcp/availability.ts) checks that the expected MCP server is available before chat connects.
@@ -380,10 +449,10 @@ Replace these existing files with their complete linked contents:
 - [`src/mcp/schemas.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/mcp/schemas.ts) validates MCP operation inputs.
 - [`src/app.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/app.ts) connects authentication and MCP request handling.
 - [`src/main.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/main.ts) starts the configured MCP server.
-- [`src/config/project-config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/config/project-config.ts) supplies the private sidecar URL and timeout.
+- [`src/config/project-config.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/config/project-config.ts) supplies application, identity, and model-provider settings.
 - [`tsconfig.build.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/tsconfig.build.json) selects the server and CLI files for compilation.
 
-Remove `src/mcp/trace.ts`; authorization now records the actual decisions.
+The step removes `src/mcp/trace.ts`; authorization now records the actual decisions.
 
 </details>
 
@@ -396,45 +465,78 @@ Cedarling-specific; do not treat them as generic AuthZEN fields. A valid true
 decision allows the MCP server to continue; DENY or an unavailable response
 must stop the operation before it returns data or changes an incident.
 
-In the copied `src/mcp/authorization.ts`, `auth` is verified MCP authentication,
+In the copied `src/mcp/authorization.ts`, `authorize()` receives verified MCP
+authentication as `auth`. Within the function,
 `subject` identifies the signed-in user, `roles` is the server account map, and `resource`
-was loaded by the operation. `action` is a server-selected action name. The
-expanded HTTP call is:
+was loaded by the operation. `action` is a server-selected action name.
+The `request` parameter defaults to `fetch`. Logging is omitted from this excerpt:
 
 ```ts
 // src/mcp/authorization.ts
-const response = await fetch("http://127.0.0.1:5000/cedarling/evaluation", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  redirect: "error",
-  signal: AbortSignal.timeout(2_000),
-  body: JSON.stringify({
-    subject: {
-      type: "JWT",
-      id: subject,
-      properties: {
-        tokens: [
-          { mapping: "P3IncidentAssistant::Access_token", payload: auth.token },
-        ],
+export async function authorize(
+  auth: AuthInfo,
+  action: Action,
+  resource: Resource,
+  requestId: string,
+  request: typeof fetch = fetch,
+): Promise<boolean> {
+  const subject = parsePersona(
+    typeof auth.extra?.subject === "string" ? auth.extra.subject : undefined,
+  );
+  let decision: boolean;
+  // ... prepare request details and HTTP status for logging.
+  try {
+    const response = await request(
+      "http://127.0.0.1:5000/cedarling/evaluation",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        redirect: "error",
+        signal: AbortSignal.timeout(2_000),
+        body: JSON.stringify({
+          subject: {
+            type: "JWT",
+            id: subject,
+            properties: {
+              tokens: [
+                {
+                  mapping: "P3IncidentAssistant::Access_token",
+                  payload: auth.token,
+                },
+              ],
+            },
+          },
+          action: { name: `P3IncidentAssistant::Action::"${action}"` },
+          resource: {
+            type: resource.type,
+            id: resource.id,
+            properties: {
+              cedar_entity_mapping: {
+                entity_type: `P3IncidentAssistant::${resource.type}`,
+                id: resource.id,
+              },
+              ...(resource.type === "Incident" && resource.assignedTo !== null
+                ? { assigned_to: resource.assignedTo }
+                : {}),
+            },
+          },
+          context: { caller: { subject, role: roles[subject] } },
+        }),
       },
-    },
-    action: { name: `P3IncidentAssistant::Action::"${action}"` },
-    resource: {
-      type: resource.type,
-      id: resource.id,
-      properties: {
-        cedar_entity_mapping: {
-          entity_type: `P3IncidentAssistant::${resource.type}`,
-          id: resource.id,
-        },
-        ...(resource.type === "Incident" && resource.assignedTo !== null
-          ? { assigned_to: resource.assignedTo }
-          : {}),
-      },
-    },
-    context: { caller: { subject, role: roles[subject] } },
-  }),
-});
+    );
+    // ... capture the HTTP status for logging.
+    if (!response.ok) throw new Error("Sidecar HTTP failure");
+    const result = decisionResponse.parse(await response.json());
+    if (result.context.id === "-1")
+      throw new Error("Sidecar evaluation failed");
+    decision = result.decision;
+  } catch {
+    // ... log authorization.failed with bounded fields.
+    throw new AuthorizationError("authorization_unavailable");
+  }
+  // ... log authorization.decision.
+  return decision;
+}
 ```
 
 `JSON.stringify()` supplies the HTTP request body as JSON here.[^4]
@@ -442,8 +544,8 @@ const response = await fetch("http://127.0.0.1:5000/cedarling/evaluation", {
 The module rejects HTTP errors and timeouts, and requires a boolean `decision`
 and object `context` in the response. This pinned sidecar can
 report runtime failure in an HTTP 200 body with `context.id === "-1"`; the module
-treats that as `authorization_unavailable`, not a policy denial. Only a valid
-true decision permits the operation. For an unassigned incident, the request omits
+treats that as `authorization_unavailable`, not a policy denial.
+For an unassigned incident, the request omits
 the optional assignment instead of sending `null` to a string field.
 
 ### Check permission before each MCP operation
@@ -459,22 +561,39 @@ is not permission to use it against every resource.
 - Triage requires `Triage` on the incident loaded by the server before producing its prompt.
 - Status updates require `UpdateStatus` before changing the stored incident.
 
-The update handler waits for permission before calling the repository:
+Inside `createIncidentMcpServer()`, the `update_incident_status` callback waits for
+permission before calling the repository:
 
 ```ts
 // src/mcp/server.ts
-const current = currentIncident(incidentId);
-await requireAllowed("UpdateStatus", {
-  type: "Incident",
-  id: current.id,
-  assignedTo: current.assignedTo,
-});
-const incident = services.incidents.updateStatus({
-  incidentId,
-  expectedStatus,
-  nextStatus,
-  idempotencyKey,
-});
+// Inside createIncidentMcpServer():
+server.registerTool(
+  "update_incident_status",
+  {
+    title: "Update incident status",
+    description: "Advance one incident through one confirmed lifecycle step.",
+    inputSchema: updateIncidentInput,
+  },
+  async ({ incidentId, expectedStatus, nextStatus, idempotencyKey }) => {
+    try {
+      const current = currentIncident(incidentId);
+      await requireAllowed("UpdateStatus", {
+        type: "Incident",
+        id: current.id,
+        assignedTo: current.assignedTo,
+      });
+      const incident = services.incidents.updateStatus({
+        incidentId,
+        expectedStatus,
+        nextStatus,
+        idempotencyKey,
+      });
+      // ... return the incident ID, status, version, and request ID.
+    } catch (error) {
+      return safeToolError(error);
+    }
+  },
+);
 ```
 
 `requireAllowed` throws on DENY; unavailable decisions also stop execution.
@@ -494,37 +613,29 @@ so the archive and sidecar are ready before the MCP server starts.
 <details>
 <summary>Required step: Configure the sidecar and update stack startup</summary>
 
-Create [`sidecar-bootstrap.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/sidecar-bootstrap.json)
-and copy its full contents to configure the archive, token validation, and logs.
-Replace these existing files with their complete linked contents:
+```bash
+node ../shared/tools/step/run.mjs p3 startup
+```
+
+The new [`sidecar-bootstrap.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/sidecar-bootstrap.json)
+configures the archive, token validation, and logs.
+
+Updated files:
 
 - [`src/chat/host.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/src/chat/host.ts) uses discovered capabilities and handles denied or unavailable operations.
 - [`scripts/setup.mjs`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/scripts/setup.mjs) prepares host chat configuration.
 - [`Dockerfile`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/Dockerfile) builds the app and policy archive.
 - [`compose.yaml`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/compose.yaml) starts the private sidecar and dependent services.
 
-Remove `scripts/dev.mjs`; Compose will manage these services.
+The step removes `scripts/dev.mjs`; Compose will manage these services.
+
+The step also updates `build` to package policies and `dev`/`start` to use Compose.
 
 </details>
 
-In `package.json`, set `dev` to
-`docker compose up --build` and `start` to `docker compose up`, then apply the
-`build` entry below. Keep the other dependencies and scripts; the
-[complete manifest](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/package.json)
-shows the completed configuration:
-
-```json
-{
-  "scripts": {
-    "build": "node ../shared/policy-store.mjs && tsc -p tsconfig.build.json"
-  }
-}
-```
-
 The host `scripts/setup.mjs` prepares chat configuration; Compose's configure
-service prepares the container IdP configuration. Host setup must not rewrite
-that container's issuer. `pnpm dev` runs Compose; `pnpm chat amir` remains a host
-command. Greetings can return a short help response without an MCP operation.
+service prepares the container IdP configuration. `pnpm dev` runs Compose;
+`pnpm chat amir` remains a host command.
 
 Run `pnpm build`, then `pnpm run setup` and `pnpm dev` from the host.
 Wait for the IdP, archive service, sidecar, and MCP server to become ready.
@@ -536,14 +647,6 @@ The integrated stack is ready. We'll first complete Amir's assigned work,
 then repeat the unassigned update that succeeded before Cedarling.
 
 ### Complete Amir's assigned work
-
-The client defaults to `liquid/lfm-2.5-2.6b:free` with free routing.
-To try another free tool-calling model, set `P3_OPENROUTER_MODEL` in
-`.env`. A paid model requires both a paid model ID and
-`P3_OPENROUTER_ALLOW_PAID=true`; do this only if you intend to use your paid
-credit. Model answers and tool choices can differ even when the authorization
-result is the same. The provider may retain prompts for training; use only
-fictional incident data.
 
 With fresh sample incidents, enter separately:
 
@@ -557,11 +660,10 @@ Advance INC-1001 from open to investigating.
 Confirm only the intended update with `y`. Find the incident again to verify its
 new status. Declining confirmation must leave it unchanged.
 
-Now repeat Amir's baseline attempt on `INC-2001`. Search returns no matching
-incident. Triage or update attempts are denied; its mitigated state is unchanged.
-
-Dana has no assignment to `INC-2001` either. Can she advance it? Check the
-supervisor condition in the policy before trying the cases below:
+Now search for `INC-2001` as Amir. Expect no matching incident; triage or update
+attempts must be denied. We'll verify its state as Dana in the direct exercise
+below, since Amir cannot read it. Save Dana's update for that exercise.
+Why can she update it without an assignment? Check the supervisor condition:
 
 | Caller and attempt                            | Expected outcome                                |
 | --------------------------------------------- | ----------------------------------------------- |
@@ -595,48 +697,136 @@ without printing tokens or raw sidecar errors.
 
 ### Try direct calls and a sidecar outage
 
-We've checked the chat path. The same restrictions must hold without the chat
-interface and when the decision service fails. Keep a before-and-after capture of Amir's attempt to resolve unassigned
-`INC-2001`, plus a successful update to assigned `INC-1001`. A denial matters
-only when the incident remains unchanged. An MCP client with a valid Amir token
-must not be able to bypass this by calling `update_incident_status` directly
-with `incidentId: "INC-2001"`, `expectedStatus: "mitigated"`, and
-`nextStatus: "resolved"`; the same server-side gate handles direct and
-model-selected calls.
+We'll use `scripts/mcp-request.ts` to send requests without a model. If chat
+failed, use the provider note in [the starting exercise](#run-the-starting-application)
+for model settings; these direct commands need no OpenRouter key.
 
-To try a sidecar outage, stop only the sidecar with
-`docker compose stop cedarling`, then attempt an otherwise permitted operation.
-The server must report authorization unavailable and leave the incident
-unchanged. Restore it with `docker compose start cedarling`. Restart the stack
-between exercises to restore sample incidents; a resolved incident cannot be
-resolved again.
+First reset the in-memory incidents, leaving configuration volumes intact:
+
+```bash
+docker compose restart incident-assistant
+```
+
+Wait for the MCP server's listening message in the service terminal. Run the
+following commands separately, signing in as the account named in each one.
+Dana's first search should show `INC-2001` as `mitigated`, version `1`:
+
+```bash
+pnpm exec tsx scripts/mcp-request.ts dana search INC-2001
+pnpm exec tsx scripts/mcp-request.ts amir search INC-2001
+pnpm exec tsx scripts/mcp-request.ts amir update INC-2001 mitigated resolved
+pnpm exec tsx scripts/mcp-request.ts dana search INC-2001
+```
+
+Amir's search returns an empty list. Confirm his update with `y`: expect
+`authorization_denied` and a nonzero command exit status. Dana's second search
+must still show `mitigated`, version `1`. An input-validation error would not
+prove this authorization check.
+
+Now confirm a permitted update for each caller:
+
+```bash
+pnpm exec tsx scripts/mcp-request.ts amir update INC-1001 open investigating
+pnpm exec tsx scripts/mcp-request.ts amir search INC-1001
+pnpm exec tsx scripts/mcp-request.ts dana update INC-2001 mitigated resolved
+pnpm exec tsx scripts/mcp-request.ts dana search INC-2001
+```
+
+Both incidents should reach version `2`, with the requested status. The helper
+sends `confirmed: true` only after `y` and generates an idempotency key for each
+invocation. To repeat this sequence, restart `incident-assistant` first; a
+resolved incident cannot be resolved again.
+
+For the outage check, use `INC-1002`, which is still `investigating`, version `1`:
+
+```bash
+pnpm exec tsx scripts/mcp-request.ts amir search INC-1002
+docker compose stop cedarling
+pnpm exec tsx scripts/mcp-request.ts amir update INC-1002 investigating mitigated
+docker compose logs --tail 30 incident-assistant
+docker compose start cedarling
+```
+
+The direct command exits unsuccessfully with a safe failure message. It may fail
+to connect before reaching confirmation. An existing chat can report a generic
+MCP failure; a fresh MCP client can fail during protocol negotiation. In the
+server logs, look for `authorization.failed`, action `Discover`, and code
+`authorization_unavailable`. This is an unavailable decision service, not a
+policy denial.
+
+Wait until `docker compose ps cedarling` shows it is healthy, then search again:
+
+```bash
+pnpm exec tsx scripts/mcp-request.ts amir search INC-1002
+```
+
+The incident must remain `investigating`, version `1`. Keep this evidence with
+the denied update and the successful assigned update.
+
+### Run the matching project checks
+
+We've observed the real decisions. Let's add the checks for the integrated app
+to this same checkout so its test suite exercises the rules we've just added.
 
 <details>
-<summary>Warning: Before deploying this application</summary>
+<summary>Required step: Add the matching tests and check configuration</summary>
 
-Replace local HTTP and the bundled learning IdP with HTTPS and a configured
-OIDC/OAuth issuer, such as [Jans Auth](https://docs.jans.io/stable/janssen-server/planning/use-cases/),
-Gluu, Auth0, or Okta.
+```bash
+node ../shared/tools/step/run.mjs p3 checks
+```
 
-Production needs a database that keeps incidents after restarts, managed user
-permissions, protected credentials, and stored audit logs. The lab keeps a fixed
-account map and incidents in memory; free-model chat may be unavailable.
+Updated files:
 
-Across hosts, restrict the sidecar network and authenticate service connections
-with mTLS through a service mesh[^5] or reverse proxy. JWT validation alone does
-not establish which service is calling the sidecar.
+- [`eslint.config.js`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/eslint.config.js) configures linting for the project scripts and tests.
+- [`test/config.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/config.test.ts) checks application, issuer, and provider settings.
+- [`test/helpers.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/helpers.ts) supplies authenticated test callers and controlled decision dependencies.
+- [`test/protocol.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/protocol.test.ts) checks MCP discovery and operation responses.
+- [`test/scenario.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/scenario.test.ts) exercises role and assignment restrictions through the chat host.
+- [`test/setup.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/setup.test.ts) checks host configuration setup.
 
-For a production stack, consider Agama Lab Policy Designer for policy authoring,
-Jans Auth for issuing tokens, and Lock Server for centralized decision logs.
-See [Cedarling production solutions](https://cedarling.dev/solutions).
+New files:
 
-These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
-on macOS and Windows. If a platform-specific step fails,
-[open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+- [`test/authorization.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/authorization.test.ts) checks sidecar requests, response validation, and failure handling with controlled HTTP responses.
+- [`test/policy-store.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/policy-store.test.ts) checks archive contents, reproducibility, and issuer discovery configuration.
+- [`test/mcp-request.test.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/test/mcp-request.test.ts) checks direct-client arguments, confirmation, errors, and cleanup.
+- [`scripts/test-e2e.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/scripts/test-e2e.ts) starts and cleans up an isolated Docker stack for verification.
+- [`scripts/verify-stack.ts`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p3-mcp-capability-governance/scripts/verify-stack.ts) exercises real signed tokens and sidecar decisions, including outage and recovery.
+
+The step also updates `test:e2e` to run the isolated stack checks.
+The other baseline tests and the existing `check` script stay in place.
 
 </details>
 
-## What we've learned
+From this checkout's P3 directory, run:
+
+```bash
+pnpm format
+pnpm check
+pnpm test:e2e
+```
+
+`pnpm check` runs formatting, lint, types, tests, and build. The separate
+`test:e2e` command uses real Device Flow tokens and the pinned sidecar, with
+scripted model selections instead of OpenRouter. It verifies role and assignment
+rules, denied direct calls, confirmation, and unavailable decisions. It uses
+its own containers and configuration volumes and removes them afterward;
+your exercise stack stays running. Neither command needs a provider key.
+
+<details>
+<summary>Warning: Learning project only</summary>
+
+This project is for learning only and is not intended for production use.
+Adapting it requires a separate review of local HTTP and the development IdP,
+fixed account permissions, in-memory incidents, sidecar access, provider data
+handling, and audit logging.
+
+Optional components include Jans Auth for identity, Agama Lab Policy Designer
+for policy authoring, and Lock Server for decision logs. See
+[Cedarling production solutions](https://cedarling.dev/solutions).
+
+</details>
+
+## Recap: permissions for MCP operations
 
 Amir could confirm an update to an unassigned incident in the starting app.
 We've now blocked that operation at the MCP server while keeping his assigned
@@ -662,3 +852,5 @@ permission changes.
 [^4]: Here `JSON.stringify()` creates the JSON body for an HTTP POST to the Cedarling sidecar. P3 uses the sidecar's AuthZen endpoint, not the `cedarling_wasm` JavaScript authorization method.
 
 [^5]: [Mutual TLS (mTLS)](https://istio.io/latest/docs/concepts/security/#mutual-tls-authentication) authenticates both ends of a service connection. A service mesh can manage that transport between application and policy decision service; the local tutorial uses a private shared network namespace instead.
+
+[^6]: [Token-Based Access Control (TBAC)](https://docs.jans.io/stable/cedarling/#proof-based-authorization-token-based-access-control-tbac) uses tokens from trusted issuers as evidence in an authorization decision. P3 supplies current account roles and incident assignments alongside that evidence.

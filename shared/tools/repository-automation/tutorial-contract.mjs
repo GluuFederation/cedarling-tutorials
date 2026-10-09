@@ -41,6 +41,13 @@ const metadataSchema = z
         (value) => Date.parse(value) <= Date.now(),
         "must not be in the future",
       ),
+    lastUpdated: z.iso
+      .datetime({ offset: true })
+      .refine(
+        (value) => Date.parse(value) <= Date.now(),
+        "must not be in the future",
+      )
+      .optional(),
   })
   .strict();
 const safeAssetPathPattern = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
@@ -81,6 +88,11 @@ function walkMarkdown(node, visit) {
 }
 
 function parseTutorial(markdown, sourcePath) {
+  if (markdown.includes("REPLACE_WITH_REVIEWED_COMMIT_SHA")) {
+    fail(
+      `${sourcePath}: replace the tutorial helper's draft source pin with its reviewed commit SHA before publication`,
+    );
+  }
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(markdown);
   if (!match) fail(`${sourcePath}: expected a YAML frontmatter block`);
 
@@ -282,10 +294,7 @@ function validateSvg(bytes, path) {
   }
 }
 
-export async function validateTutorialProject(
-  repositoryRoot,
-  project,
-) {
+export async function validateTutorialProject(repositoryRoot, project) {
   if (!tutorialProjects.includes(project)) {
     fail(`unknown tutorial project: ${project}`);
   }

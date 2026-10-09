@@ -81,7 +81,7 @@ export async function createRetrievalAuthorization(
   );
   if (cedarling.loadedTrustedIssuersCount() < 1) {
     await cedarling.shutDown();
-    throw new Error("P2 trusted issuer did not load");
+    throw new Error("P2 requires at least one trusted issuer");
   }
 
   return {

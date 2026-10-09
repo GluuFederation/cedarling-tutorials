@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "id": "p5",
+  "directory": "p5-dataguard",
+  "baseline": "21b0832be4b31271320df992d04e9d97667d0e38",
+  "steps": [
+    {
+      "id": "policy-store",
+      "files": [
+        "p5-dataguard/policy-store/metadata.json",
+        "p5-dataguard/policy-store/schema.cedarschema",
+        "p5-dataguard/policy-store/policies/fields.cedar",
+        "p5-dataguard/policy-store/policies/plans.cedar",
+        "p5-dataguard/policy-store/policies/exports.cedar"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "archive-builder",
+      "files": ["shared/policy-store.mjs", "shared/policy-store.d.mts"],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "server",
+      "files": [
+        "p5-dataguard/src/server/authorization.ts",
+        "p5-dataguard/src/server/errors.ts",
+        "p5-dataguard/src/server/app.ts",
+        "p5-dataguard/src/server/database.ts",
+        "p5-dataguard/src/server/query.ts",
+        "p5-dataguard/src/server/export-service.ts",
+        "p5-dataguard/src/server/main.ts",
+        "p5-dataguard/src/server/config.ts",
+        "p5-dataguard/src/shared/contracts.ts",
+        "p5-dataguard/scripts/setup.ts"
+      ],
+      "remove": ["p5-dataguard/src/server/permissive-trace.ts"],
+      "scripts": []
+    },
+    {
+      "id": "browser",
+      "files": [
+        "p5-dataguard/src/web/App.tsx",
+        "p5-dataguard/src/web/api.ts",
+        "p5-dataguard/src/web/Icon.tsx",
+        "p5-dataguard/src/web/styles.css"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "startup",
+      "files": ["p5-dataguard/scripts/reset.ts", "p5-dataguard/Dockerfile"],
+      "remove": [],
+      "scripts": ["build"]
+    },
+    {
+      "id": "checks",
+      "files": [
+        "p5-dataguard/test/app.test.ts",
+        "p5-dataguard/test/harness.ts",
+        "p5-dataguard/test/query.test.ts",
+        "p5-dataguard/playwright.config.ts",
+        "shared/dev-supervisor.mjs",
+        "p5-dataguard/test/authorization.test.ts",
+        "p5-dataguard/test/config.test.ts",
+        "p5-dataguard/e2e/sensitive-data-authorization.e2e.ts",
+        "shared/browser-test-stack.mjs"
+      ],
+      "remove": ["p5-dataguard/e2e/sensitive-data-gaps.e2e.ts"],
+      "scripts": ["test"]
+    }
+  ]
+}

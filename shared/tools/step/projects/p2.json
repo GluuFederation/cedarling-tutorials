@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "id": "p2",
+  "directory": "p2-tenantrag",
+  "baseline": "21b0832be4b31271320df992d04e9d97667d0e38",
+  "steps": [
+    {
+      "id": "metadata",
+      "files": [
+        "p2-tenantrag/src/rag/fixtures.ts",
+        "p2-tenantrag/src/rag/types.ts",
+        "p2-tenantrag/src/rag/pdf.ts",
+        "p2-tenantrag/src/rag/repository.ts",
+        "p2-tenantrag/src/rag/corpus.ts",
+        "p2-tenantrag/src/rag/setup.ts"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "policy-store",
+      "files": [
+        "p2-tenantrag/policy-store/metadata.json",
+        "p2-tenantrag/policy-store/schema.cedarschema",
+        "p2-tenantrag/policy-store/policies/server-access.cedar",
+        "p2-tenantrag/policy-store/trusted-issuers/tutorial-idp.json"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "archive-builder",
+      "files": ["shared/policy-store.mjs", "shared/policy-store.d.mts"],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "server",
+      "files": [
+        "p2-tenantrag/src/authorization.ts",
+        "p2-tenantrag/src/runtime.ts",
+        "p2-tenantrag/src/rag/retrieval.ts",
+        "p2-tenantrag/src/rag/trace.ts",
+        "p2-tenantrag/src/app.ts",
+        "p2-tenantrag/src/main.ts",
+        "p2-tenantrag/src/config/project-config.ts",
+        "p2-tenantrag/src/openapi.ts",
+        "p2-tenantrag/src/auth/cli.ts",
+        "p2-tenantrag/tsconfig.build.json"
+      ],
+      "remove": [],
+      "scripts": []
+    },
+    {
+      "id": "startup",
+      "files": [
+        "p2-tenantrag/scripts/prepare.ts",
+        "p2-tenantrag/scripts/preflight.ts",
+        "p2-tenantrag/scripts/dev.mjs",
+        "p2-tenantrag/scripts/setup.ts",
+        "p2-tenantrag/Dockerfile",
+        "p2-tenantrag/compose.yaml",
+        "shared/dev-supervisor.mjs"
+      ],
+      "remove": [],
+      "scripts": ["build", "dev"]
+    },
+    {
+      "id": "checks",
+      "files": [
+        "p2-tenantrag/test/app.test.ts",
+        "p2-tenantrag/test/auth-cli.test.ts",
+        "p2-tenantrag/test/config.test.ts",
+        "p2-tenantrag/test/corpus.test.ts",
+        "p2-tenantrag/test/retrieval.test.ts",
+        "p2-tenantrag/test/trace.test.ts",
+        "p2-tenantrag/scripts/test-e2e.ts",
+        "p2-tenantrag/eslint.config.js",
+        "p2-tenantrag/test/policy-store.test.ts",
+        "p2-tenantrag/test/setup.test.ts",
+        "p2-tenantrag/test/server-lifecycle.test.ts"
+      ],
+      "remove": [],
+      "scripts": []
+    }
+  ]
+}

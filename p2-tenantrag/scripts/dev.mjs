@@ -1,5 +1,6 @@
 /** Supervise the local P2 IdP and API using the explicitly prepared corpus. */
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { issuerHealth, runDevStack } from "../../shared/dev-supervisor.mjs";
@@ -7,6 +8,7 @@ import { issuerHealth, runDevStack } from "../../shared/dev-supervisor.mjs";
 const root = resolve(import.meta.dirname, "..");
 const identityRoot = resolve(root, "../shared/identity-provider");
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const tsx = createRequire(import.meta.url).resolve("tsx/cli");
 
 try {
   await runDevStack({
@@ -40,8 +42,8 @@ try {
         },
         {
           name: "P2 application",
-          command: pnpm,
-          args: ["exec", "tsx", "watch", "src/main.ts"],
+          command: process.execPath,
+          args: [tsx, "watch", "src/main.ts"],
           cwd: root,
           env,
           health: {

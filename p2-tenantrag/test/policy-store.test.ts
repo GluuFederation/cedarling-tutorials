@@ -217,6 +217,34 @@ afterAll(async () => {
 });
 
 describe("P2 corpus policy", () => {
+  test("rejects an archive without trusted issuer definitions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cedarling-p2-no-issuers-"));
+    let instance: RetrievalAuthorization | undefined;
+    try {
+      await cp(policyStoreSource, join(root, "policy-store"), {
+        recursive: true,
+        filter: (source) =>
+          source !== join(policyStoreSource, "trusted-issuers"),
+      });
+      const archive = await buildPolicyStore({
+        projectRoot: root,
+        dependencyRoot: projectRoot,
+      });
+      const initialized = createRetrievalAuthorization(archive.outputPath).then(
+        (value) => {
+          instance = value;
+          return value;
+        },
+      );
+      await expect(initialized).rejects.toThrow(
+        "P2 requires at least one trusted issuer",
+      );
+    } finally {
+      await instance?.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects a token without the required OAuth scope claim", async () => {
     const caller = {
       id: "ada",
