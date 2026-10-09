@@ -9,6 +9,9 @@ approval across revisions, and publication after a reviewer's authority is revok
 Follow the [tutorial](docs/tutorials.md) to add these checks to the [starting
 application](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing).
 
+The tutorial uses a [step helper](../shared/tools/step/README.md)
+to copy the required files from a pinned commit.
+
 ## Architecture
 
 ```mermaid
@@ -35,7 +38,7 @@ The commands work from PowerShell, macOS terminals, and Ubuntu shells.
 
 ## Run
 
-Start the application and its own IdP:
+From `p4-editorial-publishing/`, start the application and its own IdP:
 
 ```bash
 docker compose up --build
@@ -47,13 +50,11 @@ For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
-pnpm run setup
 pnpm dev
 ```
 
-`pnpm dev` starts this project's IdP and application together.
+`pnpm dev` prepares configuration, builds the IdP, and starts it alongside the app.
 Setup keeps the application port consistent with its registered URL and
 preserves your editorial data.
 
@@ -62,6 +63,10 @@ preserves your editorial data.
 Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
 
 ## Exercise
+
+Choose an account below. Use the prefilled username, or enter its lowercase name,
+and any non-empty password, such as `cedarling-is-awesome`. These credentials
+are for the local tutorial IdP only.
 
 Riley is an author, Ana can review and publish, and Omar has revocable editor
 authority. All three can create articles in their tenant and edit their own

@@ -11,6 +11,9 @@ The server authenticates the analyst and enforces those decisions before
 releasing data. Follow the [tutorial](docs/tutorials.md) to add the checks to
 the [starting application](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p5-dataguard).
 
+The tutorial uses a [step helper](../shared/tools/step/README.md)
+to copy the required files from a pinned commit.
+
 ## Architecture
 
 ```mermaid
@@ -35,7 +38,7 @@ Both startup paths include the project's tutorial identity provider.
 
 ## Run
 
-Start the application and its own IdP:
+From `p5-dataguard/`, start the application and its own IdP:
 
 ```bash
 docker compose up --build
@@ -47,22 +50,26 @@ For native development, run from this project directory:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-`pnpm dev` starts this project's IdP and application together.
+`pnpm dev` builds the IdP, prepares configuration, and builds and watches the app.
 Setup keeps the application port consistent with its registered URL and
 preserves your workforce data and exports.
 
-For a fresh `pnpm build` followed by `pnpm start`, run `pnpm run setup` first.
+For compiled startup, run `pnpm run setup`,
+`pnpm --dir ../shared/identity-provider build`, and `pnpm build` before `pnpm start`.
 Start `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js`
 in another terminal in this project directory and keep it running.
 
 Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
 
 ## Exercise
+
+Choose an account below. Use the prefilled username, or enter its lowercase name,
+and any non-empty password, such as `cedarling-is-awesome`. These credentials
+are for the local tutorial IdP only.
 
 Each account has a different reason to use the data:
 

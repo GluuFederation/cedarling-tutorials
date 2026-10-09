@@ -9,6 +9,9 @@ an incident.
 
 Follow the [tutorial](docs/tutorials.md) to secure the [starting application](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p3-mcp-capability-governance) with a [private Cedarling sidecar](https://docs.jans.io/stable/cedarling/developer/sidecar/cedarling-sidecar-overview/).
 
+The tutorial uses a [step helper](../shared/tools/step/README.md)
+to copy the required files from a pinned commit.
+
 ## Architecture
 
 ```mermaid
@@ -31,8 +34,9 @@ evidence and current account/incident facts to the sidecar. The model receives
 neither the token nor control over those facts. Discovery and direct calls each
 require permission; see the [enforcement walkthrough](docs/tutorials.md#check-permission-before-each-mcp-operation).
 
-Compose builds `policy-store/` into `.local/policy-store.cjar` and mounts it
-read-only in the sidecar. Only the MCP and IdP ports are published on host
+The Docker build packages `policy-store/` into `.local/policy-store.cjar`.
+Compose copies that archive to a named volume, where the sidecar reads
+`/policy-store/policy-store.cjar` through a read-only mount. Only the MCP and IdP ports are published on host
 loopback. These services share a network namespace for local learning.
 
 ## Prerequisites
@@ -47,7 +51,7 @@ P3 starts its own tutorial IdP at `http://localhost:18003` and MCP service at
 
 ## Run
 
-From this project directory, start the services:
+From `p3-mcp-capability-governance/`, start the services:
 
 ```bash
 docker compose up --build
@@ -74,8 +78,10 @@ and has no paid fallback. Provider availability can vary.
 The provider may retain prompts and responses for training; use only fictional
 incident data.
 
-Open the displayed verification URL, sign in as the chosen persona, and approve
-access. The MCP endpoint is `http://localhost:17003/mcp`. Leave the service
+Open the displayed verification URL and use the prefilled username, or enter
+the chosen persona's ID. This local tutorial IdP accepts any non-empty password,
+such as `cedarling-is-awesome`. Approve access.
+The MCP endpoint is `http://localhost:17003/mcp`. Leave the service
 terminal open while using chat.
 
 ## Exercise
@@ -104,6 +110,22 @@ P3 advances one incident per request, not a bulk "resolve all" operation.
 The model must return a valid operation selection before MCP can execute it.
 Chat reports provider, quota, timeout, and invalid-response failures separately
 from authorization denials.
+
+To send a request without OpenRouter, use the direct client after host setup:
+
+```bash
+pnpm exec tsx scripts/mcp-request.ts dana search INC-2001
+pnpm exec tsx scripts/mcp-request.ts amir update INC-2001 mitigated resolved
+pnpm exec tsx scripts/mcp-request.ts dana search INC-2001
+```
+
+Each command asks you to sign in through Device Flow. Confirm Amir's update with
+`y`; it returns `authorization_denied` and a nonzero exit status. Dana's two
+searches confirm the incident is unchanged. The helper supports `search <query>`
+and `update <incident-id> <current-status> <next-status>`, keeps the token in
+memory, and creates a fresh idempotency key for each update. Declining sends no
+update. [The tutorial](docs/tutorials.md#try-direct-calls-and-a-sidecar-outage)
+also covers permitted updates and sidecar failure.
 
 The MCP server prints JSON `authorization.decision` or `authorization.failed`
 records. The sidecar prints native Cedarling decisions with policy reasons and

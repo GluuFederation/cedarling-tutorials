@@ -2,7 +2,14 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -11,6 +18,7 @@ import sharp from "sharp";
 
 import { validateTutorialProject } from "./tutorial-contract.mjs";
 import { tutorialProjects } from "./changed-projects.mjs";
+import { validateManifest } from "../step/run.mjs";
 
 const project = "p1-task-manager";
 const validationScript = fileURLToPath(
@@ -68,12 +76,64 @@ async function portfolioFixture(withTutorial = false) {
   return root;
 }
 
+test("tutorial commands follow their registered step order", async () => {
+  const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const manifests = join(root, "shared/tools/step/projects");
+  for (const file of await readdir(manifests)) {
+    if (!file.endsWith(".json")) continue;
+    const id = file.slice(0, -5);
+    const manifest = validateManifest(
+      JSON.parse(await readFile(join(manifests, file), "utf8")),
+      id,
+    );
+    const tutorial = await readFile(
+      join(root, manifest.directory, "docs/tutorials.md"),
+      "utf8",
+    );
+    const commands = [
+      ...tutorial.matchAll(
+        /node \.\.\/shared\/tools\/step\/run\.mjs ([a-z0-9-]+) ([a-z0-9-]+)/g,
+      ),
+    ];
+    assert.deepEqual(
+      commands.map((match) => [match[1], match[2]]),
+      ["init", ...manifest.steps.map((step) => step.id)].map((step) => [
+        id,
+        step,
+      ]),
+    );
+  }
+});
+
 test("validates the current tutorial source contract", async (context) => {
   const root = await fixture();
   context.after(() => rm(root, { force: true, recursive: true }));
   const validated = await validateTutorialProject(root, project);
   assert.deepEqual(validated.assets, ["boundary.svg", "social-card.webp"]);
-  assert.equal(validated.markdown, await readFile(join(root, project, "docs", "tutorials.md"), "utf8"));
+  assert.equal(
+    validated.markdown,
+    await readFile(join(root, project, "docs", "tutorials.md"), "utf8"),
+  );
+});
+
+test("rejects an unresolved tutorial helper source pin", async (context) => {
+  const root = await fixture();
+  context.after(() => rm(root, { force: true, recursive: true }));
+  const path = join(root, project, "docs", "tutorials.md");
+  const markdown = await readFile(path, "utf8");
+  await writeFile(
+    path,
+    `${markdown}\nnode run.mjs p1 init --source REPLACE_WITH_REVIEWED_COMMIT_SHA\n`,
+  );
+  await assert.rejects(
+    validateTutorialProject(root, project),
+    /reviewed commit SHA before publication/,
+  );
+  await writeFile(
+    path,
+    `${markdown}\nnode run.mjs p1 init --source ${"a".repeat(40)}\n`,
+  );
+  await assert.doesNotReject(validateTutorialProject(root, project));
 });
 
 test("rejects a tutorial whose referenced asset is unavailable", async (context) => {
@@ -85,6 +145,39 @@ test("rejects a tutorial whose referenced asset is unavailable", async (context)
     validateTutorialProject(root, project),
     /missing asset \.\/assets\/boundary\.svg/,
   );
+});
+
+test("accepts an optional article update date alongside verification", async (context) => {
+  const root = await fixture();
+  context.after(() => rm(root, { force: true, recursive: true }));
+  const tutorialPath = join(root, project, "docs", "tutorials.md");
+  const markdown = await readFile(tutorialPath, "utf8");
+  await writeFile(
+    tutorialPath,
+    markdown.replace(
+      "order: 10",
+      "order: 10\nlastUpdated: 2026-09-02T12:00:00Z",
+    ),
+  );
+  await assert.doesNotReject(validateTutorialProject(root, project));
+});
+
+test("rejects invalid or future article update dates", async (context) => {
+  const root = await fixture();
+  context.after(() => rm(root, { force: true, recursive: true }));
+  const tutorialPath = join(root, project, "docs", "tutorials.md");
+  const markdown = await readFile(tutorialPath, "utf8");
+  for (const date of [
+    "2026-09-02",
+    "2026-99-99T12:00:00Z",
+    "2999-01-01T00:00:00Z",
+  ]) {
+    await writeFile(
+      tutorialPath,
+      markdown.replace("order: 10", `order: 10\nlastUpdated: ${date}`),
+    );
+    await assert.rejects(validateTutorialProject(root, project), /lastUpdated/);
+  }
 });
 
 test("rejects a missing or incorrectly sized frontmatter social card", async (context) => {

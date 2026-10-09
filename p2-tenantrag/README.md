@@ -10,6 +10,9 @@ for the model context.
 Follow the [tutorial](docs/tutorials.md) to add these checks to the [starting
 service](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p2-tenantrag).
 
+The tutorial uses a [step helper](../shared/tools/step/README.md)
+to copy the required files from a pinned commit.
+
 ## Architecture
 
 ```mermaid
@@ -35,22 +38,28 @@ flowchart TD
 
 ## Run
 
-Set `P2_VOYAGE_API_KEY` and `P2_OPENROUTER_API_KEY` in `.env` before preparing the corpus or starting Docker.
+Work from `p2-tenantrag/`. Create a local `.env` with `P2_VOYAGE_API_KEY` and
+`P2_OPENROUTER_API_KEY` before preparing the corpus or starting Docker.
 `P2_OPENROUTER_MODEL` defaults to `openrouter/free`. To select another free
 model, set its OpenRouter model ID in `.env`. A model that may incur charges
 also requires `P2_OPENROUTER_ALLOW_PAID=true`; otherwise requests retain a
 zero-price routing cap. The Voyage embedding model stays fixed, so changing
 the OpenRouter answer model does not require rebuilding the corpus.
 
-Setup sends synthetic PDF chunks to Voyage for embedding and makes a small
+Native setup sends synthetic PDF chunks to Voyage for embedding and makes a small
 OpenRouter generation check. During retrieval, Voyage receives your query;
 OpenRouter receives the query and up to three authorized chunks. Provider calls consume account quota.
 
-Start the application and its own IdP:
+Install the host sign-in client dependencies, then start the Docker services:
 
 ```bash
+pnpm install --frozen-lockfile
 docker compose up --build
 ```
+
+On its first start, Docker builds the missing corpus through Voyage, consuming
+quota. Later starts reuse the saved index. It does not run the native setup's
+OpenRouter generation check.
 
 API: <http://localhost:17002>. The issuer is <http://localhost:18002>. Stop the stack with `Ctrl+C`, then `docker compose down`.
 
@@ -65,7 +74,7 @@ pnpm dev
 
 Run setup once to prepare the corpus; repeat it only to rebuild the corpus.
 `pnpm dev` refreshes local configuration and policies, starts this
-project's IdP, and watches the API. Startup itself makes no AI-provider calls;
+project's IdP, and watches the API. Native startup makes no AI-provider calls;
 retrieval requests do. A missing corpus or provider key stops startup with an error.
 
 After updating the PDFs, rebuild the index with `pnpm corpus:reset`, then restart.
@@ -93,8 +102,10 @@ Use these accounts to compare access to the same support documents:
 - Leo (`leo`) is a partner reviewer limited to Tenant A public evidence.
 - Mallory (`mallory`) is a Tenant B analyst with no Tenant A access.
 
-Run `pnpm auth ada`, complete sign-in, and copy the printed access token into
-your HTTP client's bearer-token field. Send this request (replace `<access-token>`):
+Run `pnpm auth ada` and complete sign-in. Use the prefilled username (or enter
+`ada`) and any non-empty password, such as `cedarling-is-awesome`, for this local
+tutorial IdP. Copy the printed access token into your HTTP client's bearer-token
+field. Send this request (replace `<access-token>`):
 
 ```http
 POST http://localhost:17002/v1/retrievals
