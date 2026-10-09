@@ -6,7 +6,7 @@ order: 50
 socialImage: ./assets/social-card.webp
 socialImageAlt: Next.js Server Actions check current editorial facts with Cedarling before protected publishing effects.
 lastVerified: 2026-10-09T12:21:40Z
-lastUpdated: 2026-10-09T16:57:21Z
+lastUpdated: 2026-10-09T17:20:05Z
 ---
 
 # Secure Editorial Publishing with Cedarling
@@ -89,8 +89,8 @@ git switch --detach 21b0832be4b31271320df992d04e9d97667d0e38
 cd p4-editorial-publishing
 
 # Prepare the tutorial steps.
-git restore --source=5cd80ee94619a262fe30a4300deba0e529ae0c77 --worktree -- ../shared/tools/step
-node ../shared/tools/step/run.mjs p4 init --source 5cd80ee94619a262fe30a4300deba0e529ae0c77
+git restore --source=858d9a43cd47925d612ba292d0d35ba6b288952e --worktree -- ../shared/tools/step
+node ../shared/tools/step/run.mjs p4 init --source 858d9a43cd47925d612ba292d0d35ba6b288952e
 ```
 
 For the coding path, install the dependencies and start the app from this directory:

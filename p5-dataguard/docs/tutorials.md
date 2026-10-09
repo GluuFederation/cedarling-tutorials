@@ -6,7 +6,7 @@ order: 60
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Hono API checks query plans with embedded Cedarling before releasing rows, aggregates, or CSV exports.
 lastVerified: 2026-10-07T19:56:00Z
-lastUpdated: 2026-10-09T16:57:21Z
+lastUpdated: 2026-10-09T17:20:05Z
 ---
 
 # Protect Sensitive Data Exports with Cedarling
@@ -93,8 +93,8 @@ git switch --detach 21b0832be4b31271320df992d04e9d97667d0e38
 cd p5-dataguard
 
 # Prepare the tutorial steps.
-git restore --source=5cd80ee94619a262fe30a4300deba0e529ae0c77 --worktree -- ../shared/tools/step
-node ../shared/tools/step/run.mjs p5 init --source 5cd80ee94619a262fe30a4300deba0e529ae0c77
+git restore --source=858d9a43cd47925d612ba292d0d35ba6b288952e --worktree -- ../shared/tools/step
+node ../shared/tools/step/run.mjs p5 init --source 858d9a43cd47925d612ba292d0d35ba6b288952e
 ```
 
 For the build-along, install the dependencies and start the native development
