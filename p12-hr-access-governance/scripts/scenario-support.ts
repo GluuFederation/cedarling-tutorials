@@ -3,8 +3,8 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { type Config, loadConfig } from "../src/server/config.ts";
-import { assertDirectoryPath } from "../src/server/files.ts";
+import { type Config, loadConfig } from "../src/server/config/environment.ts";
+import { assertDirectoryPath } from "../src/server/data/files.ts";
 import type { Grant, Result } from "../src/shared/contracts.ts";
 import { openScenarioSession } from "./scenario-session.ts";
 
@@ -95,6 +95,8 @@ export async function proveAuthorizationFlow(config: Config): Promise<string> {
   console.info("✓ selected gap: contact disclosure without an effective grant");
   const created = (await call(lin, "/api/grants", {
     employeeId: "cora",
+    packageId: "team-support",
+    reason: "Coordinate employee support arrangements.",
     days: 1,
   })) as Result<Grant>;
   const approved = (await call(lin, `/api/grants/${created.data.id}/approve`, {
@@ -123,6 +125,8 @@ export async function proveAuthorizationFlow(config: Config): Promise<string> {
   assert.equal(terminal.data.status, "revoked");
   const next = (await call(lin, "/api/grants", {
     employeeId: "cora",
+    packageId: "team-support",
+    reason: "Coordinate employee support arrangements.",
     days: 1,
   })) as Result<Grant>;
   const separate = (await call(nia, `/api/grants/${next.data.id}/approve`, {
@@ -141,6 +145,53 @@ export async function proveAuthorizationFlow(config: Config): Promise<string> {
   assert.equal(forgery.status, 400);
   console.info(
     "✓ separate approval, terminal metadata, fresh requests, stale-version and native-boundary controls",
+  );
+
+  const aya = await openScenarioSession(config, "aya");
+  const medical = (await call(lin, "/api/grants", {
+    employeeId: "cora",
+    packageId: "occupational-health",
+    beneficiaryId: "aya",
+    days: 1,
+    reason: "Review the occupational-health case.",
+  })) as Result<Grant>;
+  const declined = (await call(nia, `/api/grants/${medical.data.id}/reject`, {
+    version: 1,
+    note: "The review has already been completed.",
+  })) as Result<Grant>;
+  assert.equal(declined.data.status, "rejected");
+  const clinical = (await call(lin, "/api/grants", {
+    employeeId: "cora",
+    packageId: "occupational-health",
+    beneficiaryId: "aya",
+    days: 2,
+    reason: "Review the next occupational-health case.",
+  })) as Result<Grant>;
+  assert.equal(clinical.data.expiresAt, null);
+  const clinicalApproved = (await call(
+    nia,
+    `/api/grants/${clinical.data.id}/approve`,
+    { version: 1 },
+  )) as Result<Grant>;
+  assert.equal(
+    clinicalApproved.data.expiresAt,
+    (clinicalApproved.data.approvedAt ?? 0) + 2 * 86400000,
+  );
+  assert.equal(
+    (await call(aya, "/api/employees/cora/medical")).data.bloodGroup,
+    "O+",
+  );
+  await call(nia, `/api/grants/${clinical.data.id}/revoke`, { version: 2 });
+  assert.equal(
+    (await call(ben, "/api/employees/cora/medical")).data.bloodGroup,
+    "O+",
+  );
+  assert.equal(
+    (await call(nia, `/api/grants/${next.data.id}`)).data.status,
+    "approved",
+  );
+  console.info(
+    "✓ clinician sign-in, independent medical grants, rejection, approval-based expiry and permissive disclosure",
   );
   return next.data.id;
 }

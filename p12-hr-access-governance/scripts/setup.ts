@@ -5,8 +5,11 @@ import {
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
 import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
-import { loadConfig, prepareDataDirectory } from "../src/server/config.ts";
-import { Database } from "../src/server/database.ts";
+import {
+  loadConfig,
+  prepareDataDirectory,
+} from "../src/server/config/environment.ts";
+import { Database } from "../src/server/data/database.ts";
 
 const target = resolve(".env");
 const identity = ensureProjectIdentity("P12");
@@ -29,17 +32,17 @@ const current = readProjectEnvironment(target);
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
     P12_BASE_URL: baseUrl,
+    P12_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P12_ISSUER: issuer,
+    P12_IDP_PORT:
+      new URL(issuer).port || (issuer.startsWith("https:") ? "443" : "80"),
     P12_API_RESOURCE: url("P12_API_RESOURCE"),
     P12_CLIENT_ID: required("P12_CLIENT_ID"),
     P12_CLIENT_SECRET: required("P12_CLIENT_SECRET"),
   },
   defaults: {
     P12_HOST: "127.0.0.1",
-    P12_PORT: new URL(baseUrl).port || "80",
-    P12_IDP_PORT:
-      new URL(issuer).port ||
-      (new URL(issuer).protocol === "https:" ? "443" : "80"),
     P12_DATA_DIR: ".local/p12-data",
   },
 });

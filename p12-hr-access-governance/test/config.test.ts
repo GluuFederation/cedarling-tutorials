@@ -12,8 +12,11 @@ import {
 import { resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { expect, it } from "vitest";
-import { loadConfig, prepareDataDirectory } from "../src/server/config.ts";
-import { Database } from "../src/server/database.ts";
+import {
+  loadConfig,
+  prepareDataDirectory,
+} from "../src/server/config/environment.ts";
+import { Database } from "../src/server/data/database.ts";
 
 it("rejects unsupported modes, remote plain HTTP, and broad storage paths", () => {
   const env = { P12_CLIENT_SECRET: "x".repeat(40) };
@@ -110,7 +113,7 @@ it("setup preserves linked configuration targets and derives registered service 
     }
     writeFileSync(
       resolve(project, ".env"),
-      `P12_CLIENT_SECRET=${"stale".repeat(8)}\nP12_LOCAL_NOTE=keep\n`,
+      `P12_CLIENT_SECRET=${"stale".repeat(8)}\nP12_LOCAL_NOTE=keep\nP12_PORT=3012\nP12_IDP_PORT=4000\n`,
     );
     expect(run().status).toBe(0);
     const config = parseEnv(readFileSync(resolve(project, ".env"), "utf8"));

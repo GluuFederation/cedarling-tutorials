@@ -15,7 +15,7 @@ export const activeGrantExists = (managerName: string, employeeName: string) =>
   new AppError(
     409,
     "ACTIVE_GRANT_EXISTS",
-    `${managerName} already has active access to ${employeeName}.`,
+    `A pending request or approved grant already exists for ${managerName} and ${employeeName}.`,
   );
 export const denied = () =>
   new AppError(403, "DENIED", "Access is not allowed.");
@@ -52,4 +52,22 @@ export function identifier(value: unknown): string {
   if (typeof value !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(value))
     throw new AppError(400, "INVALID_INPUT", "A valid identifier is required.");
   return value;
+}
+export function text(
+  value: unknown,
+  min: number,
+  max: number,
+  message: string,
+): string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length < min ||
+    value.trim().length > max ||
+    Array.from(value).some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return (code < 32 && ![9, 10, 13].includes(code)) || code === 127;
+    })
+  )
+    throw new AppError(400, "INVALID_INPUT", message);
+  return value.trim();
 }

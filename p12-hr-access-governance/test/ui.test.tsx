@@ -1,401 +1,364 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { createMemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  accessPackages,
+  type Grant,
+  type Profile,
+} from "../src/shared/contracts.ts";
 import { App } from "../src/web/App.tsx";
+import { routes } from "../src/web/routes.tsx";
 
 let host: HTMLDivElement;
 let root: Root;
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  HTMLDialogElement.prototype.showModal = vi.fn();
-  HTMLDialogElement.prototype.close = vi.fn();
-  host = document.createElement("div");
-  document.body.append(host);
-  root = createRoot(host);
-});
-afterEach(async () => {
-  await act(async () => root.unmount());
-  host.remove();
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
+let router: ReturnType<typeof createMemoryRouter> | undefined;
+const cora: Profile = {
+  id: "cora",
+  employeeNumber: "EMP-1001",
+  name: "Cora Mensah",
+  preferredName: "Cora",
+  managerId: "ben",
+  managerName: "Ben",
+  team: "Support",
+  jobTitle: "Support specialist",
+  office: "Cotonou",
+  employmentType: "Permanent",
+  employmentStatus: "Active",
+  startDate: "2023-06-05",
+  version: 1,
+};
+const dee: Profile = {
+  ...cora,
+  id: "other-team",
+  employeeNumber: "EMP-1004",
+  name: "Dee Okafor",
+  team: "Operations",
+  managerName: "Morgan",
+};
+const session = {
+  user: { id: "ben", name: "Ben", role: "Manager" },
+  csrfToken: "csrf",
+  expiresAt: Date.now() + 60000,
+};
+const contact = {
+  id: "cora",
+  workEmail: "private@example.test",
+  workPhone: "555",
+  personalEmail: "personal@example.test",
+  mobilePhone: "555",
+  address: "Sample street",
+  emergencyName: "Taylor",
+  emergencyRelationship: "Family",
+  emergencyPhone: "555",
+  version: 1,
+};
+const medical = {
+  id: "cora",
+  dateOfBirth: "1992-04-16",
+  bloodGroup: "O+",
+  allergies: ["Seasonal pollen"],
+  conditions: [],
+  medications: [],
+  consultations: [],
+  testResults: [],
+  vaccinations: [],
+  assessments: [],
+  version: 1,
+};
+const grant: Grant = {
+  id: "g1",
+  packageId: "team-support",
+  packageName: "Contact details",
+  employeeId: "cora",
+  employeeName: "Cora Mensah",
+  requesterId: "lin",
+  requesterName: "Lin",
+  beneficiaryId: "ben",
+  beneficiaryName: "Ben",
+  scope: "current-direct-reports",
+  reason: "Coordinate employee support arrangements.",
+  durationDays: 2,
+  status: "pending",
+  createdAt: Date.now(),
+  reviewDeadline: Date.now() + 86400000,
+  approvedAt: null,
+  expiresAt: null,
+  reviewedBy: null,
+  reviewerName: null,
+  reviewedAt: null,
+  reviewNote: null,
+  revokedBy: null,
+  revokerName: null,
+  revokedAt: null,
+  version: 1,
+};
 function response(data: unknown, status = 200) {
   return new Response(
     JSON.stringify(
       status === 200
         ? { data, requestId: "req_test" }
         : {
-            error: { code: "DENIED", message: "Contact access denied." },
+            error: { code: "DENIED", message: "Access denied." },
             requestId: "req_denied",
           },
     ),
     { status, headers: { "Content-Type": "application/json" } },
   );
 }
-function button(text: string) {
-  const found = [...host.querySelectorAll("button")].find(
-    (item) => item.textContent?.trim() === text,
-  );
-  if (!found) throw new Error(`Missing button ${text}`);
-  return found;
+function defaults(path: string): Response {
+  if (path === "/api/session") return response(session);
+  if (path === "/api/employees") return response([cora, dee]);
+  if (path.endsWith("/profile")) return response(cora);
+  if (path.endsWith("/contact")) return response(contact);
+  if (path.endsWith("/medical")) return response(medical);
+  if (path === "/api/access-options")
+    return response({
+      packages: accessPackages,
+      beneficiaries: [
+        { id: "aya", name: "Dr. Aya", role: "Occupational-health clinician" },
+        { id: "ben", name: "Ben", role: "Manager" },
+      ],
+    });
+  if (path.startsWith("/api/grants?")) return response([grant]);
+  if (path.startsWith("/api/grants/g1")) return response(grant);
+  throw new Error(`Unexpected request: ${path}`);
 }
-async function settle(action: () => void) {
+async function settle(action: () => unknown) {
   await act(async () => {
-    action();
-    await new Promise((done) => setTimeout(done, 10));
+    await action();
+    await new Promise((done) => setTimeout(done, 15));
   });
 }
-const ben = {
-  user: { id: "ben", name: "Ben", role: "Manager" },
-  csrfToken: "csrf",
-  expiresAt: Date.now() + 60000,
-};
-const cora = {
-  id: "cora",
-  name: "Cora",
-  managerId: "ben",
-  managerName: "Ben",
-  team: "Support",
-  jobTitle: "Specialist",
-  version: 1,
-};
-function expectProgramHeading() {
-  expect(host.querySelector("header h1")?.textContent).toBe(
-    "P12 - Governing Employee Record Access with Cedarling",
-  );
-  expect(host.querySelector(".topbar-copy p")?.textContent).toBe(
-    "Request, review, and revoke access to employee contact fields.",
-  );
+async function render(path = "/employees") {
+  await settle(() => {
+    router = createMemoryRouter(routes, { initialEntries: [path] });
+    root.render(<App router={router} />);
+  });
 }
-it("uses the P1 identity panel and common program title before login", async () => {
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.spyOn(console, "info").mockImplementation(() => {});
+  HTMLDialogElement.prototype.showModal = vi.fn();
+  HTMLDialogElement.prototype.close = vi.fn();
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string) => defaults(path)),
+  );
+});
+afterEach(async () => {
+  await act(async () => root.unmount());
+  router?.dispose();
+  router = undefined;
+  host.remove();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+it("provides all four sign-ins and secure resource links in the shared shell", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => response(null)),
   );
-  await settle(() => root.render(<App />));
-  expectProgramHeading();
-  expect(host.querySelector(".login-heading h2")?.textContent).toBe(
-    "Choose a tutorial identity",
-  );
+  await render("/");
+  expect(host.querySelectorAll(".account-choice")).toHaveLength(4);
+  expect(host.textContent).toContain("Dr. Aya");
   expect(
-    [...host.querySelectorAll(".account-choice")].map((link) => ({
-      href: link.getAttribute("href"),
-      name: link.querySelector(".account-copy strong")?.textContent,
-      avatar: link.querySelector(".account-avatar")?.textContent,
-    })),
-  ).toEqual([
-    { href: "/auth/login?login_hint=lin", name: "Lin", avatar: "L" },
-    { href: "/auth/login?login_hint=nia", name: "Nia", avatar: "N" },
-    { href: "/auth/login?login_hint=ben", name: "Ben", avatar: "B" },
-  ]);
-  expect(host.querySelector(".rail-identity")).toBeNull();
+    [...host.querySelectorAll("footer a")].every(
+      (link) =>
+        link.getAttribute("target") === "_blank" &&
+        link.getAttribute("rel")?.includes("noopener"),
+    ),
+  ).toBe(true);
 });
-it("closes the request dialog and selects a visible active grant after a duplicate race", async () => {
-  const active = {
-    id: "g-active",
-    employeeId: "cora",
-    employeeName: "Cora",
-    managerId: "ben",
-    managerName: "Ben",
-    requesterName: "Lin",
-    status: "approved",
-    expiresAt: Date.now() + 60_000,
-    version: 2,
-  };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (path: string) => {
-      if (path === "/api/session")
-        return response({
-          ...ben,
-          user: { id: "lin", name: "Lin", role: "Reviewer" },
-        });
-      if (path === "/api/employees") return response([cora]);
-      if (path === "/api/employees/cora/profile") return response(cora);
-      if (path === "/api/grants?view=review") {
-        return response([active]);
-      }
-      if (path === "/api/grants")
-        return new Response(
-          JSON.stringify({
-            error: {
-              code: "ACTIVE_GRANT_EXISTS",
-              message: "Ben already has an active access grant.",
-            },
-            requestId: "req_active",
-          }),
-          { status: 409, headers: { "Content-Type": "application/json" } },
-        );
-      if (path === "/api/grants/g-active") return response(active);
-      throw new Error(`Unexpected request: ${path}`);
-    }),
-  );
-
-  await settle(() => root.render(<App />));
-  await settle(() => button("CoraSupport").click());
-  await settle(() => button("Request access").click());
-  await settle(() =>
-    host.querySelector<HTMLFormElement>("dialog form")?.requestSubmit(),
-  );
-
-  expect(host.querySelector("dialog")).toBeNull();
-  expect(host.querySelector('[data-resource-id="g-active"]')).not.toBeNull();
-  expect(host.textContent).toContain("Cora");
-});
-it("opens an already-listed pending grant from the access requests view", async () => {
-  const active = {
-    id: "g-pending",
-    employeeId: "cora",
-    employeeName: "Cora",
-    managerId: "ben",
-    managerName: "Ben",
-    requesterName: "Lin",
-    status: "pending",
-    expiresAt: Date.now() + 60_000,
-    version: 1,
-  };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (path: string) => {
-      if (path === "/api/session")
-        return response({
-          ...ben,
-          user: { id: "lin", name: "Lin", role: "Reviewer" },
-        });
-      if (path === "/api/grants?view=review") return response([active]);
-      if (path === "/api/grants/g-pending") return response(active);
-      throw new Error(`Unexpected request: ${path}`);
-    }),
-  );
-
-  await settle(() => root.render(<App />));
-  await settle(() => button("Access requests").click());
-  await settle(() => button("CoraBen · requested by Linpending").click());
-
-  expect(host.querySelector("dialog")).toBeNull();
-  expect(host.textContent).toContain("Approve");
-});
-it.each(["lin", "nia", "ben"])(
-  "keeps the program title and compact task shell for %s after login",
+it.each(["lin", "nia", "ben", "aya"])(
+  "keeps directory, review and sensitive-record pages reachable for %s in the baseline",
   async (id) => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (path: string) =>
-        response(
-          path === "/api/session"
-            ? { ...ben, user: { id, name: id, role: "Reviewer" } }
-            : [],
-        ),
+        path === "/api/session"
+          ? response({
+              ...session,
+              user: { id, name: id, role: "Tutorial role" },
+            })
+          : defaults(path),
       ),
     );
-    await settle(() => root.render(<App />));
-    expectProgramHeading();
-    expect(host.querySelector(".list-heading h2")?.textContent).toBe(
-      id === "nia" ? "Access requests" : "Employees",
-    );
-    expect(host.querySelector(".identity-avatar")?.textContent).toBe(id[0]);
-    expect(host.querySelector(".login-panel")).toBeNull();
+    await render();
+    expect(host.querySelector('a[href="/access-requests"]')).not.toBeNull();
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
+    await settle(() => router?.navigate("/employees/cora/contact"));
+    expect(host.textContent).toContain("private@example.test");
+    await settle(() => router?.navigate("/employees/cora/medical"));
+    expect(host.textContent).toContain("Seasonal pollen");
     expect(
-      host.querySelector(".workspace.no-selection > .ledger + .detail"),
+      host.querySelector('a[href*="/access-requests/new"]'),
     ).not.toBeNull();
   },
 );
-it("clears denied contact fields while retaining independently allowed basic fields", async () => {
+it("filters the employee table through URL state without downloading private groups", async () => {
+  await render("/employees?q=EMP-1004&department=Operations");
+  expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
+  expect(host.textContent).toContain("Dee Okafor");
+  const calls = vi.mocked(fetch).mock.calls.map(([path]) => String(path));
+  expect(
+    calls.some(
+      (path) => path.endsWith("/contact") || path.endsWith("/medical"),
+    ),
+  ).toBe(false);
+  await settle(() =>
+    router?.navigate("/employees/cora?from=department%3DSupport"),
+  );
+  expect(host.querySelector(".back-link")?.getAttribute("href")).toBe(
+    "/employees?department=Support",
+  );
+});
+it("clears a denied medical response while retaining the independently loaded employee profile", async () => {
   let deny = false;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (path: string) => {
-      if (path === "/api/session") return response(ben);
-      if (path === "/api/employees") return response([cora]);
-      if (path.endsWith("/profile")) return response(cora);
-      return deny
-        ? response(null, 403)
-        : response({
-            id: "cora",
-            workEmail: "private@example.test",
-            workPhone: "555",
-            version: 1,
-          });
+    vi.fn(async (path: string) =>
+      path.endsWith("/medical") && deny ? response(null, 403) : defaults(path),
+    ),
+  );
+  await render("/employees/cora/medical");
+  expect(host.textContent).toContain("Seasonal pollen");
+  deny = true;
+  await settle(() => router?.revalidate());
+  expect(host.textContent).not.toContain("Seasonal pollen");
+  expect(host.textContent).toContain("Cora Mensah");
+  expect(host.textContent).toContain("Access not allowed");
+  expect(
+    host.querySelector(
+      'a[href="/access-requests/new?employee=cora&package=occupational-health"]',
+    ),
+  ).not.toBeNull();
+});
+it("distinguishes a request's beneficiary and medical package in the submission", async () => {
+  let body: unknown;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/api/grants") {
+        body = JSON.parse(String(init?.body));
+        return response(grant);
+      }
+      return defaults(path);
     }),
   );
-  await settle(() => root.render(<App />));
-  await settle(() => button("CoraSupport").click());
-  expect(host.textContent).toContain("private@example.test");
-  deny = true;
-  await settle(() => button("Refresh").click());
-  expect(host.textContent).not.toContain("private@example.test");
-  expect(host.textContent).toContain("Specialist");
-  expect(host.textContent).toContain("Contact access denied.");
+  const formData = new FormData();
+  Object.entries({
+    employeeId: "cora",
+    packageId: "occupational-health",
+    beneficiaryId: "aya",
+    days: "2",
+    reason: "Review an occupational-health case.",
+  }).forEach(([key, value]) => {
+    formData.set(key, value);
+  });
+  await render(
+    "/access-requests/new?employee=cora&package=occupational-health",
+  );
+  expect(host.querySelector('select[name="beneficiaryId"]')).not.toBeNull();
+  await settle(() =>
+    router?.navigate("/access-requests/new", { formMethod: "post", formData }),
+  );
+  expect(body).toEqual({
+    employeeId: "cora",
+    packageId: "occupational-health",
+    beneficiaryId: "aya",
+    days: 2,
+    reason: "Review an occupational-health case.",
+  });
+  expect(router?.state.location.pathname).toBe("/access-requests/g1");
 });
-it("account change discards late protected responses", async () => {
+it("retains form values after a failed submission and opens an existing request after a duplicate", async () => {
+  let duplicate = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string) => {
+      if (path === "/api/grants")
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: duplicate ? "ACTIVE_GRANT_EXISTS" : "CONFLICT",
+              message: "Refresh and try again.",
+            },
+            requestId: "req_conflict",
+          }),
+          { status: 409 },
+        );
+      return defaults(path);
+    }),
+  );
+  await render("/access-requests/new?employee=cora");
+  const form = new FormData();
+  Object.entries({
+    employeeId: "cora",
+    packageId: "team-support",
+    days: "2",
+    reason: "Coordinate employee support arrangements.",
+  }).forEach(([key, value]) => {
+    form.set(key, value);
+  });
+  const input = host.querySelector<HTMLTextAreaElement>("textarea");
+  if (!input) throw Error("Missing reason");
+  await settle(() => {
+    input.value = "Keep this request reason.";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle(() =>
+    router?.navigate("/access-requests/new?employee=cora", {
+      formMethod: "post",
+      formData: form,
+    }),
+  );
+  expect(host.textContent).toContain("Refresh and try again.");
+  expect(host.querySelector("textarea")?.value).toBe(
+    "Keep this request reason.",
+  );
+  duplicate = true;
+  await settle(() =>
+    router?.navigate("/access-requests/new?employee=cora", {
+      formMethod: "post",
+      formData: form,
+    }),
+  );
+  expect(router?.state.location.pathname).toBe("/access-requests/g1");
+  expect(host.textContent).toContain("Opened the existing request.");
+});
+it("clears protected content after expiry or sign-out and discards late responses", async () => {
+  let signedOut = false;
   let release: ((value: Response) => void) | undefined;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (path: string) => {
-      if (path === "/api/session") return response(ben);
-      if (path === "/api/employees") return response([cora]);
-      if (path.endsWith("/profile")) return response(cora);
-      if (path === "/auth/logout") return new Response(null, { status: 204 });
-      return new Promise<Response>((done) => {
-        release = done;
-      });
-    }),
-  );
-  await settle(() => root.render(<App />));
-  await settle(() => button("CoraSupport").click());
-  const accountMenu = host.querySelector<HTMLElement>(
-    '[aria-label="Open account menu"]',
-  );
-  if (!accountMenu) throw new Error("Missing account menu");
-  await settle(() => accountMenu.click());
-  await settle(() => button("Change account").click());
-  expect(host.textContent).toContain("Choose a tutorial identity");
-  await settle(() =>
-    release?.(
-      response({
-        id: "cora",
-        workEmail: "late-secret@example.test",
-        workPhone: "555",
-        version: 1,
-      }),
-    ),
-  );
-  expect(host.textContent).not.toContain("late-secret");
-  expect(host.textContent).not.toContain("Specialist");
-});
-it("keeps employee request actions and terminal grants reachable without diagnostic UI", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (path: string) => {
-      if (path === "/api/session")
-        return response({
-          ...ben,
-          user: { id: "lin", name: "Lin", role: "Reviewer" },
-        });
-      if (path === "/api/employees") return response([cora]);
-      if (path.endsWith("/profile")) return response(cora);
-      return response([
-        {
-          id: "g1",
-          employeeId: "cora",
-          employeeName: "Cora",
-          managerName: "Ben",
-          requesterName: "Lin",
-          status: "revoked",
-        },
-      ]);
-    }),
-  );
-  await settle(() => root.render(<App />));
-  await settle(() => button("CoraSupport").click());
-  expect(button("Request access")).toBeDefined();
-  await settle(() => button("Access requests").click());
-  expect(host.textContent).toContain("revoked");
-  expect(host.querySelector("footer nav")?.textContent).toBe(
-    "Cedarling.devCedarling DocsAgama LabLock ServerGluu",
-  );
-  expect(host.textContent).not.toMatch(
-    /FAKE ALLOW|Cedarling was not called|Policy diagnostics/,
-  );
-});
-it("refreshes grant state after updates and renders one coherent success or failure notice", async () => {
-  let grant = {
-    id: "g1",
-    employeeId: "cora",
-    employeeName: "Cora",
-    managerName: "Ben",
-    requesterName: "Lin",
-    status: "pending",
-    expiresAt: Date.now() + 60_000,
-    version: 1,
-  };
-  const calls: string[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (path: string, init?: RequestInit) => {
-      calls.push(path);
-      if (path === "/api/session")
-        return response({
-          ...ben,
-          user: { id: "lin", name: "Lin", role: "Reviewer" },
-        });
-      if (path === "/api/grants?view=review") return response([grant]);
-      if (path === "/api/grants/g1/approve") {
-        expect(init?.body).toBe(JSON.stringify({ version: 1 }));
-        expect(new Headers(init?.headers).get("X-CSRF-Token")).toBe("csrf");
-        grant = { ...grant, status: "approved", version: 2 };
-        return response(grant);
+      if (path === "/auth/logout") {
+        signedOut = true;
+        return new Response(null, { status: 204 });
       }
-      if (path === "/api/grants/g1/revoke")
-        return new Response(
-          JSON.stringify({
-            error: { message: "Grant update denied." },
-            requestId: "req_denied",
-          }),
-          { status: 403 },
-        );
-      return response(grant);
+      if (path === "/api/session") return response(signedOut ? null : session);
+      if (path.endsWith("/medical"))
+        return new Promise<Response>((done) => {
+          release = done;
+        });
+      return defaults(path);
     }),
   );
-  await settle(() => root.render(<App />));
-  await settle(() => button("Access requests").click());
-  await settle(() => button("CoraBen · requested by Linpending").click());
-  calls.length = 0;
-  await settle(() => button("Approve").click());
-  expect(host.querySelector('.notice[role="status"]')?.textContent).toBe(
-    "Access approved. (req_test)",
+  await render("/employees/cora/contact");
+  await settle(() => {
+    void router?.navigate("/employees/cora/medical");
+  });
+  const signOut = new FormData();
+  await settle(() =>
+    router?.navigate("/sign-out", { formMethod: "post", formData: signOut }),
   );
-  expect(calls).toContain("/api/grants?view=review");
-  expect(calls).toContain("/api/grants/g1");
-  calls.length = 0;
-  await settle(() => button("Revoke").click());
-  expect(host.querySelector('.notice[role="alert"]')?.textContent).toBe(
-    "Grant update denied. (req_denied)",
-  );
-  expect(host.querySelector('.notice[role="status"]')).toBeNull();
-  expect(calls).toContain("/api/grants?view=review");
-  expect(calls).toContain("/api/grants/g1");
+  expect(host.textContent).toContain("Choose a tutorial identity");
+  await settle(() => release?.(response(medical)));
+  expect(host.textContent).not.toContain("Seasonal pollen");
+  expect(host.textContent).not.toContain("private@example.test");
 });
-it.each(["nia", "ben"])(
-  "moves narrow-screen focus into %s details and back to its row",
-  async (id) => {
-    vi.stubGlobal("matchMedia", () => ({ matches: true }));
-    const grant = {
-      id: "g1",
-      employeeId: "cora",
-      employeeName: "Cora",
-      managerName: "Ben",
-      requesterName: "Lin",
-      status: "revoked",
-      expiresAt: Date.now() + 60_000,
-    };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (path: string) => {
-        if (path === "/api/session")
-          return response({ ...ben, user: { id, name: id, role: "Reviewer" } });
-        if (path === "/api/employees") return response([cora]);
-        if (path === "/api/grants?view=review") return response([grant]);
-        if (path === "/api/grants/g1") return response(grant);
-        if (path.endsWith("/profile")) return response(cora);
-        return response({
-          id: "cora",
-          workEmail: "private@example.test",
-          workPhone: "555",
-          version: 1,
-        });
-      }),
-    );
-    await settle(() => root.render(<App />));
-    const row = host.querySelector<HTMLButtonElement>(".resource-row");
-    if (!row) throw new Error("Missing row");
-    row.focus();
-    await settle(() => row.click());
-    expect(document.activeElement).toBe(host.querySelector(".detail"));
-    await settle(() =>
-      button(id === "ben" ? "Back to employees" : "Back to access").click(),
-    );
-    expect(document.activeElement).toBe(row);
-  },
-);

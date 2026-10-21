@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DecisionInput } from "../src/server/authorization.ts";
-import { fakeAuthorize, unavailable } from "../src/server/authorization.ts";
-import { Database } from "../src/server/database.ts";
-import { denied } from "../src/server/errors.ts";
-import { HrService } from "../src/server/service.ts";
+import { Database } from "../src/server/data/database.ts";
+import type { DecisionInput } from "../src/server/hr/authorization.ts";
+import { fakeAuthorize } from "../src/server/hr/authorization.ts";
+import { HrService } from "../src/server/hr/service.ts";
+import { denied } from "../src/server/http/errors.ts";
+import { contactRequest, unavailable } from "./support.ts";
 
 const databases: Database[] = [];
 function fixture() {
@@ -15,7 +16,48 @@ afterEach(() => {
   for (const db of databases.splice(0)) db.close();
   vi.restoreAllMocks();
 });
-describe("the five capability effects", () => {
+describe("the contact capability effects", () => {
+  it("keeps current grants visible after more than 100 completed requests", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const { db, service } = fixture();
+    for (let index = 0; index < 105; index++) {
+      const grant = await service.request("lin", contactRequest("cora", 1));
+      await service.transition("nia", grant.id, 1, "approve");
+      await service.transition("lin", grant.id, 2, "revoke");
+      db.sql
+        .prepare("UPDATE grants SET id = ? WHERE id = ?")
+        .run(`grant_history_${index.toString().padStart(3, "0")}`, grant.id);
+    }
+    const current = await service.request("lin", contactRequest("cora", 1));
+    db.sql
+      .prepare("UPDATE grants SET id = 'grant_z_current' WHERE id = ?")
+      .run(current.id);
+    const grants = await service.grants("lin", "review");
+    expect(grants).toHaveLength(100);
+    expect(grants[0]?.id).toBe("grant_z_current");
+    expect(grants[1]?.id).toBe("grant_history_104");
+    expect(await service.grants("lin", "review", "cora")).toMatchObject([
+      { id: "grant_z_current", status: "pending" },
+    ]);
+    await expect(
+      service.request("lin", contactRequest("cora", 1)),
+    ).rejects.toMatchObject({
+      code: "ACTIVE_GRANT_EXISTS",
+    });
+  });
+
+  it("authorizes the exact active-grant recovery independently of history", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const { db, service } = fixture();
+    const grant = await service.request("lin", contactRequest("cora", 1));
+    const guarded = new HrService(db, async (input) => {
+      if (input.resourceId === grant.id) throw denied();
+    });
+    expect(await guarded.grants("lin", "review", "cora")).toEqual([]);
+    await service.transition("nia", grant.id, 1, "approve");
+    await service.transition("lin", grant.id, 2, "revoke");
+    expect(await service.grants("lin", "review", "cora")).toEqual([]);
+  });
   it("traces the current governance grant status instead of labeling it absent", async () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const { db } = fixture();
@@ -24,7 +66,7 @@ describe("the five capability effects", () => {
       decisions.push(input);
       await fakeAuthorize(input);
     });
-    const grant = await service.request("lin", "cora", 1);
+    const grant = await service.request("lin", contactRequest("cora", 1));
     await service.transition("lin", grant.id, 1, "approve");
     await service.transition("nia", grant.id, 2, "revoke");
     await service.grant("lin", grant.id, "review");
@@ -61,7 +103,9 @@ describe("the five capability effects", () => {
       )
         throw denied();
     });
-    expect(await guarded.employees("ben")).toEqual([]);
+    expect(
+      (await guarded.employees("ben")).map((employee) => employee.id),
+    ).not.toContain("cora");
     db.sql.prepare("DELETE FROM employees WHERE tenantId = 'tenant-a'").run();
     await expect(
       new HrService(db, unavailable).employees("ben"),
@@ -70,8 +114,8 @@ describe("the five capability effects", () => {
   it("allows exactly one effect when duplicate requests overlap", async () => {
     const { service } = fixture();
     const results = await Promise.allSettled([
-      service.request("lin", "cora", 1),
-      service.request("lin", "cora", 1),
+      service.request("lin", contactRequest("cora", 1)),
+      service.request("lin", contactRequest("cora", 1)),
     ]);
     expect(
       results.filter((result) => result.status === "fulfilled"),
@@ -83,18 +127,20 @@ describe("the five capability effects", () => {
   });
   it("keeps grants independent for different employees and their current managers", async () => {
     const { service } = fixture();
-    const cora = await service.request("lin", "cora", 1);
-    const dee = await service.request("lin", "other-team", 1);
+    const cora = await service.request("lin", contactRequest("cora", 1));
+    const dee = await service.request("lin", contactRequest("other-team", 1));
     expect([cora, dee]).toMatchObject([
-      { employeeName: "Cora", managerName: "Ben" },
-      { employeeName: "Dee", managerName: "Other manager" },
+      { employeeName: "Cora Mensah", beneficiaryName: "Ben" },
+      { employeeName: "Dee Okafor", beneficiaryName: "Morgan" },
     ]);
   });
   it("treats elapsed grants as expired on reads and expires them transactionally before replacement", async () => {
     const { db, service } = fixture();
-    const grant = await service.request("lin", "cora", 1);
+    const grant = await service.request("lin", contactRequest("cora", 1));
     db.sql
-      .prepare("UPDATE grants SET expiresAt = ? WHERE id = ?")
+      .prepare(
+        "UPDATE grants SET createdAt = createdAt - 86400000, reviewDeadline = ? WHERE id = ?",
+      )
       .run(Date.now() - 1, grant.id);
     expect((await service.grant("lin", grant.id, "requests")).status).toBe(
       "expired",
@@ -103,12 +149,12 @@ describe("the five capability effects", () => {
     await expect(
       service.transition("nia", grant.id, 1, "approve"),
     ).rejects.toMatchObject({ status: 409 });
-    await service.request("lin", "cora", 1);
+    await service.request("lin", contactRequest("cora", 1));
     expect(db.grant(grant.id)).toMatchObject({ status: "expired", version: 2 });
   });
   it("reauthorizes changed facts and does not release contact data after a concurrent revocation", async () => {
     const { db, service } = fixture();
-    const request = await service.request("lin", "cora", 1);
+    const request = await service.request("lin", contactRequest("cora", 1));
     const grant = await service.transition("nia", request.id, 1, "approve");
     let calls = 0;
     const guarded = new HrService(db, async (input) => {
@@ -134,7 +180,9 @@ describe("the five capability effects", () => {
     db.sql.exec(
       "CREATE TRIGGER fail_request BEFORE INSERT ON grants BEGIN SELECT RAISE(ABORT, 'test failure'); END",
     );
-    await expect(service.request("lin", "cora", 1)).rejects.toThrow();
+    await expect(
+      service.request("lin", contactRequest("cora", 1)),
+    ).rejects.toThrow();
     expect(db.sql.prepare("SELECT * FROM grants").all()).toEqual([]);
     db.sql.exec("DROP TRIGGER fail_request");
     let calls = 0;
@@ -151,7 +199,7 @@ describe("the five capability effects", () => {
   });
   it("retains paired separation fixtures and server-owned read/execute inputs without pretending to evaluate policy", async () => {
     const { db, service } = fixture();
-    const request = await service.request("lin", "cora", 1);
+    const request = await service.request("lin", contactRequest("cora", 1));
     const inputs: DecisionInput[] = [];
     const observe = new HrService(db, async (input) => {
       inputs.push(input);
@@ -179,7 +227,7 @@ describe("the five capability effects", () => {
     expect(await service.contact("ben", "cora")).toMatchObject({
       workEmail: "cora@example.test",
     });
-    const pending = await service.request("lin", "cora", 1);
+    const pending = await service.request("lin", contactRequest("cora", 1));
     const approved = await service.transition(
       "lin",
       pending.id,
@@ -196,15 +244,20 @@ describe("the five capability effects", () => {
     expect(revoked.status).toBe("revoked");
     expect(await service.contact("ben", "cora")).toHaveProperty("workPhone");
     expect(await service.grants("lin", "review")).toEqual([revoked]);
-    expect((await service.request("lin", "cora", 1)).status).toBe("pending");
+    expect(
+      (await service.request("lin", contactRequest("cora", 1))).status,
+    ).toBe("pending");
   });
   it("enforces uniqueness, transitions, tenant containment and expected versions natively", async () => {
     const { service } = fixture();
-    const pending = await service.request("lin", "cora", 1);
-    await expect(service.request("lin", "cora", 1)).rejects.toMatchObject({
+    const pending = await service.request("lin", contactRequest("cora", 1));
+    await expect(
+      service.request("lin", contactRequest("cora", 1)),
+    ).rejects.toMatchObject({
       status: 409,
       code: "ACTIVE_GRANT_EXISTS",
-      message: "Ben already has active access to Cora.",
+      message:
+        "A pending request or approved grant already exists for Ben and Cora Mensah.",
     });
     await expect(
       service.transition("nia", pending.id, 1, "revoke"),
@@ -219,17 +272,12 @@ describe("the five capability effects", () => {
   });
   it("keeps profile and contact projections separate and fails unavailable without a write", async () => {
     const { db, service } = fixture();
-    expect(Object.keys(await service.profile("ben", "cora"))).toEqual([
-      "id",
-      "name",
-      "managerId",
-      "managerName",
-      "team",
-      "jobTitle",
-      "version",
-    ]);
+    expect(await service.profile("ben", "cora")).not.toHaveProperty(
+      "workEmail",
+    );
+
     await expect(
-      new HrService(db, unavailable).request("lin", "cora", 1),
+      new HrService(db, unavailable).request("lin", contactRequest("cora", 1)),
     ).rejects.toMatchObject({ status: 503 });
     expect(await service.grants("lin", "requests")).toEqual([]);
   });

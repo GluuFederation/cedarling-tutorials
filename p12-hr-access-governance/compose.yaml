@@ -71,7 +71,7 @@ services:
         - CMD
         - node
         - -e
-        - fetch(process.env.IDP_ISSUER+'/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+        - fetch(process.env.IDP_ISSUER+'/.well-known/openid-configuration').then(async r=>process.exit(r.ok&&(await r.json()).issuer===process.env.IDP_ISSUER?0:1)).catch(()=>process.exit(1))
       interval: 2s
       timeout: 3s
       retries: 30

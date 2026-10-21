@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { assertDirectoryPath, assertSqlitePath } from "./files.ts";
+import { assertDirectoryPath, assertSqlitePath } from "../data/files.ts";
 export type Config = Readonly<{
   host: string;
   port: number;

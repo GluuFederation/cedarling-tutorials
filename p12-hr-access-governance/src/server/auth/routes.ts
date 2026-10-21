@@ -1,10 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { parseCookie, stringifySetCookie } from "cookie";
 import type { Express, Request } from "express";
-import { accounts } from "../shared/contracts.ts";
-import type { Config } from "./config.ts";
-import type { Database, LoginTransaction, Session } from "./database.ts";
-import { AppError, denied, unauthorized } from "./errors.ts";
+import { accounts } from "../../shared/contracts.ts";
+import type { Config } from "../config/environment.ts";
+import type { Database, LoginTransaction, Session } from "../data/database.ts";
+import { AppError, denied, unauthorized } from "../http/errors.ts";
 import type { OidcRuntime } from "./oidc.ts";
 export const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");

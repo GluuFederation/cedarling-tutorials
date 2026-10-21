@@ -1,6 +1,6 @@
 import * as oidc from "openid-client";
-import type { Config } from "./config.ts";
-import type { LoginTransaction } from "./database.ts";
+import type { Config } from "../config/environment.ts";
+import type { LoginTransaction } from "../data/database.ts";
 
 type Identity = Readonly<{ subject: string; expiresAt: number }>;
 export interface OidcRuntime {
