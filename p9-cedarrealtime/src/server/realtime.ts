@@ -64,7 +64,7 @@ function failure(error: unknown): Ack<never> {
   if (error instanceof DomainError) {
     return { ok: false, error: { code: error.code, message: error.code } };
   }
-  console.error("P9 realtime operation failed", { error: "internal_error" });
+  console.error("P9 realtime | ERROR | internal_error");
   return {
     ok: false,
     error: { code: "internal_error", message: "internal_error" },
@@ -360,10 +360,29 @@ export function attachRealtime(
           });
           typed.data.roomIds.add(input.roomId);
           add(roomSockets, input.roomId, typed);
-          const page = options.chat.messagePageAfter(
-            input.roomId,
-            input.lastSequence,
-          );
+          const page = input.refresh
+            ? {
+                messages: options.chat.recentMessages(input.roomId),
+                hasMore: false,
+              }
+            : options.chat.messagePageAfter(input.roomId, input.lastSequence);
+          for (const message of page.messages) {
+            authorize({
+              principalId: current.user.id,
+              capability: message.deleted
+                ? "message.deletion.deliver"
+                : "message.deliver",
+              resourceId: message.id,
+              facts: {
+                roomId: input.roomId,
+                membershipActive: membership?.active ?? false,
+                membershipVersion: membership?.version ?? 0,
+                sequence: message.sequence,
+                messageVersion: message.version,
+              },
+              effect: "return current message state in bounded room history",
+            });
+          }
           const members = options.chat
             .members(input.roomId)
             .map((item) => memberView(item, item.name));
@@ -376,11 +395,13 @@ export function attachRealtime(
             },
             members,
             messages: page.messages.map(messageView),
-            nextSequence:
-              page.messages[page.messages.length - 1]?.sequence ??
-              input.lastSequence,
+            nextSequence: input.refresh
+              ? target.nextSequence - 1
+              : (page.messages[page.messages.length - 1]?.sequence ??
+                input.lastSequence),
             hasMore: page.hasMore,
             replayed: input.lastSequence > 0,
+            reset: input.refresh === true,
             outcome,
           };
           return snapshot;

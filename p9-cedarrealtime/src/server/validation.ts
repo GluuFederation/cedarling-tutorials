@@ -51,10 +51,22 @@ function integer(value: unknown, minimum = 0): number {
 }
 
 export function enterInput(value: unknown): EnterInput {
-  const input = record(value, ["roomId", "lastSequence"]);
+  const hasRefresh =
+    value !== null &&
+    typeof value === "object" &&
+    Object.hasOwn(value, "refresh");
+  const input = record(
+    value,
+    hasRefresh
+      ? ["roomId", "lastSequence", "refresh"]
+      : ["roomId", "lastSequence"],
+  );
+  if (hasRefresh && typeof input.refresh !== "boolean")
+    throw new DomainError("invalid_event", 400);
   return {
     roomId: id(input.roomId),
     lastSequence: integer(input.lastSequence),
+    ...(hasRefresh ? { refresh: input.refresh as boolean } : {}),
   };
 }
 

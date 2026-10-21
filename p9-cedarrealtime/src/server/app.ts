@@ -48,7 +48,9 @@ export async function buildApp(
     next();
   });
   app.use(express.json({ limit: "16kb", strict: true }));
-  app.get("/health", (_request, response) => response.json({ status: "ok" }));
+  app.get("/health", (_request, response) =>
+    response.json({ status: "ok", service: "p9-cedarrealtime" }),
+  );
   const auth = registerAuthRoutes(
     app,
     options.config,
@@ -87,7 +89,9 @@ export async function buildApp(
         response.status(413).json({ error: "request_too_large" });
         return;
       }
-      console.error("P9 request failed", { error: "internal_error" });
+      console.error(
+        `P9 server | ERROR | internal_error | ${response.locals.requestId}`,
+      );
       response.status(500).json({ error: "internal_error" });
     },
   );

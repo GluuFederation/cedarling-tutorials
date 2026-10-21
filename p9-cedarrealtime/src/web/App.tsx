@@ -1,4 +1,5 @@
-import { X } from "./icons.tsx";
+import { PaperPlane, X } from "./icons.tsx";
+import { TransientNotice, type Notice } from "./TransientNotice.tsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { realtimeEvents } from "../shared/protocol.ts";
@@ -124,7 +125,17 @@ export default function App(): React.JSX.Element {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [memberDrawer, setMemberDrawer] = useState(false);
-  const [notice, setNotice] = useState("Loading session");
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [connectionNotice, setConnectionNotice] = useState<string | null>(
+    "Connecting to chat…",
+  );
+  const dismissNotice = useCallback(() => setNotice(null), []);
+  const showNotice = useCallback(
+    (text: string, kind: Notice["kind"] = "success") =>
+      setNotice({ text, kind }),
+    [],
+  );
+  const operationPending = useRef(false);
   const [outcome, setOutcome] = useState<OperationOutcome>();
   const memberCloseRef = useRef<HTMLButtonElement>(null);
   const lastSequences = useRef(new Map<string, number>());
@@ -161,21 +172,31 @@ export default function App(): React.JSX.Element {
 
   const replayRoom = useCallback(
     async (currentSocket: ChatSocket, target: string): Promise<RoomView> => {
-      let cursor = lastSequences.current.get(target) ?? 0;
-      while (true) {
+      try {
         const snapshot = await emitWithAck<RoomSnapshot>(currentSocket, (ack) =>
           currentSocket.emit(
             realtimeEvents.client.enterRoom,
-            { roomId: target, lastSequence: cursor },
+            {
+              roomId: target,
+              lastSequence: lastSequences.current.get(target) ?? 0,
+              refresh: true,
+            },
             ack,
           ),
         );
+        if (activeSocket.current !== currentSocket)
+          throw new Error("Connection changed during history refresh");
         acceptSnapshot(snapshot);
-        if (!snapshot.hasMore) return snapshot.room;
-        if (snapshot.nextSequence <= cursor) {
-          throw new Error("History replay made no progress");
+        return snapshot.room;
+      } catch (error) {
+        if (activeSocket.current === currentSocket) {
+          setRoomState((current) => {
+            const next = { ...current };
+            delete next[target];
+            return next;
+          });
         }
-        cursor = snapshot.nextSequence;
+        throw error;
       }
     },
     [acceptSnapshot],
@@ -189,11 +210,11 @@ export default function App(): React.JSX.Element {
         reconnectAttempts.current = attempt;
         if (attempt > MAX_RECONNECT_ATTEMPTS) {
           setConnection("unavailable");
-          setNotice(`Realtime unavailable: ${reason}`);
+          setConnectionNotice(`Realtime unavailable: ${reason}`);
           return;
         }
         setConnection("reconnecting");
-        setNotice(`Reconnecting: ${reason}`);
+        setConnectionNotice(`Reconnecting: ${reason}`);
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = setTimeout(
           () => connectRef.current(current),
@@ -230,7 +251,8 @@ export default function App(): React.JSX.Element {
               if (activeSocket.current !== next) return;
               reconnectAttempts.current = 0;
               setConnection("connected");
-              setNotice("Realtime connection established");
+              setConnectionNotice(null);
+              showNotice("Realtime connection established");
             })
             .catch((error) =>
               fail(error instanceof Error ? error.message : "Recovery failed"),
@@ -246,7 +268,7 @@ export default function App(): React.JSX.Element {
             Math.max(seen, event.message.sequence),
           );
           setOutcome(event.outcome);
-          setNotice(`Message ${event.message.sequence} delivered`);
+          showNotice(`Message ${event.message.sequence} delivered`);
         });
         next.on(realtimeEvents.server.membershipRemoved, (event) => {
           setRoomState((state) =>
@@ -262,14 +284,14 @@ export default function App(): React.JSX.Element {
               value?.id === event.roomId ? undefined : value,
             );
             setMemberDrawer(false);
-            setNotice(`Access to ${event.roomId} was removed`);
-          } else setNotice(`${event.membership.name} was removed`);
+            showNotice(`Access to ${event.roomId} was removed`, "error");
+          } else showNotice(`${event.membership.name} was removed`);
           setOutcome(event.outcome);
         });
         next.on(realtimeEvents.server.messageDeleted, (event) => {
           setRoomState((state) => applyMessage(state, event.message));
           setOutcome(event.outcome);
-          setNotice(`Message ${event.message.sequence} was deleted`);
+          showNotice(`Message ${event.message.sequence} was deleted`);
         });
         next.on(realtimeEvents.server.operationError, (error) => {
           if (
@@ -277,15 +299,17 @@ export default function App(): React.JSX.Element {
           ) {
             shouldReconnect.current = false;
             setConnection("unavailable");
+            setConnectionNotice(error.message);
+          } else {
+            showNotice(error.message, "error");
           }
-          setNotice(error.message);
         });
       } catch (error) {
         if (activeSocket.current === next) activeSocket.current = undefined;
         schedule(error instanceof Error ? error.message : "Connection failed");
       }
     },
-    [replayRoom],
+    [replayRoom, showNotice],
   );
   connectRef.current = connect;
 
@@ -301,7 +325,10 @@ export default function App(): React.JSX.Element {
       })
       .catch((error) => {
         setLoaded(true);
-        setNotice(error instanceof Error ? error.message : "Session failed");
+        showNotice(
+          error instanceof Error ? error.message : "Session failed",
+          "error",
+        );
       });
     return () => {
       shouldReconnect.current = false;
@@ -309,16 +336,32 @@ export default function App(): React.JSX.Element {
       activeSocket.current?.disconnect();
       activeSocket.current = undefined;
     };
-  }, [connect]);
+  }, [connect, showNotice]);
+
+  useEffect(() => {
+    const resume = () => {
+      if (!session || connection !== "unavailable" || !shouldReconnect.current)
+        return;
+      reconnectAttempts.current = 0;
+      clearTimeout(reconnectTimer.current);
+      void connectRef.current(session);
+    };
+    window.addEventListener("online", resume);
+    return () => window.removeEventListener("online", resume);
+  }, [session, connection]);
 
   useEffect(() => {
     if (!memberDrawer) return;
+    const previous = document.activeElement;
     memberCloseRef.current?.focus();
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMemberDrawer(false);
     };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      if (previous instanceof HTMLElement) previous.focus();
+    };
   }, [memberDrawer]);
 
   async function runCommand<
@@ -344,12 +387,18 @@ export default function App(): React.JSX.Element {
   }
 
   async function run(work: () => Promise<void>): Promise<void> {
+    if (operationPending.current) return;
+    operationPending.current = true;
     setBusy(true);
     try {
       await work();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Operation failed");
+      showNotice(
+        error instanceof Error ? error.message : "Operation failed",
+        "error",
+      );
     } finally {
+      operationPending.current = false;
       setBusy(false);
     }
   }
@@ -364,7 +413,7 @@ export default function App(): React.JSX.Element {
         const entered = await replayRoom(currentSocket, target);
         setSelected(entered);
         setRoomId(target);
-        setNotice("Room entered and history synchronized");
+        showNotice("Room entered and history synchronized");
       } catch (error) {
         if (!alreadyDesired) desiredRooms.current.delete(target);
         throw error;
@@ -376,7 +425,13 @@ export default function App(): React.JSX.Element {
     const currentSocket = activeSocket.current;
     const targetRoom = selected;
     const content = draft;
-    if (!currentSocket || !targetRoom || !content) return;
+    if (
+      !currentSocket ||
+      !targetRoom ||
+      !content.trim() ||
+      connection !== "connected"
+    )
+      return;
     await run(async () => {
       const result = await runCommand(
         `publish:${targetRoom.id}`,
@@ -396,9 +451,9 @@ export default function App(): React.JSX.Element {
       );
       setDraft((value) => (value === content ? "" : value));
       setOutcome(result.outcome);
-      setNotice(
+      showNotice(
         result.duplicate
-          ? "Duplicate command returned its stored result"
+          ? "Message already saved; current state returned"
           : "Message persisted",
       );
     });
@@ -524,6 +579,7 @@ export default function App(): React.JSX.Element {
                 {selected?.tenantId ?? "No room selected"}
               </p>
               <h2>{selected ? `# ${selected.name}` : "Choose a room"}</h2>
+              {selected && <small>Latest 100 messages</small>}
             </div>
             <button
               aria-controls="room-members"
@@ -580,22 +636,49 @@ export default function App(): React.JSX.Element {
             <label className="sr-only" htmlFor="message">
               Message
             </label>
-            <textarea
-              id="message"
-              maxLength={4096}
-              rows={2}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Write a message"
-              disabled={!selected || busy}
-            />
-            <button
-              className="primary"
-              type="submit"
-              disabled={!selected || !draft || busy}
-            >
-              Send
-            </button>
+            <div className="composer-input">
+              <textarea
+                id="message"
+                maxLength={4096}
+                rows={2}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                aria-describedby="message-keyboard-hint"
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "Enter" ||
+                    event.shiftKey ||
+                    event.ctrlKey ||
+                    event.altKey ||
+                    event.metaKey ||
+                    event.nativeEvent.isComposing ||
+                    event.nativeEvent.keyCode === 229
+                  )
+                    return;
+                  event.preventDefault();
+                  if (!event.repeat) void publish();
+                }}
+                placeholder="Write a message"
+                disabled={!selected || busy || connection !== "connected"}
+              />
+              <button
+                className="primary send-message"
+                aria-label="Send message"
+                title="Send message"
+                type="submit"
+                disabled={
+                  !selected ||
+                  !draft.trim() ||
+                  busy ||
+                  connection !== "connected"
+                }
+              >
+                <PaperPlane size={20} aria-hidden="true" />
+              </button>
+            </div>
+            <small id="message-keyboard-hint" className="composer-hint">
+              Enter to send · Shift+Enter for a new line
+            </small>
           </form>
         </section>
 
@@ -646,9 +729,13 @@ export default function App(): React.JSX.Element {
         </aside>
       </main>
 
-      <p className="status-strip" role="status" aria-live="polite">
-        {notice}
-      </p>
+      <div className="status-strip">
+        {connectionNotice ? (
+          <p role="status">{connectionNotice}</p>
+        ) : notice ? (
+          <TransientNotice notice={notice} onDismiss={dismissNotice} />
+        ) : null}
+      </div>
       <ProgramFooter />
     </div>
   );
