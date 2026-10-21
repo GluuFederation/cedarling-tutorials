@@ -4,9 +4,6 @@
     ".react-router/types/**/*",
     "app/**/*",
     "server/**/*",
-    "src/server/**/*",
-    "src/shared/**/*",
-    "src/web/icons.tsx",
     "scripts/setup.ts",
     "test/**/*"
   ],

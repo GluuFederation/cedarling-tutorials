@@ -10,11 +10,14 @@ FROM node:24.21.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --chown=node:node --from=build /app/package.json ./package.json
-COPY --chown=node:node --from=build /app/server.js ./server.js
+COPY --chown=node:node --from=build /app/server ./server
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/build ./build
 COPY --chown=node:node --from=build /app/migrations ./migrations
 COPY --chown=node:node --from=build /app/fixtures ./fixtures
+
+COPY --chown=node:node --from=build /app/scripts/admin.ts ./scripts/admin.ts
+COPY --chown=node:node --from=build /app/scripts/reset.ts ./scripts/reset.ts
 USER node
 EXPOSE 17011
-CMD ["node", "server.js"]
+CMD ["node", "server/index.js"]

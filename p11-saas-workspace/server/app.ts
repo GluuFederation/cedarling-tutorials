@@ -1,35 +1,30 @@
 import { createRequestHandler } from "@react-router/express";
-import express from "express";
 import type { Express } from "express";
+import express from "express";
 import { RouterContextProvider, type ServerBuild } from "react-router";
 import { requestServicesContext } from "../app/context.ts";
-import { PermissiveAuthorizationGateway } from "../src/server/capabilities.ts";
-import { loadConfig } from "../src/server/config.ts";
-import { AppDatabase } from "../src/server/database.ts";
-import { createOidcRuntime } from "../src/server/oidc.ts";
-import { SessionManager } from "../src/server/session.ts";
-import { WorkspaceService } from "../src/server/service.ts";
+import { createOidcRuntime } from "./auth/oidc.ts";
+import { SessionManager } from "./auth/session.ts";
+import { loadConfig } from "./config/environment.ts";
+import { AppDatabase } from "./data/database.ts";
+import { RequestService } from "./http/requests.ts";
+import { PermissiveAuthorizationGateway } from "./workspace/capabilities.ts";
+import { WorkspaceService } from "./workspace/service.ts";
 
 const runtimeKey = Symbol.for("p11.runtime");
-type Runtime = Awaited<ReturnType<typeof createRuntime>>;
-type RuntimeGlobal = typeof globalThis & { [runtimeKey]?: Promise<Runtime> };
+type Resources = Awaited<ReturnType<typeof createResources>>;
+type RuntimeGlobal = typeof globalThis & { [runtimeKey]?: Promise<Resources> };
 
-async function createRuntime() {
+async function createResources() {
   const config = loadConfig();
   const database = new AppDatabase(config.databaseUrl);
   try {
-    await database.migrate();
+    await database.initialize(config.issuer);
     const oidc = await createOidcRuntime(config);
-    const authorization = new PermissiveAuthorizationGateway();
     return {
       config,
-      database,
-      sessions: new SessionManager(config, database, oidc),
-      workspace: new WorkspaceService(
-        database,
-        authorization,
-        config.sessionSecret,
-      ),
+      pool: database.pool,
+      oidc,
     };
   } catch (error) {
     await database.close();
@@ -39,9 +34,17 @@ async function createRuntime() {
 
 const globalRuntime = globalThis as RuntimeGlobal;
 if (!globalRuntime[runtimeKey]) {
-  globalRuntime[runtimeKey] = createRuntime();
+  const pending = createResources();
+  globalRuntime[runtimeKey] = pending;
+  void pending.catch(() => {
+    if (globalRuntime[runtimeKey] === pending) delete globalRuntime[runtimeKey];
+  });
 }
-const runtime = await globalRuntime[runtimeKey];
+const resources = await globalRuntime[runtimeKey];
+// Preserve connections, not old class instances, when Vite reloads server code.
+const database = new AppDatabase(resources.pool);
+const authorization = new PermissiveAuthorizationGateway();
+const sessions = new SessionManager(resources.config, database, resources.oidc);
 
 export const app: Express = express();
 app.use(
@@ -52,9 +55,18 @@ app.use(
       ) as unknown as Promise<ServerBuild>,
     getLoadContext(_request, response) {
       const context = new RouterContextProvider();
+      const workspace = new WorkspaceService(
+        database,
+        authorization,
+        resources.config.sessionSecret,
+      );
+      const requestId = String(response.locals.requestId);
       context.set(requestServicesContext, {
-        ...runtime,
-        requestId: String(response.locals.requestId),
+        database,
+        sessions,
+        workspace,
+        requests: new RequestService(sessions, workspace, requestId),
+        requestId,
         nonce: String(response.locals.nonce),
       });
       return context;
@@ -65,5 +77,5 @@ app.use(
 export async function closeRuntime(): Promise<void> {
   const active = globalRuntime[runtimeKey];
   delete globalRuntime[runtimeKey];
-  if (active) await (await active).database.close();
+  if (active) await (await active).pool.end();
 }

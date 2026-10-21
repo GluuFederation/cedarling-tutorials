@@ -1,22 +1,21 @@
-import { createContext, type RouterContextProvider } from "react-router";
-import type { AppConfig } from "../src/server/config.ts";
-import type { AppDatabase } from "../src/server/database.ts";
-import type { SessionManager } from "../src/server/session.ts";
-import type { WorkspaceService } from "../src/server/service.ts";
+import { createContext as createReactContext } from "react";
+import { createContext } from "react-router";
+import type { SessionManager } from "../server/auth/session.ts";
+import type { AppDatabase } from "../server/data/database.ts";
+import type { RequestService } from "../server/http/requests.ts";
+import type { WorkspaceService } from "../server/workspace/service.ts";
 
 export type RequestServices = Readonly<{
-  config: AppConfig;
   database: AppDatabase;
   sessions: SessionManager;
   workspace: WorkspaceService;
+  requests: RequestService;
   requestId: string;
   nonce: string;
 }>;
 
 export const requestServicesContext = createContext<RequestServices>();
 
-export function services(
-  context: Readonly<RouterContextProvider>,
-): RequestServices {
-  return context.get(requestServicesContext);
-}
+export const DocumentNonceContext = createReactContext<string | undefined>(
+  undefined,
+);

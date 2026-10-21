@@ -10,9 +10,9 @@ describe("Node strip-only runtime compatibility", () => {
         "--input-type=module",
         "--eval",
         [
-          "import('./src/server/errors.ts')",
-          "import('./src/server/capabilities.ts')",
-          "import('./src/server/service.ts')",
+          "import('./server/shared/errors.ts')",
+          "import('./server/workspace/capabilities.ts')",
+          "import('./server/workspace/service.ts')",
         ].join(";"),
       ],
       { encoding: "utf8" },
