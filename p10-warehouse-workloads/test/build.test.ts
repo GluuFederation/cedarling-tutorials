@@ -40,7 +40,7 @@ it("rebuilds a missing server entry even when compiler metadata is cached", () =
           typeRoots: [resolve(project, "node_modules/@types")],
         },
         include: sourceConfig.include.map((glob: string) =>
-          resolve(project, glob),
+          resolve(project, glob).replaceAll("\\", "/"),
         ),
       }),
     );
