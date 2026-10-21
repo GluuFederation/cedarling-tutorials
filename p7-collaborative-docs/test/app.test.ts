@@ -64,6 +64,7 @@ async function fixture(
   return {
     app,
     database,
+    sessionId: created.id,
     headers: {
       cookie: `p7_session=${created.id}`,
       origin: config.baseUrl,
@@ -81,6 +82,161 @@ afterEach(async () => {
 });
 
 describe("P7 HTTP boundary", () => {
+  it.each([
+    {
+      method: "PATCH",
+      path: "",
+      body: {
+        title: "Revoked edit",
+        content: "Must not be saved",
+        expectedDocumentVersion: 1,
+      },
+    },
+    {
+      method: "POST",
+      path: "/comments",
+      body: {
+        body: "Must not be posted",
+        idempotencyKey: crypto.randomUUID(),
+      },
+    },
+    {
+      method: "PUT",
+      path: "/access/user-lena",
+      body: { role: "editor", expectedAccessVersion: 1 },
+    },
+    {
+      method: "DELETE",
+      path: "/access/user-lena",
+      body: { expectedAccessVersion: 1 },
+    },
+  ] as const)(
+    "does not commit $method $path after session revocation",
+    async ({ method, path, body }) => {
+      const authorization = allowAll();
+      const { app, database, headers, sessionId } = await fixture(
+        "user-maya",
+        authorization,
+      );
+      const before = database.findDocument("doc-launch-brief", "user-maya");
+      const relations = database.documentRelations("doc-launch-brief");
+      authorization.authorize = async () => {
+        database.destroySession(sessionId);
+        return true;
+      };
+      const response = await app.inject({
+        method,
+        url: `/api/documents/doc-launch-brief${path}`,
+        headers,
+        payload: body,
+      });
+      expect(response.statusCode).toBe(401);
+      expect(database.findDocument("doc-launch-brief", "user-maya")).toEqual(
+        before,
+      );
+      expect(database.documentRelations("doc-launch-brief")).toEqual(relations);
+    },
+  );
+
+  it("rechecks a stream session after its delivery decision", async () => {
+    const authorization = allowAll();
+    const { app, database, headers } = await fixture(
+      "user-maya",
+      authorization,
+    );
+    const reader = database.createSession("user-noah", Date.now() + 60_000);
+    authorization.authorize = async (request) => {
+      if (request.requestId.includes(":")) database.destroySession(reader.id);
+      return true;
+    };
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Missing listener");
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/api/documents/doc-launch-brief/events`,
+      { headers: { cookie: `p7_session=${reader.id}` } },
+    );
+    const update = await app.inject({
+      method: "PATCH",
+      url: "/api/documents/doc-launch-brief",
+      headers,
+      payload: {
+        title: "Launch brief",
+        content: "Updated",
+        expectedDocumentVersion: 1,
+      },
+    });
+    expect(update.statusCode).toBe(200);
+    const events = await response.text();
+    expect(events).toContain("event: ready");
+    expect(events).not.toContain("document.updated");
+  });
+
+  it.each(["create", "read", "list", "stream"])(
+    "rejects a session revoked during %s authorization",
+    async (operation) => {
+      const authorization = allowAll();
+      const { app, database, headers, sessionId } = await fixture(
+        "user-noah",
+        authorization,
+      );
+      const revoke = () => database.destroySession(sessionId);
+      authorization.authorize = async () => {
+        revoke();
+        return true;
+      };
+      authorization.authorizeMany = async (requests) => {
+        revoke();
+        return Object.fromEntries(
+          requests.map((request) => [request.capability, true]),
+        );
+      };
+      const before = database.listDocuments("user-noah").length;
+      const response = await app.inject({
+        method: operation === "create" ? "POST" : "GET",
+        url:
+          operation === "create" || operation === "list"
+            ? "/api/documents"
+            : `/api/documents/doc-launch-brief${operation === "stream" ? "/events" : ""}`,
+        headers,
+        ...(operation === "create"
+          ? { payload: { title: "Revoked", content: "Must not be saved" } }
+          : {}),
+      });
+      expect(response.statusCode).toBe(401);
+      expect(database.listDocuments("user-noah")).toHaveLength(before);
+    },
+  );
+
+  it("closes an open event stream when the server stops", async () => {
+    const { app, headers } = await fixture("user-noah");
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Missing listener");
+    const controller = new AbortController();
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/api/documents/doc-launch-brief/events`,
+      {
+        headers: { cookie: headers.cookie },
+        signal: controller.signal,
+      },
+    );
+    try {
+      expect(response.status).toBe(200);
+      const closing = app.close().then(() => "closed");
+      expect(
+        await Promise.race([
+          closing,
+          new Promise((resolve) => setTimeout(() => resolve("stalled"), 750)),
+        ]),
+      ).toBe("closed");
+    } finally {
+      controller.abort();
+    }
+  });
+
   it("reproduces Noah reading a private document", async () => {
     const { app, headers } = await fixture("user-noah");
     const response = await app.inject({

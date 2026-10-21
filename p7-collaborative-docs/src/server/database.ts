@@ -49,6 +49,7 @@ export type StoredDocument = Readonly<{
 export type DocumentRelations = Readonly<{
   members: readonly DocumentMember[];
   comments: readonly DocumentComment[];
+  hasOlderComments: boolean;
 }>;
 
 type DocumentRow = {
@@ -352,7 +353,12 @@ export class AppDatabase {
   }
 
   documentRelations(id: string): DocumentRelations {
-    return { members: this.members(id), comments: this.comments(id) };
+    const comments = this.comments(id);
+    return {
+      members: this.members(id),
+      comments: comments.slice(0, 50).reverse(),
+      hasOlderComments: comments.length > 50,
+    };
   }
 
   createDocument(
@@ -556,7 +562,7 @@ export class AppDatabase {
       .prepare(
         `SELECT c.id, c.author_id, u.name AS author_name, c.body, c.created_at
          FROM comments c JOIN users u ON u.id = c.author_id
-         WHERE c.document_id = ? ORDER BY c.created_at LIMIT 50`,
+         WHERE c.document_id = ? ORDER BY c.created_at DESC, c.rowid DESC LIMIT 51`,
       )
       .all(documentId)
       .map((value) => {

@@ -1,103 +1,108 @@
 # P7 - Securing Real-Time Collaborative Documents with Cedarling
 
-CedarDocs is a focused collaborative-document application for learning how
-Cedarling protects reads, edits, comments, sharing, and live-update delivery.
-The protected collaboration capabilities currently use a fake permissive
-decision; the Cedarling tutorial replaces that seam with policy-backed
-decisions.
+P7 lets collaborators edit plain-text documents, comment, and manage access.
+Live events prompt open browsers to reload current document data.
+
+This learning baseline authenticates users and validates requests. Document,
+comment, sharing, and live-update permissions return `FAKE ALLOW` until
+Cedarling is integrated.
 
 ## Architecture
 
-```text
-Browser (React)
-  │ Authorization Code + PKCE session
-  ▼
-Fastify BFF ──► shared local OpenID Provider
-  │
-  ├─► Cedarling authorization
-  │     principal + capability + current document/membership facts
-  │
-  ├─► SQLite transactions
-  │     documents + memberships + comments + versions
-  │
-  └─► protected SSE stream
-        invalidation metadata only; browser refetches through Cedarling
+```mermaid
+flowchart TD
+  Browser["React editor"] -->|Sign in| IdP["Tutorial IdP"]
+  Browser --> API["Fastify BFF"]
+  API --> Fake["FAKE ALLOW"]
+  Fake --> DB["SQLite documents, memberships and versions"]
+  API --> SSE["SSE invalidation metadata"]
+  SSE -->|Refetch through the API| Browser
 ```
-
-The BFF owns the session cookie and every authoritative effect. Document and
-access versions close write races, comment keys make retries idempotent, and
-the owner relationship remains immutable outside policy evaluation.
 
 ## Prerequisites
 
-- Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x, pnpm 10, and the project-local tutorial identity provider.
-
-The commands work from PowerShell, macOS terminals, and Ubuntu shells.
+- Docker Desktop or Docker Engine with Compose.
+- Node.js 24.21 or newer within 24.x.
+- pnpm 10.17.1.
 
 ## Run
 
-Start the application and its own IdP:
+From this project directory, start with Docker:
 
 ```bash
 docker compose up --build
 ```
 
-Open <http://localhost:17007>. The issuer is <http://localhost:18007>. Stop the stack with `Ctrl+C`, then `docker compose down`.
+Open <http://localhost:17007>. The tutorial IdP is <http://localhost:18007>.
+Stop with `Ctrl+C`, then `docker compose down`.
 
-For native development, run from this project directory:
+For native development:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
-pnpm run setup
 pnpm dev
 ```
 
-`pnpm dev` starts this project’s IdP and application together.
-
-For `pnpm build` followed by `pnpm start`, first run `node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js` in another terminal in this project directory.
-
-Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
+`pnpm dev` prepares configuration and starts the IdP and application.
+After a browser-source rebuild, refresh the page.
 
 ## Exercise
 
-- **Maya Chen** (`maya`) owns the launch brief and a private planning document.
-- **Noah Williams** (`noah`) edits the launch brief.
-- **Lena Ortiz** (`lena`) comments on the launch brief.
+Choose an account. Use the prefilled username, or enter its lowercase first
+name, and any non-empty password such as `cedarling-is-awesome`.
 
-Use any non-empty password. Compare these business failures before integrating
-Cedarling:
+- Maya Chen (`maya`) owns the launch brief and a private planning document.
+- Noah Williams (`noah`) edits the launch brief.
+- Lena Ortiz (`lena`) comments on the launch brief.
+
+Create a document as Maya, edit it, and choose **Save changes**. Open
+**Comments** or **Access** to discuss it or manage collaborators.
+
+Compare these permission gaps:
 
 1. Noah can open Maya's private planning document without membership.
-2. Lena can edit the launch brief despite being a commenter.
-3. Noah can change or remove another collaborator's access despite not owning
-   the document.
-4. Maya can revoke Noah while he has the document open, yet Noah's stream keeps
-   receiving invalidations and his refetch still returns the document.
+2. Lena can edit the launch brief despite her comment-only role.
+3. Noah can change another collaborator's role or remove their access.
+4. In separate browser profiles, open the launch brief as Noah and Maya.
+   Remove Noah as Maya, then save another edit. Noah still receives the update
+   and can reload the document.
 
-Create another document as any persona to confirm that its creator becomes the
-immutable owner. Open the same document in two browser contexts to observe SSE
-invalidation, explicit refetch, and stale-version handling.
+## Data and reset
+
+Restarts preserve your changes. For native data, stop the app, run
+`pnpm reset`, then `pnpm dev`. Reset removes document, comment, and access changes
+and clears application sessions.
+
+For the default Docker setup:
+
+```bash
+docker compose down
+docker volume rm p7-collaborative-docs_p7-data
+docker compose up --build
+```
+
+This removes application data and preserves IdP credentials. Custom Compose
+project names or data mounts require their corresponding data target.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm run setup` | Synchronize the IdP registration and prepare SQLite |
-| `pnpm dev` | Run the complete native development stack |
-| `pnpm start` | Run the previously built application |
-| `pnpm reset` | Restore deterministic collaboration fixtures |
-| `pnpm test:e2e` | Exercise the browser collaboration workflow |
-| `pnpm check` | Run formatting, lint, types, tests, build, and browser checks |
+| `pnpm run setup` | Prepare configuration and collaboration fixtures |
+| `pnpm start` | Run the built app; requires a running IdP |
+| `pnpm test:e2e` | Exercise browser collaboration |
 
 ## Verify
 
+Stop this project's running stack before checking local changes. `pnpm check`
+runs formatting, lint, type checks, tests, build, and browser checks using
+disposable data. Install Chromium once:
+
 ```bash
+pnpm exec playwright install chromium
 pnpm check
-pnpm audit --audit-level low
 ```
 
-The browser receives only document IDs and event kinds over SSE. All document
-content is loaded again through the authenticated and authorized HTTP boundary.
+On Linux, add `--with-deps` to the Chromium installation command if system
+libraries are missing.

@@ -28,6 +28,8 @@ const current = readProjectEnvironment(target);
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
     P7_BASE_URL: baseUrl,
+    P7_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P7_ISSUER: url("IDP_ISSUER"),
     P7_API_RESOURCE: url("P7_API_RESOURCE"),
     P7_CLIENT_ID: required("P7_CLIENT_ID"),
@@ -35,7 +37,6 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P7_HOST: "127.0.0.1",
-    P7_PORT: new URL(baseUrl).port || "80",
     P7_DATA_DIR: ".local/p7-data",
   },
 });

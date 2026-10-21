@@ -59,7 +59,7 @@ export async function createApp(
       },
     },
   });
-  app.addHook("onClose", async () => events.close());
+  app.addHook("preClose", async () => events.close());
 
   app.setErrorHandler((error, request, reply) => {
     const domain = error instanceof DomainError ? error : undefined;
@@ -77,10 +77,7 @@ export async function createApp(
       domain?.code ??
       (status < 500 ? "invalid_request" : "service_unavailable");
     if (status >= 500) {
-      console.error("P7 request failed", {
-        requestId: request.id,
-        error: error instanceof Error ? error.name : "UnknownError",
-      });
+      console.error(`P7 server | ERROR | ${code} | ${request.id}`);
     }
     void reply.status(status).send({ error: code, requestId: request.id });
   });
@@ -179,6 +176,7 @@ export async function createApp(
         documents.push(document);
       }
     }
+    requireSession(request, dependencies.database);
     return { documents, createAllowed };
   });
 
@@ -193,6 +191,7 @@ export async function createApp(
       { collection: true },
       dependencies.authorization,
     );
+    requireSession(request, dependencies.database);
     if (!allowed) throw new DomainError("forbidden", 403);
     return reply.status(201).send({
       document: dependencies.database.createDocument(
@@ -206,7 +205,7 @@ export async function createApp(
   app.get<{ Params: { id: string } }>("/api/documents/:id", async (request) => {
     const session = requireSession(request, dependencies.database);
     return loadAuthorizedDocument(
-      request.id,
+      request,
       request.params.id,
       session,
       dependencies,
@@ -231,6 +230,7 @@ export async function createApp(
         documentFacts(document),
         dependencies.authorization,
       );
+      requireSession(request, dependencies.database);
       if (!allowed) throw new DomainError("forbidden", 403);
       dependencies.database.updateDocument({
         documentId: document.id,
@@ -241,7 +241,7 @@ export async function createApp(
         kind: documentEventKinds.updated,
       });
       return loadAuthorizedDocument(
-        request.id,
+        request,
         document.id,
         session,
         dependencies,
@@ -267,6 +267,7 @@ export async function createApp(
         documentFacts(document),
         dependencies.authorization,
       );
+      requireSession(request, dependencies.database);
       if (!allowed) throw new DomainError("forbidden", 403);
       const result = dependencies.database.addComment({
         documentId: document.id,
@@ -279,6 +280,7 @@ export async function createApp(
           kind: documentEventKinds.commentCreated,
         });
       }
+      requireSession(request, dependencies.database);
       return reply.status(result.replayed ? 200 : 201).send(result);
     },
   );
@@ -306,6 +308,7 @@ export async function createApp(
         },
         dependencies.authorization,
       );
+      requireSession(request, dependencies.database);
       if (!allowed) throw new DomainError("forbidden", 403);
       dependencies.database.setAccess({
         documentId: document.id,
@@ -317,7 +320,7 @@ export async function createApp(
         kind: documentEventKinds.accessChanged,
       });
       return loadAuthorizedDocument(
-        request.id,
+        request,
         document.id,
         session,
         dependencies,
@@ -348,6 +351,7 @@ export async function createApp(
         },
         dependencies.authorization,
       );
+      requireSession(request, dependencies.database);
       if (!allowed) throw new DomainError("forbidden", 403);
       dependencies.database.removeAccess({
         documentId: document.id,
@@ -359,7 +363,7 @@ export async function createApp(
         kind: documentEventKinds.accessChanged,
       });
       return loadAuthorizedDocument(
-        request.id,
+        request,
         document.id,
         session,
         dependencies,
@@ -389,6 +393,7 @@ export async function createApp(
       ) {
         throw new DomainError("forbidden", 403);
       }
+      requireSession(request, dependencies.database);
       if (!events.hasCapacity(document.id)) {
         throw new DomainError("stream_limit_reached", 429);
       }
@@ -409,7 +414,7 @@ export async function createApp(
             document.id,
             currentSession.user.id,
           );
-          return Boolean(
+          const allowed = Boolean(
             current &&
               (await authorize(
                 `${request.id}:${event.kind}`,
@@ -422,6 +427,9 @@ export async function createApp(
                 },
                 dependencies.authorization,
               )),
+          );
+          return (
+            allowed && Boolean(dependencies.database.findSession(sessionId))
           );
         },
       );
@@ -442,7 +450,7 @@ export async function createApp(
 }
 
 async function loadAuthorizedDocument(
-  requestId: string,
+  request: FastifyRequest,
   rawId: string,
   session: AppSession,
   dependencies: Dependencies,
@@ -458,13 +466,14 @@ async function loadAuthorizedDocument(
     capabilities.comment,
     capabilities.manageAccess,
   ].map((capability) => ({
-    requestId,
+    requestId: request.id,
     capability,
     principalId: session.user.id,
     resourceId: document.id,
     facts: documentFacts(document),
   }));
   const decisions = await dependencies.authorization.authorizeMany(requests);
+  requireSession(request, dependencies.database);
   if (!decisions[capabilities.read]) throw new DomainError("not_found", 404);
   const relations = dependencies.database.documentRelations(document.id);
   return {

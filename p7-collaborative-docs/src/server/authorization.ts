@@ -24,13 +24,10 @@ export function fakeAuthorization(): AuthorizationPort {
       return true;
     },
     async authorizeMany(requests) {
-      const first = requests[0];
-      if (!first) return {};
-      console.info(
-        `P7 server | FAKE ALLOW | ${requests.map((item) => item.capability).join(",")} | ${first.principalId} -> ${first.resourceId} | ${first.requestId}`,
-      );
       const decisions: Partial<Record<Capability, boolean>> = {};
-      for (const request of requests) decisions[request.capability] = true;
+      for (const request of requests) {
+        decisions[request.capability] = await this.authorize(request);
+      }
       return decisions;
     },
   };

@@ -61,6 +61,12 @@ async function services() {
       },
     },
     {
+      name: "P7 web build watcher",
+      command: pnpm,
+      args: ["exec", "vite", "build", "--watch", "--emptyOutDir=false"],
+      cwd: root,
+    },
+    {
       name: "P7 application",
       command: node,
       args: ["--watch", "src/server/main.ts"],
