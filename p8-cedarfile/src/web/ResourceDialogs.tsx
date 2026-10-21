@@ -15,6 +15,145 @@ export type Overlay =
 
 type Mutate = (action: () => Promise<unknown>, message: string) => void;
 
+function MoveDestination({
+  selected,
+  details,
+  busy,
+  csrfToken,
+  mutate,
+  onClose,
+  onError,
+}: Readonly<{
+  selected: Resource;
+  details: ResourceDetails;
+  busy: boolean;
+  csrfToken: string;
+  mutate: Mutate;
+  onClose: () => void;
+  onError: (error: unknown) => void;
+}>) {
+  const ancestors = details.breadcrumbs.filter(
+    (item) =>
+      item.kind === "folder" &&
+      item.id !== selected.id &&
+      item.access !== "none",
+  );
+  const [target, setTarget] = useState<string | undefined>(
+    ancestors.at(-1)?.id,
+  );
+  const [folder, setFolder] = useState<Resource | null>(null);
+  const [children, setChildren] = useState<Resource[]>([]);
+  const [trail, setTrail] = useState(ancestors);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setFailed(false);
+    void api
+      .list(target)
+      .then((result) => {
+        if (!active) return;
+        setFolder(result.folder);
+        setChildren(
+          result.resources.filter(
+            (item) =>
+              item.kind === "folder" &&
+              item.id !== selected.id &&
+              item.workspaceId === selected.workspaceId,
+          ),
+        );
+      })
+      .catch((error) => {
+        if (!active) return;
+        setFolder(null);
+        setChildren([]);
+        setFailed(true);
+        onError(error);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [target, selected.id, selected.workspaceId, onError]);
+  const allowed =
+    folder &&
+    folder.id !== selected.parentId &&
+    folder.id !== selected.id &&
+    folder.workspaceId === selected.workspaceId &&
+    folder.access !== "none";
+  return (
+    <form
+      className="dialog-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (allowed && !loading && !busy)
+          mutate(
+            () => api.move(selected, folder.id, csrfToken),
+            "Resource moved.",
+          );
+      }}
+    >
+      <p>
+        Destination:{" "}
+        <strong>
+          {loading ? "Loading folders…" : (folder?.name ?? "Shared with me")}
+        </strong>
+      </p>
+      <section
+        className="destination-browser"
+        aria-label="Destination folders"
+        aria-busy={loading}
+      >
+        {trail.length > 1 && (
+          <button
+            className="secondary"
+            type="button"
+            disabled={loading || busy}
+            onClick={() => {
+              const parentTrail = trail.slice(0, -1);
+              setTrail(parentTrail);
+              setTarget(parentTrail.at(-1)?.id);
+            }}
+          >
+            Parent folder
+          </button>
+        )}
+        {!loading &&
+          children.map((child) => (
+            <button
+              className="secondary"
+              type="button"
+              key={child.id}
+              disabled={busy}
+              onClick={() => {
+                setTrail([...trail, child]);
+                setTarget(child.id);
+              }}
+            >
+              {child.name}
+            </button>
+          ))}
+        {!loading && children.length === 0 && (
+          <p className="hint">
+            {failed
+              ? "Folders could not be loaded. Close this dialog and try again."
+              : "No subfolders here."}
+          </p>
+        )}
+      </section>
+      <DialogActions
+        action="Move here"
+        busy={busy}
+        disabled={!allowed || loading || failed}
+        onClose={onClose}
+      />
+    </form>
+  );
+}
+
 function DialogActions({
   action,
   busy,
@@ -45,22 +184,24 @@ function DialogActions({
 }
 
 export function ResourceDialogs({
+  error,
   overlay,
   parentId,
   selected,
   details,
-  folders,
+  onError,
   csrfToken,
   busy,
   returnFocus,
   mutate,
   onClose,
 }: Readonly<{
+  error?: string | undefined;
   overlay: Overlay;
   parentId: string | undefined;
   selected: Resource | undefined;
   details: ResourceDetails | undefined;
-  folders: Resource[];
+  onError: (error: unknown) => void;
   csrfToken: string;
   busy: boolean;
   returnFocus: RefObject<HTMLButtonElement | null>;
@@ -72,15 +213,13 @@ export function ResourceDialogs({
   const [replaceFile, setReplaceFile] = useState<File>();
   const [shareUser, setShareUser] = useState("user-priya");
   const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
-  const [destinationId, setDestinationId] = useState("");
 
   useEffect(() => {
     if (!overlay) return;
     setFolderName("");
     setUploadFile(undefined);
     setReplaceFile(undefined);
-    if (overlay === "move") setDestinationId(folders[0]?.id ?? "");
-  }, [folders, overlay]);
+  }, [overlay]);
 
   function submitFolder(event: FormEvent) {
     event.preventDefault();
@@ -100,7 +239,12 @@ export function ResourceDialogs({
   if (!overlay) return null;
   if (overlay === "folder") {
     return (
-      <Modal onClose={onClose} returnFocus={returnFocus} title="Create folder">
+      <Modal
+        onClose={onClose}
+        returnFocus={returnFocus}
+        title="Create folder"
+        error={error}
+      >
         <form className="dialog-form" onSubmit={submitFolder}>
           <label>
             Folder name
@@ -119,7 +263,12 @@ export function ResourceDialogs({
   }
   if (overlay === "upload") {
     return (
-      <Modal onClose={onClose} returnFocus={returnFocus} title="Upload file">
+      <Modal
+        onClose={onClose}
+        returnFocus={returnFocus}
+        title="Upload file"
+        error={error}
+      >
         <form className="dialog-form" onSubmit={submitUpload}>
           <label>
             File
@@ -144,7 +293,12 @@ export function ResourceDialogs({
   if (!selected) return null;
   if (overlay === "replace") {
     return (
-      <Modal onClose={onClose} returnFocus={returnFocus} title="Replace file">
+      <Modal
+        onClose={onClose}
+        returnFocus={returnFocus}
+        title="Replace file"
+        error={error}
+      >
         <form
           className="dialog-form"
           onSubmit={(event) => {
@@ -178,7 +332,12 @@ export function ResourceDialogs({
   }
   if (overlay === "share") {
     return (
-      <Modal onClose={onClose} returnFocus={returnFocus} title="Manage sharing">
+      <Modal
+        onClose={onClose}
+        returnFocus={returnFocus}
+        title="Manage sharing"
+        error={error}
+      >
         <form
           className="dialog-form"
           onSubmit={(event) => {
@@ -244,43 +403,33 @@ export function ResourceDialogs({
   }
   if (overlay === "move") {
     return (
-      <Modal onClose={onClose} returnFocus={returnFocus} title="Move resource">
-        <form
-          className="dialog-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            mutate(
-              () => api.move(selected, destinationId, csrfToken),
-              "Resource moved.",
-            );
-          }}
-        >
-          <label>
-            Destination
-            <select
-              onChange={(event) => setDestinationId(event.target.value)}
-              required
-              value={destinationId}
-            >
-              {folders.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <DialogActions
-            action="Move"
+      <Modal
+        onClose={onClose}
+        returnFocus={returnFocus}
+        title="Move resource"
+        error={error}
+      >
+        {details && (
+          <MoveDestination
+            selected={selected}
+            details={details}
             busy={busy}
-            disabled={!destinationId}
+            csrfToken={csrfToken}
+            mutate={mutate}
             onClose={onClose}
+            onError={onError}
           />
-        </form>
+        )}
       </Modal>
     );
   }
   return (
-    <Modal onClose={onClose} returnFocus={returnFocus} title="Delete resource">
+    <Modal
+      onClose={onClose}
+      returnFocus={returnFocus}
+      title="Delete resource"
+      error={error}
+    >
       <form
         className="dialog-form"
         onSubmit={(event) => {

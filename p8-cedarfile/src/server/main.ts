@@ -5,6 +5,7 @@ import { AppDatabase, databasePath } from "./database.ts";
 import { createOidcRuntime } from "./oidc.ts";
 import { FileService } from "./service.ts";
 import { SafeStorage } from "./storage.ts";
+import { formatDiscoveryFailure } from "./startup-error.ts";
 
 console.info("P8 authorization: FAKE ALLOW; Cedarling is not called.");
 
@@ -17,7 +18,11 @@ const database = new AppDatabase(
 );
 const service = new FileService(database.resources, storage);
 service.retryCleanup();
-const oidc = await createOidcRuntime(config);
+const oidc = await createOidcRuntime(config).catch((error: unknown) => {
+  console.error(formatDiscoveryFailure(config.issuer, error));
+  database.close();
+  process.exit(1);
+});
 const app = await buildApp({
   config,
   sessions: database.sessions,

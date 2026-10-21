@@ -54,7 +54,9 @@ export async function buildApp(
     next();
   });
 
-  app.get("/health", (_request, response) => response.json({ status: "ok" }));
+  app.get("/health", (_request, response) =>
+    response.json({ status: "ok", service: "p8-cedarfile" }),
+  );
   const auth = registerAuthRoutes(
     app,
     options.config,
@@ -74,7 +76,7 @@ export async function buildApp(
   app.use(
     (
       error: unknown,
-      _request: Request,
+      request: RequestWithId,
       response: Response,
       _next: NextFunction,
     ) => {
@@ -98,7 +100,9 @@ export async function buildApp(
         response.status(413).json({ error: "file_too_large" });
         return;
       }
-      console.error("P8 request failed", { error: "internal_error" });
+      console.error(
+        `P8 server | ERROR | internal_error | ${request.requestId ?? "unavailable"}`,
+      );
       response.status(500).json({ error: "internal_error" });
     },
   );

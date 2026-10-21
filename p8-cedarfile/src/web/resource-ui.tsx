@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -53,6 +54,7 @@ export function ExplorerPane({
   loading,
   onOpenOverlay,
   onParent,
+  onOpenFolder,
   onSelect,
 }: Readonly<{
   folder: Resource | null;
@@ -61,6 +63,7 @@ export function ExplorerPane({
   loading: boolean;
   onOpenOverlay: OpenOverlay;
   onParent: (id?: string) => void;
+  onOpenFolder: (resource: Resource) => void;
   onSelect: (resource: Resource) => void;
 }>) {
   return (
@@ -75,6 +78,7 @@ export function ExplorerPane({
             aria-label="Create folder"
             className="icon-button"
             disabled={!folder}
+            aria-describedby={!folder ? "folder-destination-hint" : undefined}
             onClick={(event) => onOpenOverlay("folder", event.currentTarget)}
             type="button"
           >
@@ -84,6 +88,7 @@ export function ExplorerPane({
             aria-label="Upload file"
             className="primary compact"
             disabled={!folder}
+            aria-describedby={!folder ? "folder-destination-hint" : undefined}
             onClick={(event) => onOpenOverlay("upload", event.currentTarget)}
             type="button"
           >
@@ -92,6 +97,11 @@ export function ExplorerPane({
           </button>
         </div>
       </div>
+      {!folder && !loading && (
+        <p className="destination-hint" id="folder-destination-hint">
+          Open a folder to upload files or create subfolders.
+        </p>
+      )}
       {folder?.parentId && (
         <button
           className="back-row"
@@ -111,7 +121,13 @@ export function ExplorerPane({
           <button
             className={`resource-row ${selectedId === resource.id ? "active" : ""}`}
             key={resource.id}
-            onClick={() => onSelect(resource)}
+            data-resource-id={resource.id}
+            onClick={(event) => {
+              if (event.detail < 2) onSelect(resource);
+            }}
+            onDoubleClick={() => {
+              if (resource.kind === "folder") onOpenFolder(resource);
+            }}
             type="button"
           >
             <ResourceIcon resource={resource} />
@@ -134,8 +150,9 @@ export function ResourceDetailsPane({
   selectedId,
   details,
   detailLoading,
+  contentLoading,
+  contentReady,
   busy,
-  folders,
   previewUrl,
   text,
   onBack,
@@ -147,8 +164,9 @@ export function ResourceDetailsPane({
   selectedId: string | undefined;
   details: ResourceDetails | undefined;
   detailLoading: boolean;
+  contentLoading: boolean;
+  contentReady: boolean;
   busy: boolean;
-  folders: Resource[];
   previewUrl: string | undefined;
   text: string;
   onBack: () => void;
@@ -158,6 +176,12 @@ export function ResourceDetailsPane({
   onTextChange: (value: string) => void;
 }>) {
   const selected = details?.resource;
+  const backRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (selectedId && window.matchMedia?.("(max-width: 760px)").matches) {
+      backRef.current?.focus();
+    }
+  }, [selectedId]);
   return (
     <section
       className={`detail ${selectedId ? "mobile-active" : ""}`}
@@ -170,30 +194,45 @@ export function ResourceDetailsPane({
           <p>Preview content and run a file operation.</p>
         </div>
       )}
-      {selectedId && detailLoading && (
-        <p className="state">Loading resource…</p>
+      {selectedId && (
+        <div className="detail-head">
+          <button
+            ref={backRef}
+            className="mobile-back"
+            onClick={onBack}
+            type="button"
+          >
+            <ArrowLeft size={18} />
+            Files
+          </button>
+          {selected && (
+            <>
+              <div className="detail-title">
+                <ResourceIcon resource={selected} />
+                <div>
+                  <h2>{selected.name}</h2>
+                  <small>
+                    {selected.mediaType ?? "Folder"} ·{" "}
+                    {formatSize(selected.size)} · v{selected.version}
+                  </small>
+                </div>
+              </div>
+              <span className={`access ${selected.access}`}>
+                {selected.access}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+      {selectedId && !selected && (
+        <p className="state">
+          {detailLoading
+            ? "Loading resource…"
+            : "This resource could not be loaded. Return to Files and try again."}
+        </p>
       )}
       {selected && (
         <>
-          <div className="detail-head">
-            <button className="mobile-back" onClick={onBack} type="button">
-              <ArrowLeft size={18} />
-              Files
-            </button>
-            <div className="detail-title">
-              <ResourceIcon resource={selected} />
-              <div>
-                <h2>{selected.name}</h2>
-                <small>
-                  {selected.mediaType ?? "Folder"} · {formatSize(selected.size)}{" "}
-                  · v{selected.version}
-                </small>
-              </div>
-            </div>
-            <span className={`access ${selected.access}`}>
-              {selected.access}
-            </span>
-          </div>
           <div className="detail-scroll">
             <nav className="breadcrumbs" aria-label="Resource path">
               {details.breadcrumbs.map((item) => (
@@ -205,6 +244,7 @@ export function ResourceDetailsPane({
                 {selected.mediaType?.startsWith("text/") && (
                   <textarea
                     aria-label="Text content"
+                    disabled={busy || !contentReady}
                     onChange={(event) => onTextChange(event.target.value)}
                     value={text}
                   />
@@ -234,6 +274,11 @@ export function ResourceDetailsPane({
                   </a>
                 )}
               </section>
+            )}
+            {selected.kind === "file" && contentLoading && (
+              <p className="state" role="status">
+                Loading file…
+              </p>
             )}
             <dl className="metadata">
               <div>
@@ -275,7 +320,7 @@ export function ResourceDetailsPane({
             {selected.mediaType?.startsWith("text/") && (
               <button
                 className="primary"
-                disabled={busy}
+                disabled={busy || !contentReady}
                 onClick={onSaveText}
                 type="button"
               >
@@ -316,7 +361,7 @@ export function ResourceDetailsPane({
             </button>
             <button
               className="secondary"
-              disabled={busy || folders.length === 0}
+              disabled={busy || selected.parentId === null}
               onClick={(event) => onOpenOverlay("move", event.currentTarget)}
               type="button"
             >

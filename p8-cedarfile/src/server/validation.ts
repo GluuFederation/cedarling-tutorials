@@ -31,7 +31,12 @@ export function normalizeVirtualName(input: string): {
 } {
   const name = input.normalize("NFC");
   const bytes = Buffer.byteLength(name, "utf8");
-  if (!name || bytes > limits.nameBytes) throw new InputError("invalid_name");
+  const visible = name.replace(
+    /[\p{White_Space}\p{Default_Ignorable_Code_Point}]/gu,
+    "",
+  );
+  if (!visible || bytes > limits.nameBytes)
+    throw new InputError("invalid_name");
   if (name.trim() !== name || name === "." || name === "..") {
     throw new InputError("invalid_name");
   }

@@ -4,7 +4,6 @@ type IconProps = SVGProps<SVGSVGElement> & { size?: number; weight?: string };
 type Shape =
   | "left"
   | "right"
-  | "refresh"
   | "warning"
   | "download"
   | "file"
@@ -25,9 +24,6 @@ function Icon({
   const content = {
     left: <path d="m15 18-6-6 6-6" />,
     right: <path d="m9 18 6-6-6-6" />,
-    refresh: (
-      <path d="M20 7h-5V2M20 7a8 8 0 0 0-14-2M4 17h5v5M4 17a8 8 0 0 0 14 2" />
-    ),
     warning: (
       <>
         <circle cx="12" cy="12" r="9" />
@@ -97,7 +93,6 @@ const glyph = (shape: Shape) => (props: IconProps) => (
 
 export const ArrowLeft = glyph("left");
 export const ArrowRight = glyph("right");
-export const ArrowsClockwise = glyph("refresh");
 export const WarningCircle = glyph("warning");
 export const DownloadSimple = glyph("download");
 export const File = glyph("file");

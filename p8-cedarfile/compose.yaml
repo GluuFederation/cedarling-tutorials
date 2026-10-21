@@ -6,6 +6,9 @@ services:
       target: bootstrap
     command:
       - P8
+    environment:
+      BOOTSTRAP_ISSUER: http://localhost:18008
+      BOOTSTRAP_BASE_URL: http://localhost:17008
     network_mode: none
     read_only: true
     cap_drop:
@@ -61,7 +64,7 @@ services:
         - CMD
         - node
         - -e
-        - fetch('http://127.0.0.1:18008/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+        - fetch('http://127.0.0.1:18008/.well-known/openid-configuration').then(async r=>process.exit(r.ok&&(await r.json()).issuer==='http://localhost:18008'?0:1)).catch(()=>process.exit(1))
       interval: 2s
       timeout: 3s
       retries: 30
