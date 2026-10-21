@@ -2,10 +2,10 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import * as cookie from "cookie";
 import type express from "express";
 import type { Request } from "express";
-import { isAccountId, type SessionView } from "../shared/contracts.ts";
-import type { AppConfig } from "./config.ts";
-import type { SchoolDatabase } from "./database.ts";
-import { AppError, invalid, unauthorized } from "./errors.ts";
+import { isAccountId, type SessionView } from "../../shared/contracts.ts";
+import type { AppConfig } from "../config/environment.ts";
+import type { SchoolDatabase } from "../data/database.ts";
+import { AppError, invalid, unauthorized } from "../http/errors.ts";
 import type { LoginTransaction, OidcRuntime } from "./oidc.ts";
 
 const randomToken = () => randomBytes(32).toString("base64url");

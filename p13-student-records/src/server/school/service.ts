@@ -1,16 +1,17 @@
 import type {
-  Capability,
   DraftInput,
+  GradeCapability,
+  GradeFilter,
   GradeProjection,
   GradeView,
   Publication,
   ReadCapability,
-} from "../shared/contracts.ts";
-import type { Grade, SchoolDatabase, Snapshot } from "./database.ts";
-import { AppError, conflict, invalid, missing } from "./errors.ts";
+} from "../../shared/contracts.ts";
+import type { Grade, SchoolDatabase, Snapshot } from "../data/database.ts";
+import { AppError, conflict, invalid, missing } from "../http/errors.ts";
 
-type AuthorizationRequest = {
-  capability: Capability;
+type GradeAuthorizationRequest = {
+  capability: GradeCapability;
   requestId: string;
   facts: Omit<Snapshot, "grade"> & {
     grade: Pick<
@@ -20,7 +21,13 @@ type AuthorizationRequest = {
   };
 };
 export type Authorize = (
-  request: AuthorizationRequest,
+  request:
+    | GradeAuthorizationRequest
+    | {
+        capability: "student.profile.view";
+        requestId: string;
+        facts: import("./students.ts").StudentFacts;
+      },
 ) => Promise<"allow" | "deny" | "unavailable">;
 
 function complete(grade: Grade): boolean {
@@ -68,7 +75,13 @@ function project(grade: Grade, capability: ReadCapability): GradeProjection {
 export class School {
   private readonly database: SchoolDatabase;
   private readonly authorize: Authorize;
-  constructor(database: SchoolDatabase, authorize: Authorize) {
+  private readonly beforeEffect: () => void;
+  constructor(
+    database: SchoolDatabase,
+    authorize: Authorize,
+    beforeEffect: () => void = () => {},
+  ) {
+    this.beforeEffect = beforeEffect;
     this.database = database;
     this.authorize = authorize;
   }
@@ -89,12 +102,13 @@ export class School {
     principalId: string,
     capability: ReadCapability,
     requestId: string,
+    filter: GradeFilter = {},
   ): Promise<GradeView[]> {
     const principal = this.database.principal(principalId);
     if (!principal) throw missing();
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const snapshots = this.database
-        .candidateIds(principal.schoolId)
+        .candidateIds(principal.schoolId, filter)
         .map((id) => this.database.snapshot(principalId, id))
         .filter((snapshot): snapshot is Snapshot => snapshot !== undefined);
       const allowed: Snapshot[] = [];
@@ -102,12 +116,13 @@ export class School {
         if ((await this.decide(snapshot, capability, requestId)) === "allow")
           allowed.push(snapshot);
       }
-      const result = this.database.guard(snapshots, () =>
-        allowed.map((snapshot) => ({
+      const result = this.database.guard(snapshots, () => {
+        this.beforeEffect();
+        return allowed.map((snapshot) => ({
           id: snapshot.grade.id,
           grade: project(snapshot.grade, capability),
-        })),
-      );
+        }));
+      });
       if (result.current) return result.value;
     }
     throw conflict();
@@ -172,7 +187,7 @@ export class School {
 
   private async effect<T>(
     principalId: string,
-    capability: Capability,
+    capability: GradeCapability,
     id: string,
     requestId: string,
     effect: (snapshot: Snapshot) => T,
@@ -200,7 +215,10 @@ export class School {
         );
       const decision = await this.decide(snapshot, capability, requestId);
       if (decision === "deny") throw missing();
-      const result = this.database.guard([snapshot], () => effect(snapshot));
+      const result = this.database.guard([snapshot], () => {
+        this.beforeEffect();
+        return effect(snapshot);
+      });
       if (result.current) return result.value;
     }
     throw conflict();
@@ -208,7 +226,7 @@ export class School {
 
   private async decide(
     snapshot: Snapshot,
-    capability: Capability,
+    capability: GradeCapability,
     requestId: string,
   ) {
     const { id, schoolId, studentId, courseId, state, version } =

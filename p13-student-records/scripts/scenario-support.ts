@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { lstatSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { basename, dirname, resolve } from "node:path";
-import { loadConfig } from "../src/server/config.ts";
+import { loadConfig } from "../src/server/config/environment.ts";
 
 async function freePort(): Promise<number> {
   const server = createServer();

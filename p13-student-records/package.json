@@ -8,9 +8,10 @@
   },
   "packageManager": "pnpm@10.17.1",
   "scripts": {
+    "reset": "node --env-file=.env scripts/reset.ts",
     "setup": "node scripts/setup.ts",
     "fixture": "node --env-file=.env scripts/fixture.ts",
-    "dev": "vite build && node --watch --env-file=.env src/server/main.ts",
+    "dev": "node scripts/dev.mjs",
     "start": "node --env-file=.env dist/server/main.js",
     "build": "vite build && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -b --force",
@@ -19,7 +20,8 @@
     "lint": "biome check --formatter-enabled=false --error-on-warnings .",
     "test": "vitest run",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "test:e2e": "node scripts/test-e2e.ts"
+    "test:e2e": "node scripts/test-e2e.ts",
+    "test:docker": "node scripts/test-docker.ts"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
@@ -27,7 +29,8 @@
     "express": "5.2.1",
     "openid-client": "6.8.8",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
@@ -38,7 +41,7 @@
     "@types/react-dom": "19.3.0",
     "jsdom": "30.1.1",
     "typescript": "6.0.3",
-    "vite": "8.2.2",
+    "vite": "8.2.4",
     "vitest": "4.1.11"
   },
   "pnpm": {

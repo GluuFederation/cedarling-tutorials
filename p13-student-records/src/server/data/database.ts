@@ -1,13 +1,14 @@
 import Database from "better-sqlite3";
-import {
-  type Audience,
-  accounts,
-  type DraftInput,
-  type GradeState,
-  type Publication,
-} from "../shared/contracts.ts";
+import type {
+  Audience,
+  DraftInput,
+  GradeState,
+  Publication,
+} from "../../shared/contracts.ts";
+import { seed } from "./fixtures.ts";
+import { SCHEMA_VERSION, schema } from "./schema.ts";
 
-type Principal = {
+export type Principal = {
   id: string;
   name: string;
   role: Audience;
@@ -29,7 +30,7 @@ export type Grade = {
   publishedAt: string | null;
   version: number;
 };
-type Relationship = {
+export type Relationship = {
   version: number;
   state: string;
   expiresAt: number | null;
@@ -54,149 +55,30 @@ export class SchoolDatabase {
   readonly sql: Database.Database;
   constructor(path: string, issuer: string) {
     this.sql = new Database(path);
-    this.sql.pragma("foreign_keys = ON");
-    this.sql.pragma("journal_mode = WAL");
-    this.sql.pragma("busy_timeout = 3000");
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS actors (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        role TEXT NOT NULL,
-        school_id TEXT NOT NULL,
-        issuer TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS courses (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        school_id TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS assignments (
-        actor_id TEXT NOT NULL REFERENCES actors(id),
-        course_id TEXT NOT NULL REFERENCES courses(id),
-        state TEXT NOT NULL CHECK (state IN ('active','revoked')),
-        version INTEGER NOT NULL CHECK(version > 0),
-        PRIMARY KEY(actor_id,course_id)
-      );
-      CREATE TABLE IF NOT EXISTS enrollments (
-        student_id TEXT NOT NULL REFERENCES actors(id),
-        course_id TEXT NOT NULL REFERENCES courses(id),
-        state TEXT NOT NULL CHECK (state IN ('active','withdrawn')),
-        version INTEGER NOT NULL CHECK(version > 0),
-        PRIMARY KEY(student_id,course_id)
-      );
-      CREATE TABLE IF NOT EXISTS guardian_links (
-        guardian_id TEXT NOT NULL REFERENCES actors(id),
-        student_id TEXT NOT NULL REFERENCES actors(id),
-        state TEXT NOT NULL CHECK(state IN ('active','revoked')),
-        expires_at INTEGER NOT NULL,
-        version INTEGER NOT NULL CHECK(version > 0),
-        PRIMARY KEY(guardian_id,student_id)
-      );
-      CREATE TABLE IF NOT EXISTS grades (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL REFERENCES actors(id),
-        course_id TEXT NOT NULL REFERENCES courses(id),
-        assessment TEXT NOT NULL,
-        score INTEGER CHECK(
-          score IS NULL OR (typeof(score)='integer' AND score BETWEEN 0 AND 100)
-        ),
-        feedback TEXT NOT NULL CHECK(length(feedback)<=2000),
-        internal_note TEXT NOT NULL CHECK(length(internal_note)<=1000),
-        state TEXT NOT NULL CHECK(state IN ('draft','published')),
-        version INTEGER NOT NULL CHECK(version>0),
-        published_at TEXT,
-        published_by TEXT REFERENCES actors(id),
-        authorized_grade_version INTEGER,
-        authorized_enrollment_version INTEGER,
-        authorized_assignment_version INTEGER,
-        publication_request_id TEXT,
-        synthetic_decision INTEGER,
-        policy_release TEXT,
-        policy_digest TEXT,
-        CHECK(state='draft' OR (
-          score IS NOT NULL AND length(trim(feedback))>0
-          AND published_at IS NOT NULL AND published_by IS NOT NULL
-          AND publication_request_id IS NOT NULL
-        ))
-      );
-      CREATE TRIGGER IF NOT EXISTS immutable_publication
-      BEFORE UPDATE ON grades WHEN OLD.state='published'
-      BEGIN
-        SELECT RAISE(ABORT,'Published grades are immutable');
-      END;
-    `);
-    this.sql.transaction(() => {
-      const actor = this.sql.prepare(
-        "INSERT OR IGNORE INTO actors VALUES (?, ?, ?, ?, ?)",
-      );
-      for (const { id, name, role } of accounts)
-        actor.run(id, name, role, "school-a", issuer);
-      for (const [id, name, role, school] of [
-        ["ava", "Ava", "student", "school-a"],
-        ["rene", "René", "teacher", "school-a"],
-        ["foreign", "Foreign student", "student", "school-b"],
-      ])
-        actor.run(id, name, role, school, issuer);
-      const course = this.sql.prepare(
-        "INSERT OR IGNORE INTO courses VALUES (?,?,?)",
-      );
-      course.run("algebra", "Algebra", "school-a");
-      course.run("biology", "Biology", "school-a");
-      course.run("foreign", "Foreign course", "school-b");
-      this.sql.exec(`
-        INSERT OR IGNORE INTO assignments VALUES
-          ('talia','algebra','active',1), ('rene','biology','active',1);
-        INSERT OR IGNORE INTO enrollments VALUES
-          ('sam','algebra','active',1), ('ava','biology','active',1),
-          ('foreign','foreign','active',1);
-      `);
-      this.sql
+    try {
+      this.sql.pragma("foreign_keys = ON");
+      this.sql.pragma("journal_mode = WAL");
+      this.sql.pragma("busy_timeout = 3000");
+      const version = this.sql.pragma("user_version", { simple: true });
+      const populated = this.sql
         .prepare(
-          "INSERT OR IGNORE INTO guardian_links VALUES ('grace','sam','active',?,1)",
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' LIMIT 1",
         )
-        .run(Date.now() + 24 * 60 * 60 * 1000);
-      const grade = this.sql.prepare(
-        `INSERT OR IGNORE INTO grades (
-          id,student_id,course_id,assessment,score,feedback,internal_note,state,version
-        ) VALUES (?,?,?,?,?,?,?,'draft',1)`,
-      );
-      grade.run(
-        "grade-sam-1",
-        "sam",
-        "algebra",
-        "Quiz 1",
-        85,
-        "Clear working.",
-        "Check reasoning privately.",
-      );
-      grade.run(
-        "grade-sam-2",
-        "sam",
-        "algebra",
-        "Quiz 2",
-        null,
-        "",
-        "Discuss the next exercise privately.",
-      );
-      grade.run(
-        "grade-ava-1",
-        "ava",
-        "biology",
-        "Lab 1",
-        92,
-        "Accurate observations.",
-        "Teacher-only observation.",
-      );
-      grade.run(
-        "grade-foreign-1",
-        "foreign",
-        "foreign",
-        "Quiz 1",
-        90,
-        "Synthetic fixture.",
-        "Foreign-school note.",
-      );
-    })();
+        .get();
+      if (populated && version !== SCHEMA_VERSION)
+        throw new Error(
+          "P13 data uses a different baseline schema. Stop P13 and explicitly run pnpm reset, or choose a fresh data directory. Existing data was not replaced.",
+        );
+      if (!populated)
+        this.sql.transaction(() => {
+          this.sql.exec(schema);
+          seed(this.sql, issuer);
+          this.sql.pragma(`user_version = ${SCHEMA_VERSION}`);
+        })();
+    } catch (error) {
+      this.sql.close();
+      throw error;
+    }
   }
 
   principal(id: string): Principal | undefined {
@@ -250,15 +132,37 @@ export class SchoolDatabase {
     };
   }
 
-  candidateIds(schoolId: string): string[] {
+  candidateIds(
+    schoolId: string,
+    filter: import("../../shared/contracts.ts").GradeFilter = {},
+  ): string[] {
     return this.sql
-      .prepare<[string], { id: string }>(
+      .prepare<
+        [
+          string,
+          string | null,
+          string | null,
+          string | null,
+          string | null,
+          string | null,
+          string | null,
+        ],
+        { id: string }
+      >(
         `SELECT g.id FROM grades g
         JOIN courses c ON c.id=g.course_id
-        WHERE c.school_id=?
+        WHERE c.school_id=? AND (? IS NULL OR g.student_id=?) AND (? IS NULL OR g.course_id=?) AND (? IS NULL OR g.state=?)
         ORDER BY c.name,g.assessment,g.id LIMIT 100`,
       )
-      .all(schoolId)
+      .all(
+        schoolId,
+        filter.studentId ?? null,
+        filter.studentId ?? null,
+        filter.courseId ?? null,
+        filter.courseId ?? null,
+        filter.state ?? null,
+        filter.state ?? null,
+      )
       .map((row) => row.id);
   }
 

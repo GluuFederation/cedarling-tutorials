@@ -1,5 +1,5 @@
 import * as oidc from "openid-client";
-import type { AppConfig } from "./config.ts";
+import type { AppConfig } from "../config/environment.ts";
 
 export type LoginTransaction = {
   state: string;

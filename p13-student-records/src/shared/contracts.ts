@@ -1,4 +1,9 @@
 export const capabilities = {
+  "student.profile.view": {
+    feature: "P13-F6",
+    action: "School::ViewStudentProfile",
+    kind: "profile",
+  },
   "grade.teacher.view": {
     feature: "P13-F1",
     action: "School::ViewTeacherGrade",
@@ -30,6 +35,7 @@ export const capabilities = {
 } as const;
 
 export type Capability = keyof typeof capabilities;
+export type GradeCapability = Exclude<Capability, "student.profile.view">;
 export type ReadCapability = {
   [K in Capability]: (typeof capabilities)[K] extends { kind: "read" }
     ? K
@@ -38,8 +44,11 @@ export type ReadCapability = {
 export type Audience = (typeof capabilities)[ReadCapability]["audience"];
 export const accounts = [
   { id: "talia", name: "Talia", role: "teacher" },
+  { id: "rene", name: "René", role: "teacher" },
   { id: "sam", name: "Sam Rivera", role: "student" },
+  { id: "ava", name: "Ava", role: "student" },
   { id: "grace", name: "Grace", role: "guardian" },
+  { id: "imani", name: "Imani", role: "guardian" },
 ] as const;
 export type AccountId = (typeof accounts)[number]["id"];
 export function isAccountId(value: unknown): value is AccountId {
@@ -86,4 +95,29 @@ export type SessionView = {
   user: { id: AccountId; name: string; role: Audience };
   csrfToken: string;
   expiresAt: number;
+};
+
+export type StudentSummary = {
+  id: string;
+  studentNumber: string;
+  name: string;
+  className: string;
+  yearGroup: string;
+  enrollmentStatus: "Active" | "Withdrawn";
+};
+export type StudentProfile = StudentSummary & {
+  preferredName: string;
+  admittedOn: string;
+  academicYear: string;
+  version: number;
+  enrollments: readonly {
+    courseId: string;
+    course: string;
+    state: "active" | "withdrawn";
+  }[];
+};
+export type GradeFilter = {
+  studentId?: string;
+  courseId?: string;
+  state?: GradeState;
 };

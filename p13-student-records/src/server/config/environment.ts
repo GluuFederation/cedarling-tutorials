@@ -62,6 +62,7 @@ export function prepareData(config: AppConfig, root = process.cwd()): string {
     "school.sqlite",
     "school.sqlite-wal",
     "school.sqlite-shm",
+    "school.sqlite-journal",
   ]) {
     const path = resolve(directory, file);
     const status = lstatSync(path, { throwIfNoEntry: false });

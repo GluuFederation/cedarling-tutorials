@@ -1,7 +1,7 @@
 import { buildApp } from "./app.ts";
-import { loadConfig, prepareData } from "./config.ts";
-import { SchoolDatabase } from "./database.ts";
-import { createOidc } from "./oidc.ts";
+import { createOidc } from "./auth/oidc.ts";
+import { loadConfig, prepareData } from "./config/environment.ts";
+import { SchoolDatabase } from "./data/database.ts";
 
 process.umask(0o077);
 console.info("P13 authorization: FAKE ALLOW; Cedarling is not called.");

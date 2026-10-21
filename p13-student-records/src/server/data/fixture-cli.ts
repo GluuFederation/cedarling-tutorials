@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadConfig, prepareData } from "./config.ts";
+import { loadConfig, prepareData } from "../config/environment.ts";
 import {
   type FixtureCommand,
   fixtureCommands,
@@ -18,8 +18,9 @@ try {
     throw new Error("Start the application before changing fixtures");
   const database = new SchoolDatabase(prepareData(config), config.issuer);
   try {
+    const change = database.changeFixture(command as FixtureCommand);
     console.info(
-      JSON.stringify(database.changeFixture(command as FixtureCommand)),
+      `P13 fixture | ${change.target} | ${change.state} | version ${change.version}`,
     );
   } finally {
     database.close();

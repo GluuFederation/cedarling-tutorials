@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { AppConfig } from "../src/server/config.ts";
-import { SchoolDatabase } from "../src/server/database.ts";
+import type { AppConfig } from "../src/server/config/environment.ts";
+import { SchoolDatabase } from "../src/server/data/database.ts";
 import { openSession } from "./scenario-session.ts";
 
 function record(value: unknown): Record<string, unknown> {
@@ -17,10 +17,22 @@ async function grade(response: Response): Promise<Record<string, unknown>> {
 
 export async function exercise(config: AppConfig, databaseFile: string) {
   const talia = await openSession(config, "talia");
+  for (const id of ["rene", "ava", "imani"] as const) {
+    const client = await openSession(config, id);
+    const directory = await client.request("/api/students");
+    assert.equal(directory.status, 200);
+    assert.equal(Array.isArray(record(await directory.json()).students), true);
+  }
+  const directory = await talia.request("/api/students");
+  assert.equal(
+    (record(await directory.json()).students as unknown[]).length,
+    8,
+  );
+  assert.equal((await talia.request("/api/students/foreign")).status, 404);
   const sam = await openSession(config, "sam");
   const grace = await openSession(config, "grace");
   console.info(
-    "✓ Talia, Sam and Grace completed real PKCE, consent, signed ID-token and session flows",
+    "✓ All six identities completed real PKCE, consent, signed ID-token and session flows",
   );
   for (const client of [sam, grace]) {
     const response = await client.request("/api/grades/teacher/grade-sam-1");
@@ -35,19 +47,6 @@ export async function exercise(config: AppConfig, databaseFile: string) {
   );
   const foreign = await talia.request("/api/grades/teacher/grade-foreign-1");
   assert.equal(foreign.status, 404);
-  const saved = await grade(
-    await talia.request("/api/grades/grade-sam-2", {
-      method: "PATCH",
-      body: JSON.stringify({
-        expectedVersion: 1,
-        score: 73,
-        feedback: "A complete saved draft.",
-        internalNote: "Synthetic private note.",
-      }),
-    }),
-  );
-  assert.equal(saved.version, 2);
-  assert.equal(saved.score, 73);
   const otherCourse = await talia.request("/api/grades/grade-ava-1/publish", {
     method: "POST",
     body: JSON.stringify({ expectedVersion: 1 }),
@@ -100,6 +99,33 @@ export async function exercise(config: AppConfig, databaseFile: string) {
     (await talia.request("/api/grades/teacher/grade-sam-2")).status,
     200,
   );
+  const incomplete = await talia.request("/api/grades/grade-sam-2/publish", {
+    method: "POST",
+    body: JSON.stringify({ expectedVersion: 1 }),
+  });
+  assert.equal(incomplete.status, 422);
+  const saved = await grade(
+    await talia.request("/api/grades/grade-sam-2", {
+      method: "PATCH",
+      body: JSON.stringify({
+        expectedVersion: 1,
+        score: 73,
+        feedback: "A complete saved draft.",
+        internalNote: "Synthetic private note.",
+      }),
+    }),
+  );
+  assert.equal(saved.version, 2);
+  assert.equal(saved.score, 73);
+  assert.equal(
+    (
+      await talia.request("/api/grades/grade-sam-2/publish", {
+        method: "POST",
+        body: JSON.stringify({ expectedVersion: 2 }),
+      })
+    ).status,
+    200,
+  );
   assert.equal(
     (await grace.request("/api/grades/guardian/grade-sam-1")).status,
     200,
@@ -108,6 +134,13 @@ export async function exercise(config: AppConfig, databaseFile: string) {
     (await sam.request("/api/grades/student/grade-sam-1")).status,
     200,
   );
+  const restored = new SchoolDatabase(databaseFile, config.issuer);
+  try {
+    restored.changeFixture("restore-enrollment");
+    restored.changeFixture("restore-guardian");
+  } finally {
+    restored.close();
+  }
   console.info(
     "✓ gap: withdrawn enrollment and revoked guardian links are observed but not enforced",
   );

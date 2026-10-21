@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "vitest";
-import { createAuthorization } from "../src/server/authorization.ts";
-import { SchoolDatabase } from "../src/server/database.ts";
-import { type Authorize, School } from "../src/server/school.ts";
+import { SchoolDatabase } from "../src/server/data/database.ts";
+import { createAuthorization } from "../src/server/school/authorization.ts";
+import { type Authorize, School } from "../src/server/school/service.ts";
 
 const databases: SchoolDatabase[] = [];
 function fixture(authorize: Authorize = async () => "allow") {
@@ -18,7 +18,7 @@ test("synthetic authorization traces never contain protected grade fields", asyn
   const { school } = fixture(createAuthorization((line) => lines.push(line)));
   await school.read("talia", "grade.teacher.view", "grade-sam-1", "req-safe");
   expect(lines).toEqual([
-    "P13 server | FAKE ALLOW | grade.teacher.view | talia -> Grade::grade-sam-1",
+    "P13 server | FAKE ALLOW | grade.teacher.view | talia -> grade-sam-1 | req-safe",
   ]);
   expect(lines.join("\n")).not.toMatch(
     /internalNote|feedback|score|Clear working|Check reasoning/,
@@ -101,6 +101,7 @@ test.each([
 ])("publication and authorization agree on completeness: %j", async (input) => {
   const facts: boolean[] = [];
   const { school, database } = fixture(async ({ facts: snapshot }) => {
+    if (!("grade" in snapshot)) throw new Error("Expected grade facts");
     facts.push(snapshot.grade.complete);
     return "allow";
   });
@@ -154,6 +155,7 @@ test.each(["deny", "unavailable"] as const)(
 test("a concurrent withdrawal requires a fresh decision and cannot publish on a stale allow", async () => {
   const seen: number[] = [];
   const { school, database } = fixture(async (request) => {
+    if (!("grade" in request.facts)) throw new Error("Expected grade facts");
     seen.push(request.facts.enrollment?.version ?? 0);
     if (seen.length === 1) database.changeFixture("withdraw-enrollment");
     return request.facts.enrollment?.state === "active" ? "allow" : "deny";
@@ -191,6 +193,7 @@ test("a later list decision cannot release an earlier row using stale enrollment
   let withdrawn = false;
   const versions: number[] = [];
   const { school, database } = fixture(async ({ facts }) => {
+    if (!("grade" in facts)) throw new Error("Expected grade facts");
     if (facts.grade.id === "grade-sam-1")
       versions.push(facts.enrollment?.version ?? 0);
     if (facts.grade.id === "grade-ava-1" && !withdrawn) {
@@ -200,13 +203,17 @@ test("a later list decision cannot release an earlier row using stale enrollment
     return facts.enrollment?.state === "active" ? "allow" : "deny";
   });
   const result = await school.list("talia", "grade.teacher.view", "list-race");
-  expect(result.map((view) => view.id)).toEqual(["grade-ava-1"]);
+  expect(result.map((view) => view.id)).not.toContain("grade-sam-1");
+  expect(result.map((view) => view.id)).not.toContain("grade-sam-2");
+  expect(result.map((view) => view.id)).toContain("grade-ava-1");
+  expect(result).toHaveLength(30);
   expect(versions).toEqual([1, 2]);
 });
 
 test("continuous list fact changes exhaust one retry without returning any rows", async () => {
   let calls = 0;
   const { school, database } = fixture(async ({ facts }) => {
+    if (!("grade" in facts)) throw new Error("Expected grade facts");
     calls += 1;
     if (facts.grade.id === "grade-ava-1")
       database.changeFixture("withdraw-enrollment");
@@ -215,7 +222,7 @@ test("continuous list fact changes exhaust one retry without returning any rows"
   await expect(
     school.list("talia", "grade.teacher.view", "list-churn"),
   ).rejects.toMatchObject({ status: 409 });
-  expect(calls).toBe(6);
+  expect(calls).toBe(64);
 });
 
 test("permissive gaps remain observable without weakening native integrity", async () => {
