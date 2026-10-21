@@ -21,7 +21,7 @@ export const projects = [
   { number: 11, id: "p11-saas-workspace", name: "P11 SaaS Workspace" },
   { number: 12, id: "p12-hr-access-governance", name: "P12 CedarHR" },
   { number: 13, id: "p13-student-records", name: "P13 CedarSchool" },
-  { number: 14, id: "p14-ai-scheduling-assistant", name: "P14 CedarSchedule" },
+  { number: 14, id: "p14-capital-district", name: "P14 Capital District" },
   { number: 15, id: "p15-marketplace", name: "P15 CedarMarket" },
 ] as const;
 

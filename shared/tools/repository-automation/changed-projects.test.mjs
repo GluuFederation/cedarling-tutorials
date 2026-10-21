@@ -21,6 +21,13 @@ test("selects only the changed project", () => {
   });
 });
 
+test("selects Capital District for a P14 game change", () => {
+  assert.deepEqual(selectProjects(["p14-capital-district/src/server/game/service.ts"]), {
+    projects: ["p14-capital-district"],
+    compose: ["p14-capital-district"],
+  });
+});
+
 test("selects P3 Compose without a separate shared-provider stack", () => {
   assert.deepEqual(
     selectProjects(["p3-mcp-capability-governance/src/app.ts"]),

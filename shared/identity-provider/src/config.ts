@@ -141,7 +141,7 @@ export function loadConfig(
     11: p11WorkspaceScopes,
     12: ["hr.access"],
     13: ["grade.access"],
-    14: ["schedule.access"],
+    14: ["game.access"],
     15: ["refund.access"],
   };
   const resourceName = project.number === 3 ? "mcp" : "api";

@@ -72,12 +72,12 @@ refresh tokens for Maya, Noah, Lena, and Imani. It requests
 
 P12–P15 also use confidential Authorization Code clients with PKCE S256:
 
-| Client                        | Resource                     | Scope             |
-| ----------------------------- | ---------------------------- | ----------------- |
-| `p12-hr-access-governance`    | `http://localhost:17012/api` | `hr.access`       |
-| `p13-student-records`         | `http://localhost:17013/api` | `grade.access`    |
-| `p14-ai-scheduling-assistant` | `http://localhost:17014/api` | `schedule.access` |
-| `p15-marketplace`             | `http://localhost:17015/api` | `refund.access`   |
+| Client                     | Resource                     | Scope           |
+| -------------------------- | ---------------------------- | --------------- |
+| `p12-hr-access-governance` | `http://localhost:17012/api` | `hr.access`     |
+| `p13-student-records`      | `http://localhost:17013/api` | `grade.access`  |
+| `p14-capital-district`     | `http://localhost:17014/api` | `game.access`   |
+| `p15-marketplace`          | `http://localhost:17015/api` | `refund.access` |
 
 Project setup generates only its own client registrations and secrets.
 Re-running setup preserves credentials and synchronizes the application settings.

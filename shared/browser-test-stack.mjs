@@ -29,6 +29,7 @@ export default async function startBrowserTestStack() {
     P5: ["src/server/main.ts"],
     P6: ["dist/server/main.js"],
     P7: ["dist/server/main.js"],
+    P14: ["dist/server/main.js"],
     P15: ["dist/server/main.js"],
   }[selector];
   if (!applicationArgs)
@@ -99,7 +100,7 @@ export default async function startBrowserTestStack() {
       cwd: root,
       env: { ...process.env },
       health: {
-        url: `http://127.0.0.1:${project.port}/${["P6", "P7"].includes(selector) ? "healthz" : "health"}`,
+        url: `http://127.0.0.1:${project.port}/${["P6", "P7", "P14"].includes(selector) ? "healthz" : "health"}`,
         validate:
           selector === "P1"
             ? async (response) =>
