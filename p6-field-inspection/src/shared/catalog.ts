@@ -26,11 +26,20 @@ export const technicians = tutorialUsers.filter(
 );
 
 export const checklistItems = [
-  { key: "safetyGuardSecured", label: "Safety guard secured" },
-  { key: "fluidLevelChecked", label: "Fluid level checked" },
   {
-    key: "operatingTemperatureRecorded",
-    label: "Operating temperature recorded",
+    key: "equipmentConditionPassed",
+    label: "Equipment condition",
+    help: "Check the equipment's visible condition and record any damage.",
+  },
+  {
+    key: "safetyChecksPassed",
+    label: "Safety checks",
+    help: "Record the result of the safety checks required for this work order.",
+  },
+  {
+    key: "functionalCheckPassed",
+    label: "Functional check",
+    help: "Record whether the equipment passed its permitted functional check.",
   },
 ] as const;
 

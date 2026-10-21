@@ -7,7 +7,7 @@ prepareDataDirectory(config.dataDirectory);
 const database = new AppDatabase(
   resolve(config.dataDirectory, "inspection.sqlite"),
   config.issuer,
+  { reset: true },
 );
-database.reset(config.issuer);
 database.close();
 console.info("P6 field-inspection fixtures restored");

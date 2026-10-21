@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import Sqlite from "better-sqlite3";
-import { tutorialUsers } from "../shared/catalog.ts";
+import { checklistKeys, tutorialUsers } from "../shared/catalog.ts";
+import { validNotes } from "../shared/notes.ts";
 import type {
+  AssignmentChange,
   Checklist,
   Inspection,
+  InspectionReview,
   Role,
   User,
   WorkOrder,
@@ -59,7 +62,7 @@ CREATE TABLE IF NOT EXISTS work_orders (
   id TEXT PRIMARY KEY,
   equipment TEXT NOT NULL,
   site TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('open', 'completed')),
+  status TEXT NOT NULL CHECK (status IN ('open', 'awaiting_review', 'changes_requested', 'completed')),
   work_order_version INTEGER NOT NULL CHECK (work_order_version > 0)
 );
 CREATE TABLE IF NOT EXISTS assignments (
@@ -69,17 +72,33 @@ CREATE TABLE IF NOT EXISTS assignments (
 );
 CREATE TABLE IF NOT EXISTS inspections (
   id TEXT PRIMARY KEY,
-  work_order_id TEXT NOT NULL UNIQUE REFERENCES work_orders(id),
+  work_order_id TEXT NOT NULL REFERENCES work_orders(id),
   submitted_by TEXT NOT NULL REFERENCES users(id),
   checklist_json TEXT NOT NULL,
   notes TEXT NOT NULL,
   created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS assignment_changes (
+  id INTEGER PRIMARY KEY,
+  work_order_id TEXT NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+  previous_assignee TEXT NOT NULL REFERENCES users(id),
+  new_assignee TEXT NOT NULL REFERENCES users(id),
+  changed_by TEXT NOT NULL REFERENCES users(id),
+  changed_at TEXT NOT NULL,
+  assignment_epoch INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS idempotency_results (
   idempotency_key TEXT PRIMARY KEY,
   principal_id TEXT NOT NULL REFERENCES users(id),
   request_hash TEXT NOT NULL,
   result_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS inspection_reviews (
+  inspection_id TEXT PRIMARY KEY REFERENCES inspections(id),
+  reviewed_by TEXT NOT NULL REFERENCES users(id),
+  outcome TEXT NOT NULL CHECK (outcome IN ('complete', 'request_corrections')),
+  notes TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS oidc_transactions (
   id_hash TEXT PRIMARY KEY,
@@ -99,11 +118,76 @@ CREATE TABLE IF NOT EXISTS sessions (
 export class AppDatabase {
   private readonly raw: Sqlite.Database;
 
-  constructor(path: string, issuer: string) {
+  constructor(path: string, issuer: string, options: { reset?: boolean } = {}) {
     this.raw = new Sqlite(path);
-    this.raw.pragma("journal_mode = WAL");
-    this.raw.exec(schema);
-    this.seed(issuer);
+    try {
+      if (!options.reset) this.requireCurrentChecklist();
+      this.raw.pragma("journal_mode = WAL");
+      this.raw.exec(schema);
+      this.migrateInspectionWorkflow();
+      if (options.reset) this.reset(issuer);
+      else this.seed(issuer);
+    } catch (error) {
+      this.raw.close();
+      throw error;
+    }
+  }
+
+  private requireCurrentChecklist(): void {
+    const table = this.raw
+      .prepare("SELECT sql FROM sqlite_master WHERE name = 'inspections'")
+      .get();
+    if (!table) return;
+    const records = this.raw
+      .prepare("SELECT checklist_json FROM inspections")
+      .iterate() as Iterable<{ checklist_json: string }>;
+    for (const row of records) {
+      const value = JSON.parse(row.checklist_json) as Record<string, unknown>;
+      if (
+        Object.keys(value).length !== checklistKeys.length ||
+        checklistKeys.some((key) => typeof value[key] !== "boolean")
+      ) {
+        throw new Error(
+          "P6 saved inspections use a different checklist. Stop P6 and run pnpm reset to replace its practice data. See README.md for Docker reset instructions.",
+        );
+      }
+    }
+  }
+
+  private migrateInspectionWorkflow(): void {
+    const table = this.raw
+      .prepare("SELECT sql FROM sqlite_master WHERE name = 'work_orders'")
+      .get() as { sql: string };
+    if (table.sql.includes("'awaiting_review'")) return;
+    // Rebuild the two legacy tables together. All IDs, completed records, and
+    // idempotency results survive; no supervisor review is invented.
+    this.raw.pragma("foreign_keys = OFF");
+    try {
+      this.raw.transaction(() => {
+        this.raw.exec(`
+          CREATE TABLE work_orders_v2 (
+            id TEXT PRIMARY KEY, equipment TEXT NOT NULL, site TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('open', 'awaiting_review', 'changes_requested', 'completed')),
+            work_order_version INTEGER NOT NULL CHECK (work_order_version > 0)
+          );
+          INSERT INTO work_orders_v2 SELECT * FROM work_orders;
+          CREATE TABLE inspections_v2 (
+            id TEXT PRIMARY KEY, work_order_id TEXT NOT NULL REFERENCES work_orders(id),
+            submitted_by TEXT NOT NULL REFERENCES users(id), checklist_json TEXT NOT NULL,
+            notes TEXT NOT NULL, created_at TEXT NOT NULL
+          );
+          INSERT INTO inspections_v2 SELECT * FROM inspections;
+          DROP TABLE inspections;
+          DROP TABLE work_orders;
+          ALTER TABLE work_orders_v2 RENAME TO work_orders;
+          ALTER TABLE inspections_v2 RENAME TO inspections;
+        `);
+        if ((this.raw.pragma("foreign_key_check") as unknown[]).length)
+          throw new Error("Inspection migration failed integrity checks");
+      })();
+    } finally {
+      this.raw.pragma("foreign_keys = ON");
+    }
   }
 
   close(): void {
@@ -116,7 +200,9 @@ export class AppDatabase {
         DELETE FROM sessions;
         DELETE FROM oidc_transactions;
         DELETE FROM idempotency_results;
+        DELETE FROM inspection_reviews;
         DELETE FROM inspections;
+        DELETE FROM assignment_changes;
         DELETE FROM assignments;
         DELETE FROM work_orders;
         DELETE FROM users;
@@ -299,7 +385,7 @@ export class AppDatabase {
       .run(tokenHash(id));
   }
 
-  listWorkOrders(limit = 20): readonly WorkOrder[] {
+  listWorkOrders(limit = 20, offset = 0): readonly WorkOrder[] {
     const rows = this.raw
       .prepare(
         `SELECT w.id, w.equipment, w.site, w.status, w.work_order_version,
@@ -307,9 +393,9 @@ export class AppDatabase {
          FROM work_orders w
          JOIN assignments a ON a.work_order_id = w.id
          JOIN users u ON u.id = a.technician_id
-         ORDER BY w.id LIMIT ?`,
+         ORDER BY w.id LIMIT ? OFFSET ?`,
       )
-      .all(Math.min(limit, 20)) as WorkOrderRow[];
+      .all(Math.min(limit, 20), offset) as WorkOrderRow[];
     return rows.map(mapWorkOrder);
   }
 
@@ -378,6 +464,7 @@ export class AppDatabase {
   }
 
   reassign(values: {
+    principalId: string;
     workOrderId: string;
     technicianId: string;
     expectedAssignmentEpoch: number;
@@ -387,11 +474,19 @@ export class AppDatabase {
       if (technician?.role !== "technician") {
         throw new DomainError("invalid_technician", 400);
       }
+      const before = this.findWorkOrder(values.workOrderId);
+      if (
+        !before ||
+        before.assignmentEpoch !== values.expectedAssignmentEpoch ||
+        !["open", "changes_requested"].includes(before.status)
+      )
+        throw new DomainError("state_conflict", 409);
+      if (before.assigneeId === values.technicianId) return before;
       const result = this.raw
         .prepare(
           `UPDATE assignments SET technician_id = ?, assignment_epoch = assignment_epoch + 1
            WHERE work_order_id = ? AND assignment_epoch = ?
-             AND EXISTS (SELECT 1 FROM work_orders WHERE id = ? AND status = 'open')`,
+             AND EXISTS (SELECT 1 FROM work_orders WHERE id = ? AND status IN ('open', 'changes_requested'))`,
         )
         .run(
           values.technicianId,
@@ -400,8 +495,32 @@ export class AppDatabase {
           values.workOrderId,
         );
       if (result.changes !== 1) throw new DomainError("state_conflict", 409);
+      this.raw
+        .prepare(`INSERT INTO assignment_changes
+        (work_order_id, previous_assignee, new_assignee, changed_by, changed_at, assignment_epoch)
+        VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(
+          values.workOrderId,
+          before.assigneeId,
+          values.technicianId,
+          values.principalId,
+          new Date().toISOString(),
+          before.assignmentEpoch + 1,
+        );
       return this.findWorkOrder(values.workOrderId) as WorkOrder;
     })();
+  }
+
+  assignmentHistory(workOrderId: string): readonly AssignmentChange[] {
+    return this.raw
+      .prepare(`SELECT previous.name AS previousAssignee, next.name AS newAssignee,
+      actor.name AS changedBy, c.changed_at AS changedAt, c.assignment_epoch AS assignmentEpoch
+      FROM assignment_changes c
+      JOIN users previous ON previous.id = c.previous_assignee
+      JOIN users next ON next.id = c.new_assignee
+      JOIN users actor ON actor.id = c.changed_by
+      WHERE c.work_order_id = ? ORDER BY c.id DESC LIMIT 20`)
+      .all(workOrderId) as AssignmentChange[];
   }
 
   submit(values: {
@@ -413,6 +532,19 @@ export class AppDatabase {
     checklist: Checklist;
     notes: string;
   }): { inspection: Inspection; workOrder: WorkOrder; replayed: boolean } {
+    if (
+      !values.checklist ||
+      Object.keys(values.checklist).length !== checklistKeys.length ||
+      checklistKeys.some((key) => typeof values.checklist[key] !== "boolean")
+    ) {
+      throw new DomainError("invalid_checklist", 400);
+    }
+    if (!validNotes(values.notes)) throw new DomainError("invalid_notes", 400);
+    if (
+      checklistKeys.some((key) => !values.checklist[key]) &&
+      !values.notes.trim()
+    )
+      throw new DomainError("failure_notes_required", 400);
     const normalized = {
       workOrderId: values.workOrderId,
       expectedWorkOrderVersion: values.expectedWorkOrderVersion,
@@ -443,7 +575,8 @@ export class AppDatabase {
       }
       const current = this.findWorkOrder(values.workOrderId);
       if (
-        current?.status !== "open" ||
+        !current ||
+        !["open", "changes_requested"].includes(current.status) ||
         current.workOrderVersion !== values.expectedWorkOrderVersion ||
         current.assignmentEpoch !== values.capturedAssignmentEpoch
       ) {
@@ -451,8 +584,8 @@ export class AppDatabase {
       }
       const update = this.raw
         .prepare(
-          `UPDATE work_orders SET status = 'completed', work_order_version = work_order_version + 1
-           WHERE id = ? AND status = 'open' AND work_order_version = ?
+          `UPDATE work_orders SET status = 'awaiting_review', work_order_version = work_order_version + 1
+           WHERE id = ? AND status IN ('open', 'changes_requested') AND work_order_version = ?
              AND EXISTS (
                SELECT 1 FROM assignments
                WHERE work_order_id = ? AND assignment_epoch = ?
@@ -511,6 +644,130 @@ export class AppDatabase {
         count: number;
       }
     ).count;
+  }
+
+  inspections(workOrderId: string): readonly Inspection[] {
+    const rows = this.raw
+      .prepare(`SELECT i.*, r.reviewed_by, r.outcome, r.notes AS review_notes, r.created_at AS reviewed_at
+      FROM inspections i LEFT JOIN inspection_reviews r ON r.inspection_id = i.id
+      WHERE i.work_order_id = ? ORDER BY i.rowid DESC LIMIT 20`)
+      .all(workOrderId) as {
+      id: string;
+      work_order_id: string;
+      submitted_by: string;
+      checklist_json: string;
+      notes: string;
+      created_at: string;
+      reviewed_by: string | null;
+      outcome: InspectionReview["outcome"];
+      review_notes: string;
+      reviewed_at: string;
+    }[];
+    return rows.map((row) => ({
+      id: row.id,
+      workOrderId: row.work_order_id,
+      submittedBy: row.submitted_by,
+      checklist: JSON.parse(row.checklist_json) as Checklist,
+      notes: row.notes,
+      createdAt: row.created_at,
+      ...(row.reviewed_by
+        ? {
+            review: {
+              reviewedBy: row.reviewed_by,
+              outcome: row.outcome,
+              notes: row.review_notes,
+              createdAt: row.reviewed_at,
+            },
+          }
+        : {}),
+    }));
+  }
+
+  review(
+    values: InspectionReview & { principalId: string; workOrderId: string },
+  ): { workOrder: WorkOrder; replayed: boolean } {
+    if (!["complete", "request_corrections"].includes(values.outcome))
+      throw new DomainError("invalid_review", 400);
+    if (
+      !validNotes(values.notes) ||
+      (values.outcome === "request_corrections" && !values.notes.trim())
+    )
+      throw new DomainError("invalid_review_notes", 400);
+    const requestHash = contentHash({
+      action: "review",
+      workOrderId: values.workOrderId,
+      inspectionId: values.inspectionId,
+      expectedWorkOrderVersion: values.expectedWorkOrderVersion,
+      outcome: values.outcome,
+      notes: values.notes,
+    });
+    return this.raw.transaction(() => {
+      const prior = this.raw
+        .prepare(
+          "SELECT principal_id, request_hash, result_json FROM idempotency_results WHERE idempotency_key = ?",
+        )
+        .get(values.idempotencyKey) as
+        | { principal_id: string; request_hash: string; result_json: string }
+        | undefined;
+      if (prior) {
+        if (
+          prior.principal_id !== values.principalId ||
+          prior.request_hash !== requestHash
+        )
+          throw new DomainError("idempotency_conflict", 409);
+        return { ...JSON.parse(prior.result_json), replayed: true } as {
+          workOrder: WorkOrder;
+          replayed: boolean;
+        };
+      }
+      const current = this.findWorkOrder(values.workOrderId);
+      const latest = this.inspections(values.workOrderId)[0];
+      if (
+        current?.status !== "awaiting_review" ||
+        current.workOrderVersion !== values.expectedWorkOrderVersion ||
+        latest?.id !== values.inspectionId ||
+        latest.review
+      )
+        throw new DomainError("state_conflict", 409);
+      if (
+        values.outcome === "complete" &&
+        checklistKeys.some((key) => !latest.checklist[key])
+      )
+        throw new DomainError("corrections_required", 409);
+      this.raw
+        .prepare(
+          "INSERT INTO inspection_reviews (inspection_id, reviewed_by, outcome, notes, created_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run(
+          values.inspectionId,
+          values.principalId,
+          values.outcome,
+          values.notes,
+          new Date().toISOString(),
+        );
+      this.raw
+        .prepare(
+          "UPDATE work_orders SET status = ?, work_order_version = work_order_version + 1 WHERE id = ?",
+        )
+        .run(
+          values.outcome === "complete" ? "completed" : "changes_requested",
+          values.workOrderId,
+        );
+      const stored = {
+        workOrder: this.findWorkOrder(values.workOrderId) as WorkOrder,
+      };
+      this.raw
+        .prepare(
+          "INSERT INTO idempotency_results (idempotency_key, principal_id, request_hash, result_json) VALUES (?, ?, ?, ?)",
+        )
+        .run(
+          values.idempotencyKey,
+          values.principalId,
+          requestHash,
+          JSON.stringify(stored),
+        );
+      return { ...stored, replayed: false };
+    })();
   }
 }
 

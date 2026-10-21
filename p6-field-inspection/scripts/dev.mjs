@@ -23,17 +23,12 @@ try {
         args: ["run", "build"],
         cwd: identityRoot,
       },
-      { name: "P6 setup", command: pnpm, args: ["run", "setup"], cwd: root },
-      ...(resetFixtures
-        ? [
-            {
-              name: "P6 fixture reset",
-              command: pnpm,
-              args: ["run", "reset"],
-              cwd: root,
-            },
-          ]
-        : []),
+      {
+        name: "P6 setup",
+        command: pnpm,
+        args: ["run", "setup", ...(resetFixtures ? ["--reset"] : [])],
+        cwd: root,
+      },
       { name: "P6 build", command: pnpm, args: ["run", "build"], cwd: root },
     ],
     services,
@@ -59,6 +54,12 @@ async function services() {
         url: `http://127.0.0.1:${idpPort}/.well-known/openid-configuration`,
         validate: issuerHealth(issuer),
       },
+    },
+    {
+      name: "P6 web build watcher",
+      command: pnpm,
+      args: ["exec", "vite", "build", "--watch", "--emptyOutDir=false"],
+      cwd: root,
     },
     {
       name: "P6 application",
