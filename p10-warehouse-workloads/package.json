@@ -12,7 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "start": "node scripts/dev.mjs --production",
     "reset": "node --env-file=.env scripts/reset.ts",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && tsc -b tsconfig.server.json --force",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.web.json",
     "format": "biome check --write .",
     "format:check": "biome format .",
@@ -40,7 +40,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
     "typescript": "6.0.3",
-    "vite": "8.2.2",
+    "vite": "8.2.4",
     "vitest": "4.1.11"
   },
   "pnpm": {

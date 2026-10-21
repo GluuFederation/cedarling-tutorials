@@ -93,11 +93,9 @@ export async function createAgentApp(
   app.setErrorHandler((error, request, reply) => {
     const domain = requestError(error, "dependency_unavailable");
     if (domain.statusCode >= 500) {
-      console.error("P10 workload agent failed", {
-        requestId: request.id,
-        workload: config.workloadId,
-        error: error instanceof Error ? error.name : "unknown",
-      });
+      console.error(
+        `P10 agent | ERROR | ${domain.code} | ${config.workloadId} | ${request.id}`,
+      );
     }
     void reply
       .code(domain.statusCode)

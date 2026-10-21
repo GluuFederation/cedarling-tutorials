@@ -100,10 +100,7 @@ export async function createConsoleApp(
   app.setErrorHandler((error, request, reply) => {
     const domain = requestError(error, "service_unavailable");
     if (domain.statusCode >= 500) {
-      console.error("P10 console request failed", {
-        requestId: request.id,
-        error: error instanceof Error ? error.name : "unknown",
-      });
+      console.error(`P10 console | ERROR | ${domain.code} | ${request.id}`);
     }
     void reply
       .code(domain.statusCode)

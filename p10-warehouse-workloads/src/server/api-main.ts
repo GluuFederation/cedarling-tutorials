@@ -1,14 +1,13 @@
-import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadEnvFile } from "node:process";
 import { createApiApp } from "./api-app.ts";
 import { fakeAuthorization } from "./authorization.ts";
 import { loadApiConfig, prepareDataDirectory } from "./config.ts";
 import { WarehouseDatabase } from "./database.ts";
+import { loadLocalEnvironment } from "./environment.ts";
 import { createTokenVerifier } from "./jwt.ts";
 import { listen, shutdown } from "./runtime.ts";
 
-if (existsSync(resolve(".env"))) loadEnvFile(resolve(".env"));
+loadLocalEnvironment();
 console.info(
   "P10 baseline: FAKE ALLOW marks authorization boundaries; Cedarling is not called.",
 );

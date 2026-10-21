@@ -22,6 +22,7 @@ body,
   width: 100%;
   height: 100%;
   margin: 0;
+  overflow: hidden;
 }
 body {
   min-width: 320px;
@@ -35,9 +36,14 @@ button {
   cursor: pointer;
 }
 button:focus-visible,
+summary:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
+  outline: 3px solid #00aeef;
+  outline-offset: 2px;
+}
+.table-wrap:focus-visible {
   outline: 3px solid #00aeef;
   outline-offset: 2px;
 }
@@ -53,8 +59,9 @@ p {
 }
 
 .app-shell {
-  min-height: 100dvh;
+  height: 100dvh;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 .brand-rail {
@@ -117,16 +124,27 @@ p {
 }
 
 .workspace {
+  min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(250px, 0.72fr) minmax(600px, 2fr);
+  grid-template-columns: minmax(260px, 330px) minmax(0, 1fr);
   overflow: hidden;
+}
+.mobile-back {
+  display: none;
+}
+.new-transfer {
+  width: 100%;
+  margin-bottom: 18px;
 }
 .transfer-rail,
 .main-panel {
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
   padding: clamp(20px, 3vw, 32px);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-color: #8fa09a var(--soft);
 }
 .transfer-rail {
   background: var(--soft);
@@ -176,7 +194,7 @@ p {
   border-color: var(--green);
 }
 .transfer-item.selected {
-  box-shadow: inset 3px 0 var(--green);
+  background: var(--green-soft);
 }
 .transfer-item span,
 .workload-list span {
@@ -197,25 +215,78 @@ p {
 }
 .transfer-layout {
   display: grid;
-  grid-template-columns: minmax(340px, 0.85fr) minmax(390px, 1.15fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
 }
 .panel-card {
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  max-width: 960px;
 }
 .panel-card h2 {
   margin: 3px 0 16px;
   color: var(--navy);
-  font-size: 1.12rem;
+  font-size: 1.4rem;
 }
-.eyebrow {
+.panel-card h3 {
+  color: var(--navy);
+  font-size: 1rem;
+  margin: 0 0 12px;
+}
+.panel-card p {
+  line-height: 1.5;
+  max-width: 70ch;
+}
+.transfer-reference {
   color: var(--slate);
-  font-size: 0.69rem;
+  font-size: 0.8rem;
+}
+.transfer-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  padding: 20px 0 20px 24px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--slate);
+  text-transform: capitalize;
+  font-size: 0.85rem;
+}
+.transfer-progress [aria-current="step"] {
+  color: var(--green);
   font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+}
+.stock-context,
+.transfer-operation {
+  margin-top: 24px;
+}
+.stock-context dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+  margin: 0;
+  font-size: 0.85rem;
+}
+.stock-context dt {
+  color: var(--slate);
+}
+.stock-context dd {
+  margin: 6px 0 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.baseline-comparison {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.baseline-comparison summary {
+  padding-block: 16px;
+  cursor: pointer;
+  color: var(--navy);
+  font-weight: 700;
+}
+.baseline-comparison p {
+  color: var(--slate);
+  font-size: 0.85rem;
 }
 .form-grid {
   display: grid;
@@ -223,6 +294,7 @@ p {
   gap: 12px;
 }
 label {
+  min-width: 0;
   display: grid;
   gap: 6px;
   color: var(--navy);
@@ -231,6 +303,9 @@ label {
 }
 input,
 select {
+  min-width: 0;
+  min-height: 44px;
+  font-size: 1rem;
   width: 100%;
   padding: 9px 10px;
   color: #262a29;
@@ -246,6 +321,7 @@ select {
 }
 .primary,
 .secondary {
+  min-height: 44px;
   padding: 9px 13px;
   border-radius: 5px;
   font-weight: 800;
@@ -288,7 +364,7 @@ select {
 }
 .facts {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr auto;
   margin: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -370,28 +446,41 @@ td {
 }
 
 footer {
-  padding: 14px 20px;
+  padding: 2px 12px;
   border-top: 1px solid var(--border);
 }
 footer nav {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px 20px;
+  gap: 0 16px;
 }
 footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--navy);
   font-size: 0.75rem;
 }
 
+.view-tabs button {
+  min-height: 44px;
+}
+
 @media (max-width: 980px) {
+  .brand-rail {
+    grid-template-columns: 38px minmax(0, 1fr) 40px;
+    gap: 10px;
+    padding: 9px 14px;
+  }
+  .brand-lockup {
+    width: 38px;
+  }
+  .workload-indicator strong {
+    display: none;
+  }
   .workspace {
     grid-template-columns: 1fr;
-    overflow: visible;
-  }
-  .transfer-rail,
-  .main-panel {
-    overflow: visible;
   }
   .transfer-rail {
     border-right: 0;
@@ -403,6 +492,28 @@ footer a {
   }
   .transfer-layout {
     grid-template-columns: 1fr;
+  }
+  .mobile-list .main-panel,
+  .mobile-create .transfer-rail,
+  .mobile-detail .transfer-rail,
+  .mobile-inventory .transfer-rail,
+  .mobile-create .detail-card,
+  .mobile-detail .create-card {
+    display: none;
+  }
+  .mobile-back {
+    display: inline-block;
+    margin-bottom: 18px;
+  }
+}
+
+@media (max-height: 500px) {
+  .brand-rail {
+    min-height: 56px;
+    padding-block: 6px;
+  }
+  .topbar-copy p {
+    display: none;
   }
 }
 

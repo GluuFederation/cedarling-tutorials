@@ -1,108 +1,111 @@
 # P10 - Authorizing Warehouse Workloads with Cedarling
 
-P10 is a warehouse stock-transfer console for learning how Cedarling authorizes
-OAuth Client Credentials workloads. A signed machine token proves which
-workload is calling; authorization decides whether that workload may plan,
-release, receive, or inspect a transfer in its current state.
+P10 moves stock between two warehouses. Its console sends commands through
+four workload agents, each authenticated with OAuth Client Credentials.
 
-The marked capabilities currently use compact fake permissive decisions. The
-Cedarling tutorial replaces that adapter while preserving every business and
-authentication boundary.
+The learning baseline validates workload tokens and requests, while business
+permissions return `FAKE ALLOW`. Cedarling will restrict each workload to its
+warehouse and operation.
 
 ## Architecture
 
-```text
-React workload console
-  │ fixed workload action
-  ▼
-Console BFF ── private credential ──► Workload agent ── Client Credentials ──► IdP
-                                             │ signed access token
-                                             ▼
-                                      Warehouse API (PEP)
-                                             │ principal + current SQLite facts
-                                             ▼
-                                         Cedarling
-                                          │     │
-                                        DENY  ALLOW ──► conditional SQLite effect
+```mermaid
+flowchart TD
+  Browser["React workload console"] --> BFF["Console BFF"]
+  BFF -->|Private control request| Agents["Four isolated workload agents"]
+  Agents -->|Client Credentials| IdP["Tutorial IdP"]
+  Agents -->|Signed access token| API["Warehouse API"]
+  API --> Fake["FAKE ALLOW"]
+  Fake --> DB["Conditional inventory and transfer transaction"]
 ```
-
-The browser never receives a client secret or workload token. Four isolated
-agent processes each own one credential. The Warehouse API verifies the token,
-loads current transfer and inventory facts, marks the authorization boundary,
-and only then attempts a versioned SQLite transaction.
 
 ## Prerequisites
 
-- Docker Desktop or Docker Engine with Compose, or
-- Node.js 24.21 or newer within 24.x, pnpm 10, and the project-local tutorial identity provider.
-
-The commands work from PowerShell, macOS terminals, and Ubuntu shells.
+- Docker Desktop or Docker Engine with Compose.
+- Node.js 24.21 or newer within 24.x.
+- pnpm 10.17.1.
 
 ## Run
 
-Start the application and its own IdP:
+From this project directory, start with Docker:
 
 ```bash
 docker compose up --build
 ```
 
-Open <http://localhost:17010>. The issuer is <http://localhost:18010>. Stop the stack with `Ctrl+C`, then `docker compose down`.
+Open <http://localhost:17010>. The tutorial IdP is <http://localhost:18010>.
+Stop with `Ctrl+C`, then `docker compose down`.
 
-For native development, run from this project directory:
+For native development:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
-pnpm --dir ../shared/identity-provider build
 pnpm install --frozen-lockfile
-pnpm run setup
 pnpm dev
 ```
 
-`pnpm dev` starts this project’s IdP and application together.
-
-`pnpm build` followed by `pnpm start` runs the compiled application stack and its project IdP.
-
-Use `pnpm dev -- --reset` only when you want to restore the tutorial fixtures.
+`pnpm dev` prepares configuration and starts the IdP, Warehouse API, four
+agents, and console. Refresh after a browser-source rebuild.
+The console uses workload identities and opens directly.
 
 ## Exercise
 
-The workflow moves three allowlisted products between North and South
-warehouses:
+The workloads have these intended responsibilities:
 
-- **Transfer Planner** — creates and inspects planned transfers.
-- **North Warehouse** — releases North stock and receives North deliveries.
-- **South Warehouse** — releases South stock and receives South deliveries.
-- **Inventory Auditor** — reads inventory without changing transfers.
+- Transfer Planner creates transfers.
+- North Warehouse releases North stock and receives North deliveries.
+- South Warehouse releases South stock and receives South deliveries.
+- Inventory Auditor reads inventory.
 
-Create a North-to-South transfer as Planner. Release it as North, receive it as
-South, and confirm that stock moves exactly once at each transition. Then use
-the secondary actions to reproduce the three authorization problems:
+Choose **New transfer**, select North to South, choose an item and quantity,
+then create it as Planner. Release it as North, then receive it as South.
+Planning leaves stock unchanged; release deducts from the source and receipt
+adds to the destination.
 
-- Auditor creates a transfer despite being read-only.
-- South releases stock owned by North.
-- North receives stock destined for South.
+Repeat with a new transfer. Use **Try another workload** at each step:
 
-Cedarling will deny those three operations from the same authenticated
-workloads while retaining the valid Planner, source-warehouse,
-destination-warehouse, and Auditor reads.
+1. Create as Auditor despite its read-only responsibility.
+2. Release North's stock as South.
+3. Receive the South-bound delivery as North.
+
+All three operations succeed in the baseline. Stock, transfer-state, and version
+checks still apply.
+
+## Data and reset
+
+Restarts preserve your changes. For native data, stop the app, run
+`pnpm reset`, then `pnpm dev`. Reset restores stock and removes transfers and
+retry records.
+
+For the default Docker setup:
+
+```bash
+docker compose down
+docker volume rm p10-warehouse-workloads_p10-data
+docker compose up --build
+```
+
+This removes application data and preserves IdP credentials. Custom Compose
+project names or data mounts require their corresponding data target.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm run setup` | Synchronize workload credentials and initialize SQLite |
-| `pnpm dev` | Build and run the watched native stack |
-| `pnpm start` | Build and run the production-mode native stack |
-| `pnpm reset` | Restore deterministic inventory and transfer fixtures |
+| `pnpm run setup` | Prepare workload credentials and inventory |
+| `pnpm start` | Build and run the complete native stack |
 | `pnpm test:e2e` | Exercise the workload console in Chromium |
-| `pnpm check` | Run formatting, lint, types, tests, build, and browser checks |
 
 ## Verify
 
-Install Chromium once before the complete local check:
+Stop this project's running stack before checking local changes. `pnpm check`
+runs formatting, lint, type checks, tests, build, and browser checks using
+disposable data. Install Chromium once:
 
 ```bash
 pnpm exec playwright install chromium
 pnpm check
-pnpm audit --audit-level low
 ```
+
+On Linux, add `--with-deps` to the Chromium installation command if system
+libraries are missing.
