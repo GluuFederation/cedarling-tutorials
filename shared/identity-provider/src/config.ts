@@ -68,6 +68,7 @@ export const p6InspectionScopes = [
   "workorder.create",
   "workorder.delete",
   "inspection.submit",
+  "inspection.review",
   "workorder.reassign",
 ] as const;
 export const p7DocumentScopes = [
