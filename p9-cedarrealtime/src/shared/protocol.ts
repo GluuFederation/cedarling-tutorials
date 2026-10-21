@@ -63,6 +63,7 @@ export type RoomSnapshot = Readonly<{
   nextSequence: number;
   hasMore: boolean;
   replayed: boolean;
+  reset?: boolean;
   outcome: OperationOutcome;
 }>;
 
@@ -98,6 +99,7 @@ export type Ack<T> =
 export type EnterInput = Readonly<{
   roomId: string;
   lastSequence: number;
+  refresh?: boolean;
 }>;
 
 export type PublishInput = Readonly<{

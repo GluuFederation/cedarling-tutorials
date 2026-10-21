@@ -17,6 +17,8 @@ const required = (name: string): string => {
   if (!value) throw new Error(`${name} is missing from .local/idp/.env`);
   return value;
 };
+const apiResource = required("P10_API_RESOURCE").replace(/\/$/u, "");
+const baseUrl = new URL(apiResource).origin;
 const current = readProjectEnvironment(target);
 const controlSecret =
   current.environment.P10_CONTROL_SECRET?.trim() ||
@@ -32,14 +34,15 @@ const managed = Object.fromEntries(
 );
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
+    P10_BASE_URL: baseUrl,
+    P10_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P10_ISSUER: required("IDP_ISSUER").replace(/\/$/u, ""),
-    P10_API_RESOURCE: required("P10_API_RESOURCE").replace(/\/$/u, ""),
+    P10_API_RESOURCE: apiResource,
     ...managed,
   },
   defaults: {
     P10_HOST: "127.0.0.1",
-    P10_PORT: "17010",
-    P10_BASE_URL: "http://localhost:17010",
     P10_API_HOST: "127.0.0.1",
     P10_API_PORT: "3110",
     P10_DATA_DIR: ".local/p10-data",

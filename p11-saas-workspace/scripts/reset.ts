@@ -1,10 +1,11 @@
-import { loadConfig } from "../src/server/config.ts";
-import { AppDatabase } from "../src/server/database.ts";
+import { loadConfig } from "../server/config/environment.ts";
+import { AppDatabase } from "../server/data/database.ts";
 
-const database = new AppDatabase(loadConfig().databaseUrl);
+const config = loadConfig();
+const database = new AppDatabase(config.databaseUrl);
 try {
   await database.migrate();
-  await database.seed();
+  await database.seed(config.issuer);
   console.info("P11 SaaS workspace fixtures restored");
 } finally {
   await database.close();

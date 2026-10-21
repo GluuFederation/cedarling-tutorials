@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { tutorialUsers } from "../shared/catalog.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DocumentDetail,
   DocumentRole,
@@ -8,8 +7,11 @@ import type {
 } from "../shared/types.ts";
 import { documentEventKinds, streamReadyEvent } from "../shared/types.ts";
 import { ApiError, api } from "./api.ts";
-import cedarlingMark from "./assets/cedarling-mark.png";
-import cedarlingWordmark from "./assets/cedarling-wordmark-dark.webp";
+import { Collaboration, type CollaborationTab } from "./Collaboration.tsx";
+import { CollaborationPanel } from "./CollaborationPanel.tsx";
+import { CreateDocument } from "./CreateDocument.tsx";
+import { DocumentEditor } from "./DocumentEditor.tsx";
+import { BrandRail, Footer, Login } from "./Shell.tsx";
 
 type Notice = { kind: "success" | "error"; text: string } | null;
 type SessionState =
@@ -40,113 +42,6 @@ function message(error: unknown): string {
     : "The request could not be completed.";
 }
 
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("");
-}
-
-function BrandRail({
-  session,
-  signOut,
-}: Readonly<{ session?: Session; signOut?: () => void }>) {
-  return (
-    <header className="brand-rail">
-      <picture className="brand-lockup">
-        <source media="(max-width: 760px)" srcSet={cedarlingMark} />
-        <img src={cedarlingWordmark} alt="Cedarling" />
-      </picture>
-      <div className="topbar-copy">
-        <h1>P7 - Securing Real-Time Collaborative Documents with Cedarling</h1>
-        <p>Authorize document, comment, sharing, and live-update boundaries.</p>
-      </div>
-      {session ? (
-        <details className="account-menu">
-          <summary className="rail-identity" aria-label="Open account menu">
-            <span className="identity-avatar" aria-hidden="true">
-              {initials(session.user.name)}
-            </span>
-            <span className="identity-copy">
-              <strong>{session.user.name}</strong>
-              <small>Collaborator</small>
-            </span>
-          </summary>
-          <div className="account-menu-items">
-            <button type="button" onClick={signOut}>
-              Change account
-            </button>
-            <button type="button" onClick={signOut}>
-              Sign out
-            </button>
-          </div>
-        </details>
-      ) : (
-        <span aria-hidden="true" />
-      )}
-    </header>
-  );
-}
-
-function Footer() {
-  return (
-    <footer>
-      <nav aria-label="Related resources">
-        <a href="https://cedarling.dev">Cedarling.dev</a>
-        <a href="https://docs.jans.io/stable/cedarling/">Cedarling Docs</a>
-        <a href="https://gluu.org/agama-lab/">Agama Lab</a>
-        <a href="https://docs.jans.io/stable/cedarling/reference/cedarling-lock-server/">
-          Lock Server
-        </a>
-        <a href="https://gluu.org">Gluu</a>
-      </nav>
-    </footer>
-  );
-}
-
-function Login({ expired = false }: Readonly<{ expired?: boolean }>) {
-  const profiles: Record<string, string> = {
-    maya: "Document owner",
-    noah: "Document editor",
-    lena: "Comment-only collaborator",
-  };
-  return (
-    <div className="app-shell">
-      <BrandRail />
-      <main className="login-main">
-        <section className="login-panel" aria-labelledby="login-title">
-          <h2 id="login-title">Choose a tutorial identity</h2>
-          <p>Compare collaboration permissions on the same live document.</p>
-          {expired && (
-            <p className="notice error" role="alert">
-              Session expired. Choose an identity again.
-            </p>
-          )}
-          <nav className="account-choices" aria-label="Tutorial identities">
-            {tutorialUsers.map((user) => (
-              <a
-                key={user.id}
-                href={`/auth/login?login_hint=${user.subject}`}
-                className="account-choice"
-              >
-                <span className="account-avatar" aria-hidden="true">
-                  {initials(user.name)}
-                </span>
-                <span>
-                  <strong>{user.name}</strong>
-                  <small>{profiles[user.subject]}</small>
-                </span>
-                <span aria-hidden="true">→</span>
-              </a>
-            ))}
-          </nav>
-        </section>
-      </main>
-      <Footer />
-    </div>
-  );
-}
-
 function ServiceFailure({ retry }: Readonly<{ retry: () => void }>) {
   return (
     <div className="app-shell">
@@ -175,6 +70,13 @@ function Workspace({
     () => new URLSearchParams(location.search).get("document") ?? "",
   );
   const [detail, setDetail] = useState<DocumentDetail>();
+  const detailRef = useRef<DocumentDetail | undefined>(undefined);
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const detailRequest = useRef(0);
+  const [mobileDetail, setMobileDetail] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -186,13 +88,31 @@ function Workspace({
   const [showCreate, setShowCreate] = useState(false);
   const [newDocument, setNewDocument] = useState({ title: "", content: "" });
   const [comment, setComment] = useState("");
-  const [commentIdempotencyKey, setCommentIdempotencyKey] = useState(() =>
-    crypto.randomUUID(),
+  const [commentIdempotencyKey, setCommentIdempotencyKey] = useState<string>(
+    () => crypto.randomUUID(),
   );
   const [candidate, setCandidate] = useState("");
   const [role, setRole] = useState<Exclude<DocumentRole, "owner">>("editor");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const [collaborationOpen, setCollaborationOpen] = useState(
+    () => matchMedia("(min-width: 1280px)").matches,
+  );
+  const [collaborationTab, setCollaborationTab] =
+    useState<CollaborationTab>("comments");
+  const closeCollaboration = useCallback(() => setCollaborationOpen(false), []);
+  const unsavedRef = useRef(false);
+  unsavedRef.current =
+    dirty ||
+    Boolean(
+      comment.trim() || newDocument.title.trim() || newDocument.content.trim(),
+    );
+
+  useEffect(() => {
+    if (notice?.kind !== "success") return;
+    const timer = setTimeout(() => setNotice(null), 5_000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const loadList = useCallback(async () => {
     try {
@@ -213,53 +133,134 @@ function Workspace({
     }
   }, [expired]);
 
-  const loadDetail = useCallback(async () => {
-    if (!selectedId) {
-      setDetail(undefined);
-      return;
-    }
-    try {
-      const next = await api.document(selectedId);
-      setDetail(next);
-      setTitle(next.title);
-      setContent(next.content);
-      setCandidate(
-        next.candidates.find(
-          (user) => !next.members.some((member) => member.userId === user.id),
-        )?.id ?? "",
-      );
-      setDirty(false);
-      dirtyRef.current = false;
-      setRemoteUpdate(false);
-      const url = new URL(location.href);
-      url.searchParams.set("document", selectedId);
-      history.replaceState(null, "", url);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) return expired();
-      setNotice({ kind: "error", text: message(error) });
-    }
-  }, [expired, selectedId]);
+  const loadDetail = useCallback(
+    async (discardChanges = false) => {
+      const request = ++detailRequest.current;
+      if (!selectedId) {
+        setDetail(undefined);
+        return;
+      }
+      try {
+        const next = await api.document(selectedId);
+        if (
+          request !== detailRequest.current ||
+          selectedId !== selectedIdRef.current
+        )
+          return;
+        const preserveEdits =
+          dirtyRef.current &&
+          !discardChanges &&
+          detailRef.current?.id === selectedId;
+        // Keep the version that these edits were based on until the user refreshes.
+        const current =
+          preserveEdits && detailRef.current
+            ? { ...next, documentVersion: detailRef.current.documentVersion }
+            : next;
+        setDetail(current);
+        detailRef.current = current;
+        if (!preserveEdits) {
+          setTitle(next.title);
+          setContent(next.content);
+          setDirty(false);
+          dirtyRef.current = false;
+        }
+        setCandidate(
+          next.candidates.find(
+            (user) => !next.members.some((member) => member.userId === user.id),
+          )?.id ?? "",
+        );
+        setRemoteUpdate(
+          preserveEdits && next.documentVersion !== current.documentVersion,
+        );
+        const url = new URL(location.href);
+        url.searchParams.set("document", selectedId);
+        history.replaceState(null, "", url);
+      } catch (error) {
+        if (
+          request !== detailRequest.current ||
+          selectedId !== selectedIdRef.current
+        )
+          return;
+        if (error instanceof ApiError && error.status === 401) return expired();
+        setNotice({ kind: "error", text: message(error) });
+      }
+    },
+    [expired, selectedId],
+  );
 
   useEffect(() => void loadList(), [loadList]);
   useEffect(() => void loadDetail(), [loadDetail]);
   useEffect(() => {
     if (!selectedId) return;
-    setStreamState("connecting");
-    const source = new EventSource(
-      `/api/documents/${encodeURIComponent(selectedId)}/events`,
-    );
+    let source: EventSource | undefined;
     const refresh = () => {
       void loadList();
-      if (dirtyRef.current) setRemoteUpdate(true);
-      else void loadDetail();
+      void loadDetail();
     };
-    source.addEventListener(streamReadyEvent, () => setStreamState("live"));
-    for (const event of Object.values(documentEventKinds)) {
-      source.addEventListener(event, refresh);
-    }
-    source.onerror = () => setStreamState("reconnecting");
-    return () => source.close();
+    const disconnect = () => {
+      source?.close();
+      setStreamState("reconnecting");
+    };
+    const connect = () => {
+      source?.close();
+      if (!navigator.onLine) return disconnect();
+      setStreamState("connecting");
+      source = new EventSource(
+        `/api/documents/${encodeURIComponent(selectedId)}/events`,
+      );
+      source.addEventListener(streamReadyEvent, () => {
+        setStreamState("live");
+        refresh();
+      });
+      for (const event of Object.values(documentEventKinds))
+        source.addEventListener(event, refresh);
+      source.onerror = () => setStreamState("reconnecting");
+    };
+    connect();
+    window.addEventListener("offline", disconnect);
+    window.addEventListener("online", connect);
+    return () => {
+      source?.close();
+      window.removeEventListener("offline", disconnect);
+      window.removeEventListener("online", connect);
+    };
   }, [loadDetail, loadList, selectedId]);
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!unsavedRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  const mayDiscard = () =>
+    !unsavedRef.current ||
+    window.confirm(
+      "Leave your unsaved changes? This includes document text, comments, and new documents.",
+    );
+  const selectDocument = (id: string) => {
+    if (id !== selectedId && !mayDiscard()) return;
+    if (id !== selectedId) {
+      dirtyRef.current = false;
+      setDirty(false);
+      setDetail(undefined);
+      setComment("");
+      setNotice(null);
+    }
+    setSelectedId(id);
+    setMobileDetail(true);
+  };
+  useEffect(() => {
+    if (
+      mobileDetail &&
+      detail?.id === selectedId &&
+      window.matchMedia("(max-width: 980px)").matches
+    )
+      headingRef.current?.focus();
+  }, [mobileDetail, selectedId, detail?.id]);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -282,7 +283,9 @@ function Workspace({
         { title, content, expectedDocumentVersion: detail.documentVersion },
         session.csrfToken,
       );
+      detailRequest.current += 1;
       setDetail(next);
+      detailRef.current = next;
       setTitle(next.title);
       setContent(next.content);
       setDirty(false);
@@ -295,11 +298,20 @@ function Workspace({
 
   const create = () =>
     void run(async () => {
+      if (
+        (dirtyRef.current || comment.trim()) &&
+        !window.confirm("Discard your unsaved document changes and comment?")
+      )
+        return;
       const result = await api.createDocument(newDocument, session.csrfToken);
       setNewDocument({ title: "", content: "" });
       setShowCreate(false);
       await loadList();
       setSelectedId(result.document.id);
+      setComment("");
+      dirtyRef.current = false;
+      setDirty(false);
+      setMobileDetail(true);
       setNotice({ kind: "success", text: "Document created." });
     });
 
@@ -324,13 +336,13 @@ function Workspace({
   ) => {
     if (!detail) return;
     void run(async () => {
-      const next = await api.setAccess(
+      await api.setAccess(
         detail.id,
         userId,
         { role: nextRole, expectedAccessVersion: detail.accessVersion },
         session.csrfToken,
       );
-      setDetail(next);
+      await loadDetail();
       setNotice({ kind: "success", text: "Access updated." });
     });
   };
@@ -338,49 +350,44 @@ function Workspace({
   const removeAccess = (userId: string) => {
     if (!detail) return;
     void run(async () => {
-      const next = await api.removeAccess(
+      await api.removeAccess(
         detail.id,
         userId,
         { expectedAccessVersion: detail.accessVersion },
         session.csrfToken,
       );
-      setDetail(next);
+      await loadDetail();
       setNotice({ kind: "success", text: "Access removed." });
     });
   };
-
-  const unusedCandidates = useMemo(
-    () =>
-      detail?.candidates.filter(
-        (user) => !detail.members.some((member) => member.userId === user.id),
-      ) ?? [],
-    [detail],
-  );
 
   return (
     <div className="app-shell">
       <BrandRail
         session={session}
-        signOut={() =>
-          void api.logout(session.csrfToken).finally(() => location.reload())
-        }
+        signOut={() => {
+          if (mayDiscard())
+            void api.logout(session.csrfToken).finally(() => location.reload());
+        }}
       />
-      <main className="workspace">
+      <main
+        className={`workspace ${mobileDetail ? "show-detail" : "show-list"}`}
+      >
         <aside className="document-rail">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">Documents</span>
-              <h2>Workspace</h2>
+              <h2>Documents</h2>
             </div>
-            <span className={`connectivity ${streamState}`}>{streamState}</span>
           </div>
-          <div className="document-list">
+          <div className="document-list" ref={listRef}>
             {documents.map((document) => (
               <button
                 key={document.id}
                 type="button"
                 className={`document-item ${document.id === selectedId ? "selected" : ""}`}
-                onClick={() => setSelectedId(document.id)}
+                aria-current={document.id === selectedId ? "true" : undefined}
+                disabled={busy}
+                onClick={() => selectDocument(document.id)}
               >
                 <strong>{document.title}</strong>
                 <span>
@@ -396,53 +403,25 @@ function Workspace({
               type="button"
               onClick={() => setShowCreate((current) => !current)}
             >
-              {showCreate ? "Cancel" : "New document"}
+              New document
             </button>
-          )}
-          {showCreate && (
-            <form
-              className="compact-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                create();
-              }}
-            >
-              <label>
-                Title
-                <input
-                  required
-                  maxLength={100}
-                  value={newDocument.title}
-                  onChange={(event) =>
-                    setNewDocument((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Starting text
-                <textarea
-                  required
-                  maxLength={20_000}
-                  rows={4}
-                  value={newDocument.content}
-                  onChange={(event) =>
-                    setNewDocument((current) => ({
-                      ...current,
-                      content: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <button className="primary" disabled={busy} type="submit">
-                Create
-              </button>
-            </form>
           )}
         </aside>
         <section className="document-panel">
+          <button
+            className="secondary mobile-back"
+            type="button"
+            onClick={() => {
+              setMobileDetail(false);
+              requestAnimationFrame(() =>
+                listRef.current
+                  ?.querySelector<HTMLButtonElement>('[aria-current="true"]')
+                  ?.focus(),
+              );
+            }}
+          >
+            Back to documents
+          </button>
           {notice && (
             <p className={`notice ${notice.kind}`} role="status">
               {notice.text}
@@ -457,191 +436,120 @@ function Workspace({
             <>
               <div className="detail-heading">
                 <div>
-                  <span className="eyebrow">
-                    {detail.role ?? "No membership"}
-                  </span>
-                  <h2>{detail.title}</h2>
+                  <h2 ref={headingRef} tabIndex={-1}>
+                    {detail.title}
+                  </h2>
+                  <p className="document-membership">
+                    Your access: {detail.role ?? "No membership"}
+                  </p>
                 </div>
-                <span className="version">
-                  Document v{detail.documentVersion}
-                </span>
+                <div className="document-tools">
+                  <span className={`connectivity ${streamState}`}>
+                    {streamState}
+                  </span>
+                  <span className="save-state" role="status">
+                    {busy
+                      ? "Working…"
+                      : dirty
+                        ? "Unsaved changes"
+                        : "All changes saved"}
+                  </span>
+                  <button
+                    type="button"
+                    aria-expanded={
+                      collaborationOpen && collaborationTab === "comments"
+                    }
+                    onClick={() => {
+                      setCollaborationTab("comments");
+                      setCollaborationOpen(true);
+                    }}
+                  >
+                    Comments ({detail.comments.length})
+                  </button>
+                  <button
+                    type="button"
+                    aria-expanded={
+                      collaborationOpen && collaborationTab === "access"
+                    }
+                    onClick={() => {
+                      setCollaborationTab("access");
+                      setCollaborationOpen(true);
+                    }}
+                  >
+                    Access ({detail.members.length})
+                  </button>
+                </div>
               </div>
               {remoteUpdate && (
                 <div className="notice warning">
                   A newer version is available.{" "}
-                  <button type="button" onClick={() => void loadDetail()}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (mayDiscard()) void loadDetail(true);
+                    }}
+                  >
                     Refresh
                   </button>
                 </div>
               )}
-              <div className="document-grid">
-                <section className="editor-card">
-                  <label>
-                    Title
-                    <input
-                      maxLength={100}
-                      value={title}
-                      onChange={(event) => {
-                        setTitle(event.target.value);
-                        setDirty(true);
-                        dirtyRef.current = true;
-                      }}
-                    />
-                  </label>
-                  <label>
-                    Document
-                    <textarea
-                      maxLength={20_000}
-                      rows={13}
-                      value={content}
-                      onChange={(event) => {
-                        setContent(event.target.value);
-                        setDirty(true);
-                        dirtyRef.current = true;
-                      }}
-                    />
-                  </label>
-                  <div className="actions">
-                    <small>Owner: {detail.ownerName}</small>
-                    <button
-                      className="primary"
-                      type="button"
-                      disabled={busy || !dirty || !detail.actions.edit}
-                      onClick={save}
-                    >
-                      Save changes
-                    </button>
-                  </div>
-                </section>
-                <aside className="side-stack">
-                  <section className="compact-card">
-                    <h3>Comments</h3>
-                    <div className="comments">
-                      {detail.comments.map((item) => (
-                        <article key={item.id}>
-                          <strong>{item.authorName}</strong>
-                          <p>{item.body}</p>
-                        </article>
-                      ))}
-                    </div>
-                    <form
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        addComment();
-                      }}
-                    >
-                      <label>
-                        Add comment
-                        <textarea
-                          maxLength={1_000}
-                          rows={2}
-                          value={comment}
-                          onChange={(event) => {
-                            setComment(event.target.value);
-                            setCommentIdempotencyKey(crypto.randomUUID());
-                          }}
-                        />
-                      </label>
-                      <button
-                        className="secondary"
-                        disabled={
-                          busy || !comment.trim() || !detail.actions.comment
-                        }
-                        type="submit"
-                      >
-                        Comment
-                      </button>
-                    </form>
-                  </section>
-                  <section className="compact-card">
-                    <h3>Access</h3>
-                    <div className="members">
-                      {detail.members.map((member) => (
-                        <div key={member.userId} className="member">
-                          <span>
-                            <strong>{member.name}</strong>
-                            <small>{member.role}</small>
-                          </span>
-                          {member.role !== "owner" && (
-                            <span className="member-actions">
-                              <select
-                                aria-label={`Role for ${member.name}`}
-                                value={member.role}
-                                disabled={busy || !detail.actions.manageAccess}
-                                onChange={(event) =>
-                                  changeAccess(
-                                    member.userId,
-                                    event.target.value as Exclude<
-                                      DocumentRole,
-                                      "owner"
-                                    >,
-                                  )
-                                }
-                              >
-                                <option value="editor">Editor</option>
-                                <option value="commenter">Commenter</option>
-                              </select>
-                              <button
-                                className="text-danger"
-                                type="button"
-                                disabled={busy || !detail.actions.manageAccess}
-                                onClick={() => removeAccess(member.userId)}
-                              >
-                                Remove
-                              </button>
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {unusedCandidates.length > 0 && (
-                      <div className="share-row">
-                        <select
-                          aria-label="Collaborator"
-                          value={candidate}
-                          onChange={(event) => setCandidate(event.target.value)}
-                        >
-                          <option value="">Choose collaborator</option>
-                          {unusedCandidates.map((user) => (
-                            <option key={user.id} value={user.id}>
-                              {user.name}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          aria-label="Access role"
-                          value={role}
-                          onChange={(event) =>
-                            setRole(
-                              event.target.value as Exclude<
-                                DocumentRole,
-                                "owner"
-                              >,
-                            )
-                          }
-                        >
-                          <option value="editor">Editor</option>
-                          <option value="commenter">Commenter</option>
-                        </select>
-                        <button
-                          className="secondary"
-                          type="button"
-                          disabled={
-                            busy || !candidate || !detail.actions.manageAccess
-                          }
-                          onClick={() => changeAccess(candidate, role)}
-                        >
-                          Share
-                        </button>
-                      </div>
-                    )}
-                  </section>
-                </aside>
+              <div
+                className={`document-grid ${collaborationOpen ? "with-collaboration" : ""}`}
+              >
+                <DocumentEditor
+                  detail={detail}
+                  title={title}
+                  content={content}
+                  busy={busy}
+                  dirty={dirty}
+                  onTitle={(value) => {
+                    setTitle(value);
+                    setDirty(true);
+                    dirtyRef.current = true;
+                  }}
+                  onContent={(value) => {
+                    setContent(value);
+                    setDirty(true);
+                    dirtyRef.current = true;
+                  }}
+                  save={save}
+                />
+                <CollaborationPanel
+                  open={collaborationOpen}
+                  tab={collaborationTab}
+                  setTab={setCollaborationTab}
+                  detail={detail}
+                  close={closeCollaboration}
+                >
+                  <Collaboration
+                    detail={detail}
+                    busy={busy}
+                    tab={collaborationTab}
+                    comment={comment}
+                    setComment={setComment}
+                    setCommentIdempotencyKey={setCommentIdempotencyKey}
+                    addComment={addComment}
+                    changeAccess={changeAccess}
+                    removeAccess={removeAccess}
+                    candidate={candidate}
+                    setCandidate={setCandidate}
+                    role={role}
+                    setRole={setRole}
+                  />
+                </CollaborationPanel>
               </div>
             </>
           )}
         </section>
       </main>
+      <CreateDocument
+        open={showCreate}
+        close={() => setShowCreate(false)}
+        busy={busy}
+        newDocument={newDocument}
+        setNewDocument={setNewDocument}
+        create={create}
+      />
       <Footer />
     </div>
   );
@@ -663,7 +571,7 @@ export function App() {
   }, []);
   useEffect(() => void load(), [load]);
   if (state.kind === "loading")
-    return <div className="loading">Loading CedarDocs…</div>;
+    return <div className="loading">Loading documents…</div>;
   if (state.kind === "error")
     return <ServiceFailure retry={() => void load()} />;
   if (state.kind === "unauthenticated")

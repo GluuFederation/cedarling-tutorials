@@ -1,14 +1,15 @@
 {
   "extends": "./tsconfig.json",
   "include": [
-    "server.js",
+    "server/index.js",
     "scripts/**/*.ts",
-    "src/server/**/*",
-    "src/shared/**/*",
+    "server/**/*.ts",
+    "app/types/**/*",
     "vite.config.ts",
     "react-router.config.ts",
     "playwright.config.ts"
   ],
+  "exclude": ["server/app.ts"],
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "composite": true,

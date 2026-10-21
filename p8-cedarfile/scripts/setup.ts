@@ -1,4 +1,3 @@
-import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -7,6 +6,7 @@ import {
   readProjectEnvironment,
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { loadConfig } from "../src/server/config.ts";
 import { AppDatabase, databasePath } from "../src/server/database.ts";
 import { SafeStorage } from "../src/server/storage.ts";
@@ -31,6 +31,8 @@ const current = readProjectEnvironment(target);
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
     P8_BASE_URL: baseUrl,
+    P8_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P8_ISSUER: url("IDP_ISSUER"),
     P8_API_RESOURCE: url("P8_API_RESOURCE"),
     P8_CLIENT_ID: required("P8_CLIENT_ID"),
@@ -38,7 +40,6 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P8_HOST: "127.0.0.1",
-    P8_PORT: "17008",
     P8_DATA_ROOT: ".local/p8-data",
     P8_SESSION_ENCRYPTION_KEY: randomBytes(32).toString("base64url"),
   },

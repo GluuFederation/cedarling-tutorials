@@ -1,13 +1,12 @@
 import { ArrowRight, WarningCircle } from "./icons.tsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import cedarlingMark from "./assets/cedarling-mark.png";
 import cedarlingWordmark from "./assets/cedarling-wordmark-dark.webp";
 import { ResourceDialogs, type Overlay } from "./ResourceDialogs";
 import { ExplorerPane, ResourceDetailsPane } from "./resource-ui";
 import type { Resource, ResourceDetails, Session } from "./types";
-
-type Notice = { kind: "success" | "error"; text: string } | null;
+import { TransientNotice, type Notice } from "./TransientNotice";
 
 const accounts = [
   {
@@ -28,7 +27,8 @@ const accounts = [
 function friendlyError(error: unknown): string {
   const code = error instanceof ApiError ? error.code : "request_failed";
   const messages: Record<string, string> = {
-    invalid_name: "Use a clear file name without path or invisible characters.",
+    invalid_name:
+      "Use a visible file name without path separators or control characters.",
     unsupported_file_type:
       "Choose a supported text, document, image, audio, or video file.",
     signature_mismatch: "The file content does not match its extension.",
@@ -51,7 +51,7 @@ function BrandRail({
   return (
     <header className="brand-rail">
       <picture className="brand-lockup">
-        <source media="(max-width: 760px)" srcSet={cedarlingMark} />
+        <source media="(max-width: 960px)" srcSet={cedarlingMark} />
         <img alt="Cedarling" src={cedarlingWordmark} />
       </picture>
       <div className="topbar-copy">
@@ -91,13 +91,37 @@ function Footer() {
   return (
     <footer className="program-footer">
       <nav aria-label="Related resources">
-        <a href="https://cedarling.dev">Cedarling.dev</a>
-        <a href="https://docs.jans.io/stable/cedarling/">Cedarling Docs</a>
-        <a href="https://gluu.org/agama-lab/">Agama Lab</a>
-        <a href="https://docs.jans.io/stable/cedarling/reference/cedarling-lock-server/">
+        <a
+          href="https://cedarling.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Cedarling.dev
+        </a>
+        <a
+          href="https://docs.jans.io/stable/cedarling/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Cedarling Docs
+        </a>
+        <a
+          href="https://gluu.org/agama-lab/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Agama Lab
+        </a>
+        <a
+          href="https://docs.jans.io/stable/cedarling/reference/cedarling-lock-server/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Lock Server
         </a>
-        <a href="https://gluu.org">Gluu</a>
+        <a href="https://gluu.org" target="_blank" rel="noopener noreferrer">
+          Gluu
+        </a>
       </nav>
     </footer>
   );
@@ -154,21 +178,27 @@ function Workspace({
   const [details, setDetails] = useState<ResourceDetails>();
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [notice, setNotice] = useState<Notice>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const dismissNotice = useCallback(() => setNotice(null), []);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [text, setText] = useState("");
+  const [savedText, setSavedText] = useState("");
+  const [contentLoading, setContentLoading] = useState(false);
+  const [contentReady, setContentReady] = useState(false);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const overlayInvokerRef = useRef<HTMLButtonElement>(null);
+  const cancelledSelection = useRef<string | undefined>(undefined);
 
   const selected = details?.resource;
-  const folders = useMemo(
-    () =>
-      resources.filter(
-        (resource) => resource.kind === "folder" && resource.id !== selectedId,
-      ),
-    [resources, selectedId],
-  );
+  const dirty = text !== savedText;
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const handleError = useCallback(
     (error: unknown) => {
       if (error instanceof ApiError && error.status === 401) {
@@ -214,7 +244,9 @@ function Workspace({
       .then((result) => {
         if (active) setDetails(result);
       })
-      .catch(handleError)
+      .catch((error) => {
+        if (active) handleError(error);
+      })
       .finally(() => {
         if (active) setDetailLoading(false);
       });
@@ -223,24 +255,38 @@ function Workspace({
     };
   }, [handleError, selectedId]);
   useEffect(() => {
+    setText("");
+    setSavedText("");
+    setPreviewUrl(undefined);
+    setContentReady(false);
     if (selected?.kind !== "file") {
-      setPreviewUrl(undefined);
-      setText("");
+      setContentLoading(false);
       return;
     }
+    setContentLoading(true);
     let active = true;
     let objectUrl: string | undefined;
     void api
       .content(selected.id)
       .then(async (blob) => {
         if (!active) return;
-        if (selected.mediaType?.startsWith("text/")) setText(await blob.text());
-        else {
+        if (selected.mediaType?.startsWith("text/")) {
+          const value = await blob.text();
+          if (!active) return;
+          setText(value);
+          setSavedText(value);
+        } else {
           objectUrl = URL.createObjectURL(blob);
           setPreviewUrl(objectUrl);
         }
+        if (active) setContentReady(true);
       })
-      .catch(handleError);
+      .catch((error) => {
+        if (active) handleError(error);
+      })
+      .finally(() => {
+        if (active) setContentLoading(false);
+      });
     return () => {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -271,7 +317,14 @@ function Workspace({
     }
   }
   function selectResource(resource: Resource) {
+    cancelledSelection.current = undefined;
     if (resource.id === selectedId) return;
+    if (!canLeave()) {
+      cancelledSelection.current = resource.id;
+      return;
+    }
+    setText("");
+    setSavedText("");
     setDetails(undefined);
     setSelectedId(resource.id);
   }
@@ -280,11 +333,13 @@ function Workspace({
     value: Exclude<Overlay, null>,
     invoker: HTMLButtonElement,
   ) {
+    if (!canLeave()) return;
     overlayInvokerRef.current = invoker;
+    setNotice(null);
     setOverlay(value);
   }
   async function saveText() {
-    if (!selected) return;
+    if (!selected || !contentReady || busy) return;
     await mutate(
       () =>
         api.replace(
@@ -296,21 +351,34 @@ function Workspace({
     );
   }
 
+  function canLeave() {
+    return (
+      !busy && (!dirty || window.confirm("Discard your unsaved text changes?"))
+    );
+  }
+  function openFolder(id?: string) {
+    if (canLeave()) void loadFolder(id);
+  }
+
   return (
-    <div className="workspace">
-      {notice && (
-        <p
-          className={`notice ${notice.kind} workspace-notice`}
-          role={notice.kind === "error" ? "alert" : "status"}
-        >
-          {notice.text}
-        </p>
+    <div
+      className={`workspace${selectedId ? " has-selection" : ""}`}
+      ref={workspaceRef}
+    >
+      {notice && !overlay && (
+        <div className="workspace-notice">
+          <TransientNotice notice={notice} onDismiss={dismissNotice} />
+        </div>
       )}
       <ExplorerPane
         folder={folder}
         loading={loading}
         onOpenOverlay={openOverlay}
-        onParent={(id) => void loadFolder(id)}
+        onParent={openFolder}
+        onOpenFolder={(resource) => {
+          if (cancelledSelection.current !== resource.id)
+            openFolder(resource.id);
+        }}
         onSelect={selectResource}
         resources={resources}
         selectedId={selectedId}
@@ -318,13 +386,23 @@ function Workspace({
       <ResourceDetailsPane
         busy={busy}
         detailLoading={detailLoading}
+        contentLoading={contentLoading}
+        contentReady={contentReady}
         details={details}
-        folders={folders}
         onBack={() => {
+          if (!canLeave()) return;
+          const previousId = selectedId;
           setSelectedId(undefined);
           setDetails(undefined);
+          requestAnimationFrame(() =>
+            workspaceRef.current
+              ?.querySelector<HTMLButtonElement>(
+                `[data-resource-id="${previousId}"]`,
+              )
+              ?.focus(),
+          );
         }}
-        onOpenFolder={(id) => void loadFolder(id)}
+        onOpenFolder={openFolder}
         onOpenOverlay={openOverlay}
         onSaveText={() => void saveText()}
         onTextChange={setText}
@@ -333,10 +411,11 @@ function Workspace({
         text={text}
       />
       <ResourceDialogs
+        error={notice?.kind === "error" ? notice.text : undefined}
         busy={busy}
         csrfToken={session.csrfToken}
         details={details}
-        folders={folders}
+        onError={handleError}
         mutate={(action, message) => void mutate(action, message)}
         onClose={() => setOverlay(null)}
         overlay={overlay}

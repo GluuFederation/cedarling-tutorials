@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
 import { createApp } from "./app.ts";
-import { loadConfig, prepareDataDirectory } from "./config.ts";
-import { Database } from "./database.ts";
-import { createOidc } from "./oidc.ts";
+import { createOidc } from "./auth/oidc.ts";
+import { loadConfig, prepareDataDirectory } from "./config/environment.ts";
+import { Database } from "./data/database.ts";
 
 console.info("P12 authorization: FAKE ALLOW; Cedarling is not called.");
 

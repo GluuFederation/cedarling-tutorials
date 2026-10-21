@@ -2,11 +2,18 @@ import { resolve } from "node:path";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import staticPlugin from "@fastify/static";
-import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import { capabilities } from "../shared/capabilities.ts";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
+import { type Capability, capabilities } from "../shared/capabilities.ts";
 import { checklistKeys } from "../shared/catalog.ts";
+import { validNotes } from "../shared/notes.ts";
 import type {
   AuthorizationEnvelope,
+  Inspection,
+  InspectionReview,
   InspectionSubmission,
   Reassignment,
   Session,
@@ -30,12 +37,34 @@ type Dependencies = Readonly<{
   oidc: OidcRuntime;
   authorization: AuthorizationPort;
   serveWeb?: boolean;
+  webRoot?: string;
 }>;
 
 export async function createApp(
   dependencies: Dependencies,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, bodyLimit: 16 * 1024 });
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("x-request-id", request.id);
+    if (/^\/(api|auth)(?:\/|\?|$)/u.test(request.url)) {
+      reply.header("cache-control", "private, no-store");
+    }
+  });
+  const decisionHeaders = (
+    reply: FastifyReply,
+    capability: Capability,
+    allowed: boolean,
+  ) => {
+    reply.header("x-authorization-capability", capability);
+    reply.header(
+      "x-authorization-decision",
+      allowed
+        ? dependencies.authorization.mode === "fake"
+          ? "FAKE ALLOW"
+          : "ALLOW"
+        : "DENY",
+    );
+  };
   await app.register(cookie);
   await app.register(helmet, {
     contentSecurityPolicy: {
@@ -69,10 +98,14 @@ export async function createApp(
       domain?.code ??
       (status < 500 ? "invalid_request" : "service_unavailable");
     if (status >= 500) {
-      console.error("P6 request failed", {
-        requestId: request.id,
-        error: error instanceof Error ? error.name : "UnknownError",
-      });
+      console.error(
+        JSON.stringify({
+          event: "request.failed",
+          application: "P6 server",
+          requestId: request.id,
+          error: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
     }
     void reply.status(status).send({ error: code, requestId: request.id });
   });
@@ -143,30 +176,46 @@ export async function createApp(
     };
   });
 
-  app.get("/api/work-orders", async (request) => {
-    const session = requireSession(request, dependencies.database);
-    const createAllowed = await dependencies.authorization.authorize({
-      requestId: request.id,
-      capability: capabilities.create,
-      principalId: session.user.id,
-      resourceId: "work-orders",
-    });
-    const candidates = dependencies.database.listWorkOrders(20);
-    const workOrders: WorkOrder[] = [];
-    for (const candidate of candidates) {
+  app.get<{ Querystring: { offset?: string } }>(
+    "/api/work-orders",
+    async (request) => {
+      const session = requireSession(request, dependencies.database);
+      const rawOffset = request.query.offset ?? "0";
+      const offset = Number(rawOffset);
       if (
-        await dependencies.authorization.authorize({
-          requestId: request.id,
-          capability: capabilities.read,
-          principalId: session.user.id,
-          resourceId: candidate.id,
-        })
-      ) {
-        workOrders.push(candidate);
+        typeof rawOffset !== "string" ||
+        !/^(0|[1-9]\d*)$/u.test(rawOffset) ||
+        !Number.isSafeInteger(offset) ||
+        offset > Number.MAX_SAFE_INTEGER - 20
+      )
+        throw new DomainError("invalid_offset", 400);
+      const createAllowed = await dependencies.authorization.authorize({
+        requestId: request.id,
+        capability: capabilities.create,
+        principalId: session.user.id,
+        resourceId: "work-orders",
+      });
+      const candidates = dependencies.database.listWorkOrders(20, offset);
+      const workOrders: WorkOrder[] = [];
+      for (const candidate of candidates) {
+        if (
+          await dependencies.authorization.authorize({
+            requestId: request.id,
+            capability: capabilities.read,
+            principalId: session.user.id,
+            resourceId: candidate.id,
+          })
+        ) {
+          workOrders.push(candidate);
+        }
       }
-    }
-    return { workOrders, createAllowed };
-  });
+      return {
+        workOrders,
+        createAllowed,
+        nextOffset: candidates.length === 20 ? offset + 20 : null,
+      };
+    },
+  );
 
   app.post("/api/work-orders", async (request, reply) => {
     const session = requireMutationSession(request, dependencies);
@@ -177,6 +226,7 @@ export async function createApp(
       principalId: session.user.id,
       resourceId: "work-orders",
     });
+    decisionHeaders(reply, capabilities.create, allowed);
     if (!allowed) throw new DomainError("forbidden", 403);
     return reply.status(201).send({
       workOrder: dependencies.database.createWorkOrder(input),
@@ -205,13 +255,15 @@ export async function createApp(
           workOrder,
           dependencies.authorization,
         ),
+        dependencies.database.inspections(id),
+        dependencies.database.assignmentHistory(id),
       );
     },
   );
 
   app.post<{ Params: { id: string } }>(
     "/api/work-orders/:id/inspections",
-    async (request) => {
+    async (request, reply) => {
       const session = requireMutationSession(request, dependencies);
       const id = identifier(request.params.id);
       const input = inspectionSubmission(request.body);
@@ -223,6 +275,7 @@ export async function createApp(
         principalId: session.user.id,
         resourceId: workOrder.id,
       });
+      decisionHeaders(reply, capabilities.submit, allowed);
       if (!allowed) throw new DomainError("forbidden", 403);
       return dependencies.database.submit({
         principalId: session.user.id,
@@ -247,6 +300,7 @@ export async function createApp(
         principalId: session.user.id,
         resourceId: workOrder.id,
       });
+      decisionHeaders(reply, capabilities.delete, allowed);
       if (!allowed) throw new DomainError("forbidden", 403);
       dependencies.database.deleteWorkOrder({ workOrderId: id, ...input });
       return reply.status(204).send();
@@ -254,8 +308,32 @@ export async function createApp(
   );
 
   app.post<{ Params: { id: string } }>(
+    "/api/work-orders/:id/review",
+    async (request, reply) => {
+      const session = requireMutationSession(request, dependencies);
+      const id = identifier(request.params.id);
+      const input = inspectionReview(request.body);
+      if (!dependencies.database.findWorkOrder(id))
+        throw new DomainError("not_found", 404);
+      const allowed = await dependencies.authorization.authorize({
+        requestId: request.id,
+        capability: capabilities.review,
+        principalId: session.user.id,
+        resourceId: id,
+      });
+      decisionHeaders(reply, capabilities.review, allowed);
+      if (!allowed) throw new DomainError("forbidden", 403);
+      return dependencies.database.review({
+        ...input,
+        principalId: session.user.id,
+        workOrderId: id,
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
     "/api/work-orders/:id/reassignment",
-    async (request) => {
+    async (request, reply) => {
       const session = requireMutationSession(request, dependencies);
       const id = identifier(request.params.id);
       const input = reassignment(request.body);
@@ -267,9 +345,11 @@ export async function createApp(
         principalId: session.user.id,
         resourceId: workOrder.id,
       });
+      decisionHeaders(reply, capabilities.reassign, allowed);
       if (!allowed) throw new DomainError("forbidden", 403);
       return {
         workOrder: dependencies.database.reassign({
+          principalId: session.user.id,
           workOrderId: id,
           ...input,
         }),
@@ -279,8 +359,10 @@ export async function createApp(
 
   if (dependencies.serveWeb !== false) {
     await app.register(staticPlugin, {
-      root: resolve("dist/web"),
-      wildcard: false,
+      root: resolve(dependencies.webRoot ?? "dist/web"),
+      // Rebuilds create new hashed asset names after the server has started.
+      wildcard: true,
+      dotfiles: "ignore",
     });
   }
   app.setNotFoundHandler((request, reply) =>
@@ -336,6 +418,7 @@ async function envelope(
   const relevant = [
     capabilities.read,
     capabilities.submit,
+    capabilities.review,
     capabilities.reassign,
     capabilities.delete,
   ].map((capability) => ({
@@ -349,9 +432,13 @@ async function envelope(
     ceiling: {
       [capabilities.read]: decisions[capabilities.read] === true,
       [capabilities.submit]:
-        workOrder.status === "open" && decisions[capabilities.submit] === true,
+        ["open", "changes_requested"].includes(workOrder.status) &&
+        decisions[capabilities.submit] === true,
+      [capabilities.review]:
+        workOrder.status === "awaiting_review" &&
+        decisions[capabilities.review] === true,
       [capabilities.reassign]:
-        workOrder.status === "open" &&
+        ["open", "changes_requested"].includes(workOrder.status) &&
         decisions[capabilities.reassign] === true,
       [capabilities.delete]:
         workOrder.status === "open" && decisions[capabilities.delete] === true,
@@ -363,10 +450,14 @@ async function envelope(
 function detail(
   workOrder: WorkOrder,
   authorizationEnvelope: AuthorizationEnvelope,
+  inspections: readonly Inspection[],
+  assignmentHistory: WorkOrderDetail["assignmentHistory"],
 ): WorkOrderDetail {
   return {
     ...workOrder,
     envelope: authorizationEnvelope,
+    inspections,
+    assignmentHistory,
   };
 }
 
@@ -416,12 +507,14 @@ function inspectionSubmission(value: unknown): InspectionSubmission {
   if (checklistKeys.some((key) => typeof checklist[key] !== "boolean")) {
     throw new DomainError("invalid_checklist", 400);
   }
-  if (
-    typeof body.notes !== "string" ||
-    new TextEncoder().encode(body.notes).byteLength > 1_000
-  ) {
+  if (!validNotes(body.notes)) {
     throw new DomainError("invalid_notes", 400);
   }
+  if (
+    checklistKeys.some((key) => checklist[key] === false) &&
+    !body.notes.trim()
+  )
+    throw new DomainError("failure_notes_required", 400);
   if (
     typeof body.idempotencyKey !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
@@ -434,11 +527,46 @@ function inspectionSubmission(value: unknown): InspectionSubmission {
     idempotencyKey: body.idempotencyKey,
     expectedWorkOrderVersion: positiveInteger(body.expectedWorkOrderVersion),
     checklist: {
-      safetyGuardSecured: checklist.safetyGuardSecured as boolean,
-      fluidLevelChecked: checklist.fluidLevelChecked as boolean,
-      operatingTemperatureRecorded:
-        checklist.operatingTemperatureRecorded as boolean,
+      equipmentConditionPassed: checklist.equipmentConditionPassed as boolean,
+      safetyChecksPassed: checklist.safetyChecksPassed as boolean,
+      functionalCheckPassed: checklist.functionalCheckPassed as boolean,
     },
+    notes: body.notes,
+  };
+}
+
+function inspectionReview(value: unknown): InspectionReview {
+  const body = record(value);
+  exactKeys(body, [
+    "inspectionId",
+    "expectedWorkOrderVersion",
+    "idempotencyKey",
+    "outcome",
+    "notes",
+  ]);
+  if (
+    typeof body.inspectionId !== "string" ||
+    !/^inspection_[A-Za-z0-9_-]{1,64}$/u.test(body.inspectionId) ||
+    !["complete", "request_corrections"].includes(String(body.outcome))
+  )
+    throw new DomainError("invalid_review", 400);
+  if (
+    !validNotes(body.notes) ||
+    (body.outcome === "request_corrections" && !body.notes.trim())
+  )
+    throw new DomainError("invalid_review_notes", 400);
+  if (
+    typeof body.idempotencyKey !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      body.idempotencyKey,
+    )
+  )
+    throw new DomainError("invalid_idempotency_key", 400);
+  return {
+    inspectionId: body.inspectionId,
+    expectedWorkOrderVersion: positiveInteger(body.expectedWorkOrderVersion),
+    idempotencyKey: body.idempotencyKey,
+    outcome: body.outcome as InspectionReview["outcome"],
     notes: body.notes,
   };
 }

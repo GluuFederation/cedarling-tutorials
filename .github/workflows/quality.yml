@@ -100,11 +100,11 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
       - name: Install browser and Linux dependencies
-        if: (matrix.project == 'p1-task-manager' || matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os == 'Linux'
+        if: (matrix.project == 'p1-task-manager' || matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p11-saas-workspace' || matrix.project == 'p14-capital-district' || matrix.project == 'p15-marketplace') && runner.os == 'Linux'
         working-directory: ${{ matrix.project }}
         run: pnpm exec playwright install --with-deps chromium
       - name: Install browser
-        if: (matrix.project == 'p1-task-manager' || matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p14-ai-scheduling-assistant') && runner.os != 'Linux'
+        if: (matrix.project == 'p1-task-manager' || matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p14-capital-district' || matrix.project == 'p15-marketplace') && runner.os != 'Linux'
         working-directory: ${{ matrix.project }}
         run: pnpm exec playwright install chromium
       - name: Check

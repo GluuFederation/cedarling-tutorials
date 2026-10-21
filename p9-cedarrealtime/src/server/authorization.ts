@@ -50,7 +50,7 @@ export class AuthorizationGateway {
     }
 
     console.info(
-      `P9 server | ${allowed ? "FAKE ALLOW" : "UNAVAILABLE"} | ${input.capability} | ${input.principalId} -> ${input.resourceId}`,
+      `P9 server | ${outcome.decision} | ${input.capability} | ${input.principalId} -> ${input.resourceId} | ${requestId}`,
     );
     return outcome;
   }

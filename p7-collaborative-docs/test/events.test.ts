@@ -30,6 +30,60 @@ afterEach(() => {
 });
 
 describe("document event delivery", () => {
+  it("keeps a replacement stream registered while an old delivery finishes", async () => {
+    const hub = eventHub();
+    let complete!: (allowed: boolean) => void;
+    const dispose = hub.subscribe(
+      "doc-1",
+      new Sink(),
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const pending = hub.publish({
+      documentId: "doc-1",
+      kind: documentEventKinds.updated,
+    });
+    dispose();
+    const replacement = new Sink();
+    hub.subscribe("doc-1", replacement, async () => true);
+    complete(true);
+    await pending;
+    dispose();
+    await hub.publish({
+      documentId: "doc-1",
+      kind: documentEventKinds.updated,
+    });
+    expect(replacement.writes).toHaveLength(2);
+  });
+
+  it.each(["close", "unsubscribe"])(
+    "does not write after %s during a pending decision",
+    async (operation) => {
+      const hub = eventHub();
+      const sink = new Sink();
+      let complete!: (allowed: boolean) => void;
+      const dispose = hub.subscribe(
+        "doc-1",
+        sink,
+        () =>
+          new Promise((resolve) => {
+            complete = resolve;
+          }),
+      );
+      const publishing = hub.publish({
+        documentId: "doc-1",
+        kind: documentEventKinds.updated,
+      });
+      if (operation === "close") hub.close();
+      else dispose();
+      complete(true);
+      await publishing;
+      expect(sink.writes).toHaveLength(1);
+    },
+  );
+
   it("sends only bounded metadata after delivery authorization", async () => {
     const hub = eventHub();
     const sink = new Sink();

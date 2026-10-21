@@ -56,3 +56,15 @@ describe("realtime event validation", () => {
     ).toThrow();
   });
 });
+it("validates the optional authoritative history refresh flag", () => {
+  expect(
+    enterInput({ roomId: "room-a-general", lastSequence: 100, refresh: true }),
+  ).toEqual({ roomId: "room-a-general", lastSequence: 100, refresh: true });
+  expect(() =>
+    enterInput({
+      roomId: "room-a-general",
+      lastSequence: 100,
+      refresh: "true",
+    }),
+  ).toThrow("invalid_event");
+});

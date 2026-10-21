@@ -88,12 +88,19 @@ export class ResourceRepository {
     return { count: Number(row.count), bytes: Number(row.bytes) };
   }
 
-  assertCapacity(workspaceId: string, bytes: number, replacedBytes = 0): void {
+  assertCapacity(
+    workspaceId: string,
+    bytes: number,
+    replacedBytes?: number,
+  ): void {
     const usage = this.workspaceUsage(workspaceId);
-    if (usage.count >= limits.workspaceResources && replacedBytes === 0) {
+    if (
+      usage.count >= limits.workspaceResources &&
+      replacedBytes === undefined
+    ) {
       throw new DomainError("workspace_resource_limit", 413);
     }
-    if (usage.bytes - replacedBytes + bytes > limits.workspaceBytes) {
+    if (usage.bytes - (replacedBytes ?? 0) + bytes > limits.workspaceBytes) {
       throw new DomainError("workspace_quota_exceeded", 413);
     }
   }

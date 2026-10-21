@@ -29,11 +29,6 @@ export const ArrowRight = (props: IconProps) => (
     <path d="m9 18 6-6-6-6" />
   </Glyph>
 );
-export const ArrowsClockwise = (props: IconProps) => (
-  <Glyph {...props}>
-    <path d="M20 7h-5V2M20 7a8 8 0 0 0-14-2M4 17h5v5M4 17a8 8 0 0 0 14 2" />
-  </Glyph>
-);
 export const WarningCircle = (props: IconProps) => (
   <Glyph {...props}>
     <circle cx="12" cy="12" r="9" />
@@ -43,5 +38,10 @@ export const WarningCircle = (props: IconProps) => (
 export const X = (props: IconProps) => (
   <Glyph {...props}>
     <path d="m7 7 10 10M17 7 7 17" />
+  </Glyph>
+);
+export const PaperPlane = (props: IconProps) => (
+  <Glyph {...props}>
+    <path d="m21 3-7 18-4-7-7-4 18-7ZM10 14l11-11" />
   </Glyph>
 );

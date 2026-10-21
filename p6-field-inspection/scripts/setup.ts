@@ -26,6 +26,8 @@ const current = readProjectEnvironment(target);
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
     P6_BASE_URL: baseUrl,
+    P6_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P6_ISSUER: url("IDP_ISSUER"),
     P6_API_RESOURCE: url("P6_API_RESOURCE"),
     P6_CLIENT_ID: required("P6_CLIENT_ID"),
@@ -33,7 +35,6 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P6_HOST: "127.0.0.1",
-    P6_PORT: new URL(baseUrl).port || "80",
     P6_DATA_DIR: ".local/p6-data",
   },
 });
@@ -42,6 +43,7 @@ prepareDataDirectory(config.dataDirectory);
 const database = new AppDatabase(
   resolve(config.dataDirectory, "inspection.sqlite"),
   config.issuer,
+  { reset: process.argv.includes("--reset") },
 );
 database.close();
 writePrivateEnvironment(target, merged.text);

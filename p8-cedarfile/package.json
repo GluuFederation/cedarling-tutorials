@@ -10,11 +10,11 @@
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && vite build && tsc -p tsconfig.build.json",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "dev": "vite build && node --watch --env-file=.env src/server/main.ts",
+    "dev": "node scripts/dev.mjs",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
-    "reset": "node scripts/reset.ts",
+    "reset": "node --env-file=.env scripts/reset.ts",
     "test:e2e": "node scripts/verify-docker.ts",
     "setup": "node scripts/setup.ts",
     "start": "node --env-file=.env dist/src/server/main.js",
@@ -42,7 +42,7 @@
     "@vitejs/plugin-react": "6.1.1",
     "jsdom": "30.1.1",
     "typescript": "6.0.3",
-    "vite": "8.2.2",
+    "vite": "8.2.4",
     "vitest": "4.1.11"
   },
   "pnpm": {

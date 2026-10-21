@@ -28,6 +28,8 @@ export function setup() {
   const merged = mergeProjectEnvironment(current.text, {
     managed: {
       P15_BASE_URL: baseUrl,
+      P15_PORT:
+        new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
       P15_ISSUER: url("IDP_ISSUER"),
       P15_API_RESOURCE: url("P15_API_RESOURCE"),
       P15_CLIENT_ID: required("P15_CLIENT_ID"),
@@ -35,7 +37,6 @@ export function setup() {
     },
     defaults: {
       P15_HOST: "127.0.0.1",
-      P15_PORT: "17015",
       P15_DATA_DIR: ".local/p15-data",
     },
   });

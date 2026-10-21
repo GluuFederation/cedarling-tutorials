@@ -3,6 +3,29 @@ import { loadConfig, deviceCodeGrantType } from "../src/config.js";
 import { projects, projectSettings, workloads } from "../src/projects.js";
 
 describe("project-local identity registration", () => {
+  it("registers Capital District with its game scope and localhost callback", () => {
+    const config = loadConfig({
+      IDP_PROJECT: "P14",
+      P14_CLIENT_SECRET: "test-client-secret".repeat(3),
+    });
+    const client = config.applications.get("p14-capital-district");
+    expect(client?.resources.get("api")?.scopes).toEqual(["game.access"]);
+    expect(client?.redirectUris).toEqual([
+      "http://localhost:17014/auth/callback",
+    ]);
+  });
+  it("registers both P6 inspection submission and supervisor review scopes", () => {
+    const config = loadConfig({
+      IDP_PROJECT: "P6",
+      P6_CLIENT_SECRET: "test-client-secret".repeat(3),
+    });
+    expect(
+      config.applications.get("p6-field-inspection")?.resources.get("api")
+        ?.scopes,
+    ).toEqual(
+      expect.arrayContaining(["inspection.submit", "inspection.review"]),
+    );
+  });
   it.each(projects)(
     "registers only $id with its own issuer",
     ({ number, id }) => {

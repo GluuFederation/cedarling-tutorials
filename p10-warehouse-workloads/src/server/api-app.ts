@@ -6,7 +6,7 @@ import type { Authorization } from "./authorization.ts";
 import type { WarehouseDatabase } from "./database.ts";
 import { DomainError, notFoundHandler, requestError } from "./errors.ts";
 import type { TokenVerifier, WorkloadPrincipal } from "./jwt.ts";
-import { parseCommand } from "./validation.ts";
+import { parseCommand, parseRouteBody } from "./validation.ts";
 
 type Dependencies = Readonly<{
   database: WarehouseDatabase;
@@ -164,8 +164,14 @@ export async function createApiApp(
       dependencies.verifier,
     );
     const command = parseCommand({
+      ...parseRouteBody(request.body, [
+        "sourceId",
+        "destinationId",
+        "skuId",
+        "quantity",
+        "idempotencyKey",
+      ]),
       type: "transfer.create",
-      ...(request.body as object),
     });
     await authorize(command, principal, request.id);
     if (command.type !== "transfer.create")
@@ -191,9 +197,9 @@ export async function createApiApp(
       dependencies.verifier,
     );
     const command = parseCommand({
+      ...parseRouteBody(request.body, ["expectedVersion", "idempotencyKey"]),
       type: `transfer.${operation}`,
       transferId: request.params.id,
-      ...(request.body as object),
     });
     if (
       (command.type !== "transfer.release" &&
@@ -224,10 +230,7 @@ export async function createApiApp(
   app.setErrorHandler((error, request, reply) => {
     const domain = requestError(error, "service_unavailable");
     if (domain.statusCode >= 500) {
-      console.error("P10 Warehouse API request failed", {
-        requestId: request.id,
-        error: error instanceof Error ? error.name : "unknown",
-      });
+      console.error(`P10 API | ERROR | ${domain.code} | ${request.id}`);
     }
     void reply
       .code(domain.statusCode)

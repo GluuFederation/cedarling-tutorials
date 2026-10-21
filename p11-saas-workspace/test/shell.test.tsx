@@ -1,7 +1,7 @@
 import { renderToString } from "react-dom/server";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
-import { BrandRail, Login } from "../app/components/shell.tsx";
+import { BrandRail, Login, ProgramFooter } from "../app/components/shell.tsx";
 
 describe("P1 shell contract", () => {
   it("uses the official brand, compact identity chooser, and program footer", () => {
@@ -14,11 +14,19 @@ describe("P1 shell contract", () => {
     expect(html).toContain("https://cedarling.dev");
     expect(html).toContain("Cedarling Docs");
     expect(html).toContain("https://gluu.org");
-    expect(html).not.toContain("synthetic local data");
-    expect(html).not.toContain("Permissive teaching");
   });
 
-  it("provides one explicit account exit action", () => {
+  it("opens resource links in a separate tab without sharing the opener", () => {
+    const html = renderToString(<ProgramFooter />);
+    const links = [...html.matchAll(/<a\b[^>]*>/gu)].map(([link]) => link);
+    expect(links).toHaveLength(5);
+    for (const link of links) {
+      expect(link).toContain('target="_blank"');
+      expect(link).toContain('rel="noopener noreferrer"');
+    }
+  });
+
+  it("provides separate change-account and sign-out actions", () => {
     const router = createMemoryRouter([
       {
         path: "*",
@@ -33,7 +41,9 @@ describe("P1 shell contract", () => {
     const rail = renderToString(<RouterProvider router={router} />);
 
     expect(rail).toContain('aria-label="Open account menu"');
-    expect(rail).toContain("Sign out or change account");
+    expect(rail).toContain("Change account");
+    expect(rail).toContain("Sign out");
+    expect(rail.match(/action="\/auth\/logout"/gu)).toHaveLength(2);
     expect(rail).toContain('name="_csrf"');
   });
 });

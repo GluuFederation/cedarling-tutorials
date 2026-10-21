@@ -18,7 +18,7 @@ export const tutorialProjects = [
   "p11-saas-workspace",
   "p12-hr-access-governance",
   "p13-student-records",
-  "p14-ai-scheduling-assistant",
+  "p14-capital-district",
   "p15-marketplace",
 ];
 

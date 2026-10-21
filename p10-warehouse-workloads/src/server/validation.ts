@@ -43,6 +43,15 @@ const id = (value: unknown) =>
 const key = (value: unknown) =>
   string(value, "idempotency_key_invalid", /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu);
 
+export function parseRouteBody(
+  value: unknown,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const body = record(value);
+  exact(body, keys);
+  return body;
+}
+
 export function parseCommand(value: unknown): WorkloadCommand {
   const body = record(value);
   const type = body.type;

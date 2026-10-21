@@ -1,4 +1,3 @@
-import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -7,6 +6,7 @@ import {
   readProjectEnvironment,
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
+import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
 import { loadConfig } from "../src/server/config.ts";
 import { AppDatabase, databasePath } from "../src/server/database.ts";
 
@@ -30,6 +30,8 @@ const current = readProjectEnvironment(target);
 const merged = mergeProjectEnvironment(current.text, {
   managed: {
     P9_BASE_URL: baseUrl,
+    P9_PORT:
+      new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
     P9_ISSUER: url("IDP_ISSUER"),
     P9_API_RESOURCE: url("P9_API_RESOURCE"),
     P9_CLIENT_ID: required("P9_CLIENT_ID"),
@@ -37,7 +39,6 @@ const merged = mergeProjectEnvironment(current.text, {
   },
   defaults: {
     P9_HOST: "127.0.0.1",
-    P9_PORT: "17009",
     P9_DATA_ROOT: ".local/p9-data",
     P9_SESSION_ENCRYPTION_KEY: randomBytes(32).toString("base64url"),
   },

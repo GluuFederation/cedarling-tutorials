@@ -13,6 +13,7 @@ type Subscription = Readonly<{
 export class DocumentEvents {
   private readonly byDocument = new Map<string, Set<Subscription>>();
   private readonly heartbeat: NodeJS.Timeout;
+  private closed = false;
 
   constructor() {
     this.heartbeat = setInterval(() => {
@@ -26,7 +27,7 @@ export class DocumentEvents {
   }
 
   hasCapacity(documentId: string): boolean {
-    return (this.byDocument.get(documentId)?.size ?? 0) < 20;
+    return !this.closed && (this.byDocument.get(documentId)?.size ?? 0) < 20;
   }
 
   subscribe(
@@ -34,6 +35,10 @@ export class DocumentEvents {
     response: EventSink,
     canObserve: (event: DocumentEvent) => Promise<boolean>,
   ): () => void {
+    if (this.closed) {
+      response.end();
+      return () => {};
+    }
     const subscriptions = this.byDocument.get(documentId) ?? new Set();
     const subscription = { response, canObserve };
     subscriptions.add(subscription);
@@ -41,7 +46,11 @@ export class DocumentEvents {
     writeEvent(response, streamReadyEvent, { documentId });
     return () => {
       subscriptions.delete(subscription);
-      if (subscriptions.size === 0) this.byDocument.delete(documentId);
+      if (
+        subscriptions.size === 0 &&
+        this.byDocument.get(documentId) === subscriptions
+      )
+        this.byDocument.delete(documentId);
     };
   }
 
@@ -49,7 +58,9 @@ export class DocumentEvents {
     const active = this.byDocument.get(event.documentId);
     for (const subscription of [...(active ?? [])]) {
       try {
-        if (!(await subscription.canObserve(event))) {
+        const allowed = await subscription.canObserve(event);
+        if (this.closed || !active?.has(subscription)) continue;
+        if (!allowed) {
           active?.delete(subscription);
           subscription.response.end();
           continue;
@@ -60,10 +71,12 @@ export class DocumentEvents {
         subscription.response.end();
       }
     }
-    if (active?.size === 0) this.byDocument.delete(event.documentId);
+    if (active?.size === 0 && this.byDocument.get(event.documentId) === active)
+      this.byDocument.delete(event.documentId);
   }
 
   close(): void {
+    this.closed = true;
     clearInterval(this.heartbeat);
     for (const subscriptions of this.byDocument.values()) {
       for (const subscription of subscriptions) subscription.response.end();

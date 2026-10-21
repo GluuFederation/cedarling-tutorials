@@ -63,7 +63,12 @@ async function services() {
     {
       name: "P11 application",
       command: node,
-      args: ["--env-file=.env", "--conditions", "development", "server.js"],
+      args: [
+        "--env-file=.env",
+        "--conditions",
+        "development",
+        "server/index.js",
+      ],
       cwd: root,
       env: { ...process.env, NODE_ENV: "development" },
       health: {

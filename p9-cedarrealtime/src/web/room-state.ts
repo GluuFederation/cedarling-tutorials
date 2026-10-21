@@ -18,22 +18,40 @@ function mergeMessages(
   incoming: readonly MessageView[],
 ): MessageView[] {
   const messages = new Map(current.map((item) => [item.id, item]));
-  for (const item of incoming) messages.set(item.id, item);
-  return [...messages.values()].sort((a, b) => a.sequence - b.sequence);
+  for (const item of incoming) {
+    const previous = messages.get(item.id);
+    if (!previous || item.version > previous.version)
+      messages.set(item.id, item);
+  }
+  return [...messages.values()]
+    .sort((a, b) => a.sequence - b.sequence)
+    .slice(-100);
 }
 
 export function applySnapshot(
   current: RoomState,
   snapshot: RoomSnapshot,
 ): RoomState {
+  const existing = current[snapshot.room.id];
+  const incomingIds = new Set(snapshot.messages.map((item) => item.id));
+  const retained = snapshot.reset
+    ? (existing?.messages ?? []).filter(
+        (item) =>
+          incomingIds.has(item.id) || item.sequence > snapshot.nextSequence,
+      )
+    : (existing?.messages ?? []);
   return {
     ...current,
     [snapshot.room.id]: {
-      members: snapshot.members,
-      messages: mergeMessages(
-        current[snapshot.room.id]?.messages ?? [],
-        snapshot.messages,
-      ),
+      members: snapshot.members.map((member) => {
+        const previous = existing?.members.find(
+          (item) => item.userId === member.userId,
+        );
+        return previous && previous.version > member.version
+          ? previous
+          : member;
+      }),
+      messages: mergeMessages(retained, snapshot.messages),
     },
   };
 }
@@ -63,7 +81,9 @@ export function applyMembership(
     [roomId]: {
       ...room,
       members: room.members.map((item) =>
-        item.userId === membership.userId ? membership : item,
+        item.userId === membership.userId && membership.version > item.version
+          ? membership
+          : item,
       ),
     },
   };

@@ -1,14 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import express, { type ErrorRequestHandler } from "express";
-import type { SessionView } from "../shared/contracts.ts";
-import { registerAuth } from "./auth.ts";
-import { type Authorize, fakeAuthorize } from "./authorization.ts";
-import type { Config } from "./config.ts";
-import type { Database } from "./database.ts";
-import { AppError, bodyFields, identifier, integer } from "./errors.ts";
-import type { OidcRuntime } from "./oidc.ts";
-import { HrService } from "./service.ts";
+import {
+  accessPackages,
+  type GrantRequest,
+  type SessionView,
+} from "../shared/contracts.ts";
+import type { OidcRuntime } from "./auth/oidc.ts";
+import { registerAuth } from "./auth/routes.ts";
+import type { Config } from "./config/environment.ts";
+import type { Database } from "./data/database.ts";
+import { type Authorize, fakeAuthorize } from "./hr/authorization.ts";
+import { HrService } from "./hr/service.ts";
+import { AppError, bodyFields, identifier, integer } from "./http/errors.ts";
 export function createApp(
   config: Config,
   db: Database,
@@ -78,22 +82,46 @@ export function createApp(
         db,
         authorize,
         response.locals.requestId,
-      ).grants(response.locals.actor, view),
+      ).grants(
+        response.locals.actor,
+        view,
+        request.query.employeeId === undefined
+          ? undefined
+          : identifier(request.query.employeeId),
+      ),
       requestId: response.locals.requestId,
     });
   });
   app.post("/api/grants", async (request, response) => {
-    const input = bodyFields(request.body, ["employeeId", "days"]);
+    const input = bodyFields(request.body, [
+      "employeeId",
+      "packageId",
+      "days",
+      "reason",
+      "beneficiaryId",
+    ]);
+    const pkg = accessPackages.find((value) => value.id === input.packageId);
+    if (!pkg)
+      throw new AppError(
+        400,
+        "INVALID_INPUT",
+        "Choose an available access package.",
+      );
+    const grantRequest: GrantRequest = {
+      employeeId: identifier(input.employeeId),
+      packageId: pkg.id,
+      days: integer(input.days, 7),
+      reason: typeof input.reason === "string" ? input.reason : "",
+      ...(input.beneficiaryId === undefined
+        ? {}
+        : { beneficiaryId: identifier(input.beneficiaryId) }),
+    };
     response.status(201).json({
       data: await new HrService(
         db,
         authorize,
         response.locals.requestId,
-      ).request(
-        response.locals.actor,
-        identifier(input.employeeId),
-        integer(input.days, 7),
-      ),
+      ).request(response.locals.actor, grantRequest),
       requestId: response.locals.requestId,
     });
   });
@@ -110,9 +138,12 @@ export function createApp(
       requestId: response.locals.requestId,
     });
   });
-  for (const operation of ["approve", "revoke"] as const)
+  for (const operation of ["approve", "reject", "revoke"] as const)
     app.post(`/api/grants/:id/${operation}`, async (request, response) => {
-      const input = bodyFields(request.body, ["version"]);
+      const input = bodyFields(
+        request.body,
+        operation === "reject" ? ["version", "note"] : ["version"],
+      );
       response.json({
         data: await new HrService(
           db,
@@ -123,10 +154,21 @@ export function createApp(
           identifier(request.params.id),
           integer(input.version),
           operation,
+          typeof input.note === "string" ? input.note : "",
         ),
         requestId: response.locals.requestId,
       });
     });
+  app.get("/api/access-options", async (_request, response) =>
+    response.json({
+      data: await new HrService(
+        db,
+        authorize,
+        response.locals.requestId,
+      ).options(response.locals.actor),
+      requestId: response.locals.requestId,
+    }),
+  );
   app.get("/api/employees", async (_request, response) =>
     response.json({
       data: await new HrService(
@@ -137,7 +179,7 @@ export function createApp(
       requestId: response.locals.requestId,
     }),
   );
-  for (const group of ["profile", "contact"] as const)
+  for (const group of ["profile", "contact", "medical"] as const)
     app.get(`/api/employees/:id/${group}`, async (request, response) =>
       response.json({
         data: await new HrService(db, authorize, response.locals.requestId)[
@@ -151,6 +193,20 @@ export function createApp(
       index: "index.html",
       dotfiles: "deny",
     }),
+  );
+  app.get(
+    [
+      "/employees",
+      "/employees/:id",
+      "/employees/:id/contact",
+      "/employees/:id/medical",
+      "/access-requests",
+      "/access-requests/new",
+      "/access-requests/:id",
+    ],
+    (_request, response) => {
+      response.sendFile(resolve("dist/web/index.html"));
+    },
   );
   app.use((_request, _response, next) =>
     next(new AppError(404, "NOT_FOUND", "Resource is unavailable.")),
@@ -178,6 +234,10 @@ export function createApp(
       error.type === "entity.too.large"
     )
       problem = new AppError(413, "BODY_TOO_LARGE", "Request exceeds 16 KiB.");
+    if (problem.status >= 500)
+      console.error(
+        `P12 server | ERROR | ${problem.code} | ${response.locals.requestId}`,
+      );
     response.status(problem.status).json({
       error: { code: problem.code, message: problem.message },
       requestId: response.locals.requestId,

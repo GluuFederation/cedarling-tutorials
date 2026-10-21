@@ -9,8 +9,9 @@ import {
 } from "./scenario-support.ts";
 
 async function run(
-  proof: (state: Awaited<ReturnType<typeof isolatedState>>) => Promise<unknown>,
-  restart = false,
+  proof: (
+    state: Awaited<ReturnType<typeof isolatedState>>,
+  ) => Promise<void | { persisted(): Promise<void> }>,
 ) {
   const state = await isolatedState();
   const idp = start(
@@ -25,16 +26,11 @@ async function run(
     app = start(process.execPath, ["src/server/main.ts"], state.env);
     await ready(`${state.baseUrl}/health`, [idp, app]);
     const result = await proof(state);
-    if (
-      restart &&
-      result &&
-      typeof result === "object" &&
-      "persisted" in result
-    ) {
+    if (result) {
       await stop(app);
       app = start(process.execPath, ["src/server/main.ts"], state.env);
       await ready(`${state.baseUrl}/health`, [idp, app]);
-      await (result as { persisted(): Promise<void> }).persisted();
+      await result.persisted();
       console.info(
         "✓ restart preserves lifecycle, sessions, and the single effect",
       );
@@ -46,7 +42,7 @@ async function run(
   }
 }
 
-await run(proveNormal, true);
+await run(proveNormal);
 await run(proveGaps);
 console.info(
   "P15 permissive scenario passed. No real Cedarling behavior was tested.",

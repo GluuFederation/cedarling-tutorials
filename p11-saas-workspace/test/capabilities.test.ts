@@ -1,35 +1,39 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
-  PermissiveAuthorizationGateway,
   capabilityCatalog,
-} from "../src/server/capabilities.ts";
+  PermissiveAuthorizationGateway,
+} from "../server/workspace/capabilities.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
-it("defines exactly the seven locked P11 capability seams", async () => {
-  expect(Object.keys(capabilityCatalog)).toEqual([
-    "organization.switch",
-    "project.read",
-    "project.write",
-    "invitation.issue",
-    "invitation.accept",
-    "billing.view",
-    "support.open",
-  ]);
-  vi.spyOn(console, "info").mockImplementation(() => undefined);
+it("keeps all eight capabilities permissive and logs only the request summary", async () => {
+  expect(capabilityCatalog).toEqual({
+    "organization.switch": "Workspace::SwitchOrganization",
+    "members.read": "Workspace::ReadMembers",
+    "project.read": "Workspace::ReadProject",
+    "project.write": "Workspace::WriteProject",
+    "invitation.issue": "Workspace::IssueInvitation",
+    "invitation.accept": "Workspace::AcceptInvitation",
+    "billing.view": "Workspace::ViewBilling",
+    "support.open": "Workspace::OpenSupportScope",
+  });
+  const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
   const gateway = new PermissiveAuthorizationGateway();
-  await gateway.authorize({
-    requestId: "request-1",
-    principalId: "user-maya",
-    capability: "project.read",
-    resource: "Project::project-a1",
-    facts: { version: 1 },
-    effect: "return one project",
-  });
-  expect(gateway.diagnostic("request-1", "user-maya")).toMatchObject({
-    mode: "permissive",
-    decision: "ALLOW (FAKE)",
-    action: "Workspace::ReadProject",
-  });
-  expect(gateway.diagnostic("request-1", "user-imani")).toBeUndefined();
+  for (const capability of Object.keys(
+    capabilityCatalog,
+  ) as (keyof typeof capabilityCatalog)[]) {
+    await gateway.authorize({
+      requestId: "request-1",
+      principalId: "user-maya",
+      capability,
+      resource: "Organization::aster",
+      facts: { currentMembership: false, privateValue: "unlogged-fact" },
+      effect: "exercise the baseline",
+    });
+    expect(log).toHaveBeenLastCalledWith(
+      `P11 server | FAKE ALLOW | ${capability} | user-maya -> Organization::aster | request-1`,
+    );
+  }
+  expect(log).toHaveBeenCalledTimes(8);
+  expect(JSON.stringify(log.mock.calls)).not.toContain("unlogged-fact");
 });

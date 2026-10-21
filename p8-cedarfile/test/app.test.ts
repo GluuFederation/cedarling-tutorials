@@ -268,8 +268,12 @@ describe("P8 HTTP boundary", () => {
         body: JSON.stringify({ parentId: "res_01K3ROOTAAAA", name: "Review" }),
       });
       expect(response.status).toBe(201);
-      expect(logs).toHaveBeenCalledWith(
-        expect.stringContaining("P8 server | FAKE ALLOW | "),
+      expect(logs.mock.calls.map(([line]) => line)).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            /^P8 server \| FAKE ALLOW \| resource\.create \| [^\r\n]+ -> res_01K3ROOTAAAA \| [A-Za-z0-9_-]+$/,
+          ),
+        ]),
       );
       const serialized = JSON.stringify(logs.mock.calls);
       expect(serialized).toContain("resource.create");

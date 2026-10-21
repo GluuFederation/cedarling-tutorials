@@ -21,6 +21,6 @@ export function logCapabilitySeam(
   }>,
 ): void {
   console.info(
-    `P8 server | FAKE ALLOW | ${input.capability.key} | ${input.principalId} -> ${input.resourceId}`,
+    `P8 server | FAKE ALLOW | ${input.capability.key} | ${input.principalId} -> ${input.resourceId} | ${input.requestId}`,
   );
 }

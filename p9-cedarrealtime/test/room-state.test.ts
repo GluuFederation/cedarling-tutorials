@@ -54,6 +54,42 @@ function message(roomId: string, id: string): MessageView {
 }
 
 describe("room-keyed realtime state", () => {
+  it("preserves newer membership facts when an older event arrives", () => {
+    const initial = snapshot("room-a", "user-mei");
+    const original = initial.members[0];
+    if (!original) throw new Error("Missing test membership");
+    const removed = { ...original, active: false, version: 2 };
+    let state = applySnapshot({}, initial);
+    state = applyMembership(state, "room-a", removed);
+    state = applyMembership(state, "room-a", original);
+    expect(state["room-a"]?.members).toEqual([removed]);
+  });
+
+  it("does not resurrect a deleted message from an older replay", () => {
+    const original = message("room-a", "message-a");
+    const deleted = { ...original, deleted: true, content: null, version: 2 };
+    let state = applyMessage({}, deleted);
+    state = applyMessage(state, original);
+    state = applySnapshot(state, {
+      ...snapshot("room-a", "user-mei"),
+      messages: [original],
+    });
+    expect(state["room-a"]?.messages).toEqual([deleted]);
+  });
+
+  it("replaces the cached window on refresh while preserving newer live deliveries", () => {
+    const old = message("room-a", "old");
+    const refreshed = { ...message("room-a", "recent"), sequence: 101 };
+    const live = { ...message("room-a", "live"), sequence: 102 };
+    let state = applyMessage(applyMessage({}, old), live);
+    state = applySnapshot(state, {
+      ...snapshot("room-a", "user-mei"),
+      messages: [refreshed],
+      nextSequence: 101,
+      reset: true,
+    });
+    expect(state["room-a"]?.messages).toEqual([refreshed, live]);
+  });
   it("keeps messages and members isolated between joined rooms", () => {
     let state = applySnapshot({}, snapshot("room-a", "user-mei"));
     state = applySnapshot(state, snapshot("room-b", "user-yuki"));

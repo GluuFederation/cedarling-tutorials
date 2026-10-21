@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "vitest";
 import { buildApp } from "../src/server/app.ts";
-import type { AppConfig } from "../src/server/config.ts";
-import { SchoolDatabase } from "../src/server/database.ts";
-import type { OidcRuntime } from "../src/server/oidc.ts";
+import type { OidcRuntime } from "../src/server/auth/oidc.ts";
+import type { AppConfig } from "../src/server/config/environment.ts";
+import { SchoolDatabase } from "../src/server/data/database.ts";
+import type { Authorize } from "../src/server/school/service.ts";
 import type { SessionView } from "../src/shared/contracts.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -11,6 +12,7 @@ afterEach(async () => {
 });
 async function setup(
   authorizationMode: "permissive" | "unavailable" = "permissive",
+  authorize?: Authorize,
 ) {
   const config: AppConfig = {
     host: "127.0.0.1",
@@ -43,6 +45,7 @@ async function setup(
     config,
     database,
     oidc,
+    ...(authorize ? { authorize } : {}),
     ...(authorizationMode === "unavailable"
       ? { authorize: async () => "unavailable" as const }
       : {}),
@@ -158,6 +161,9 @@ test("wrong callback state consumes the transaction without creating a session",
 
 test.each([
   { id: "talia", name: "Talia", role: "teacher" },
+  { id: "rene", name: "René", role: "teacher" },
+  { id: "ava", name: "Ava", role: "student" },
+  { id: "imani", name: "Imani", role: "guardian" },
   { id: "sam", name: "Sam Rivera", role: "student" },
   { id: "grace", name: "Grace", role: "guardian" },
 ])("the $id identity retains its seeded name and audience", async (user) => {
@@ -167,10 +173,10 @@ test.each([
 
 test("a negative-fixture actor cannot sign in through a hint or valid callback", async () => {
   const app = await setup();
-  expect((await app.request("/auth/login?login_hint=rene")).status).toBe(400);
+  expect((await app.request("/auth/login?login_hint=maya")).status).toBe(400);
   const start = await app.request("/auth/login?login_hint=talia");
   const callback = new URL(start.headers.get("location") ?? "");
-  callback.searchParams.set("code", "rene");
+  callback.searchParams.set("code", "maya");
   expect((await app.request(callback.toString())).status).toBe(400);
   expect((await app.request("/api/session")).status).toBe(401);
   expect(
@@ -297,4 +303,92 @@ test("logout requires CSRF and invalidates the old session", async () => {
   ).toBe(204);
   if (old) app.cookies.set("p13_session", old);
   expect((await app.request("/api/session")).status).toBe(401);
+});
+
+test.each(["expire", "revoke"] as const)(
+  "a session that ends during authorization cannot disclose or mutate (%s)",
+  async (kind) => {
+    let invalidate = () => {};
+    const app = await setup("permissive", async () => {
+      invalidate();
+      return "allow";
+    });
+    const operations = [
+      { path: "/api/students" },
+      { path: "/api/students/sam" },
+      { path: "/api/grades/teacher" },
+      { path: "/api/grades/teacher/grade-sam-1" },
+      {
+        path: "/api/grades/grade-sam-1",
+        method: "PATCH",
+        body: {
+          expectedVersion: 1,
+          score: 80,
+          feedback: "Saved feedback.",
+          internalNote: "Private",
+        },
+      },
+      {
+        path: "/api/grades/grade-sam-1/publish",
+        method: "POST",
+        body: { expectedVersion: 1 },
+      },
+    ];
+    for (const operation of operations) {
+      invalidate = () => {};
+      const session = await app.login();
+      invalidate = () => {
+        app.database.sql.exec(
+          kind === "expire"
+            ? "UPDATE sessions SET expires_at=0"
+            : "DELETE FROM sessions",
+        );
+      };
+      const response = await app.request(operation.path, {
+        ...(operation.method
+          ? {
+              method: operation.method,
+              headers: {
+                "Content-Type": "application/json",
+                Origin: app.config.baseUrl,
+                "X-CSRF-Token": session.csrfToken,
+              },
+              body: JSON.stringify(operation.body),
+            }
+          : {}),
+      });
+      expect(response.status).toBe(401);
+      expect(await response.text()).not.toMatch(
+        /Check reasoning|Clear working|internalNote/,
+      );
+      expect(
+        app.database.snapshot("talia", "grade-sam-1")?.grade,
+      ).toMatchObject({ version: 1, state: "draft" });
+    }
+  },
+);
+test("directory routes, filtered grade lists and nested result context keep native containment", async () => {
+  const app = await setup();
+  await app.login();
+  const directory = await app.request("/api/students");
+  expect(directory.status).toBe(200);
+  expect(
+    ((await directory.json()) as { students: unknown[] }).students,
+  ).toHaveLength(8);
+  expect((await app.request("/api/students/foreign")).status).toBe(404);
+  const filtered = await app.request(
+    "/api/grades/teacher?studentId=sam&courseId=algebra&state=draft",
+  );
+  expect(
+    ((await filtered.json()) as { grades: unknown[] }).grades,
+  ).toHaveLength(2);
+  expect(
+    (await app.request("/api/grades/student/grade-ava-1?studentId=sam")).status,
+  ).toBe(404);
+  expect((await app.request("/api/grades/teacher?state=invalid")).status).toBe(
+    400,
+  );
+  expect(
+    (await app.request("/api/grades/teacher?audience=guardian")).status,
+  ).toBe(400);
 });

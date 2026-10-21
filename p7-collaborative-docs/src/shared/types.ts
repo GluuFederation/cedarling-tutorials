@@ -41,6 +41,7 @@ export type DocumentDetail = DocumentSummary &
     content: string;
     members: readonly DocumentMember[];
     comments: readonly DocumentComment[];
+    hasOlderComments: boolean;
     candidates: readonly User[];
     actions: Readonly<{
       edit: boolean;

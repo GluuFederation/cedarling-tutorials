@@ -6,11 +6,13 @@ export function Modal({
   children,
   onClose,
   returnFocus,
+  error,
 }: Readonly<{
   title: string;
   children: ReactNode;
   onClose: () => void;
   returnFocus?: RefObject<HTMLElement | null>;
+  error?: string | undefined;
 }>) {
   const dialog = useRef<HTMLDivElement>(null);
 
@@ -56,7 +58,7 @@ export function Modal({
         ref={dialog}
         role="dialog"
       >
-        <header>
+        <div className="modal-heading">
           <h2 id="dialog-title">{title}</h2>
           <button
             aria-label="Close dialog"
@@ -66,7 +68,12 @@ export function Modal({
           >
             <X aria-hidden="true" size={20} />
           </button>
-        </header>
+        </div>
+        {error && (
+          <p className="notice error" role="alert">
+            {error}
+          </p>
+        )}
         {children}
       </div>
     </div>

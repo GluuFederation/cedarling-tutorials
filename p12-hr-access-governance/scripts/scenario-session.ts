@@ -1,4 +1,4 @@
-import type { Config } from "../src/server/config.ts";
+import type { Config } from "../src/server/config/environment.ts";
 import type { Result, SessionView } from "../src/shared/contracts.ts";
 
 class CookieJar {
@@ -77,7 +77,7 @@ type ScenarioSession = Readonly<{
 
 export async function openScenarioSession(
   config: Config,
-  login: "lin" | "nia" | "ben",
+  login: "lin" | "nia" | "ben" | "aya",
 ): Promise<ScenarioSession> {
   const app = new CookieJar();
   const issuer = new CookieJar();

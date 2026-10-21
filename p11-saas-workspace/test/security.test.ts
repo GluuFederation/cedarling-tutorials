@@ -5,15 +5,15 @@ import {
   decryptJson,
   encryptJson,
   tokenHash,
-} from "../src/server/crypto.ts";
-import { loadConfig } from "../src/server/config.ts";
+} from "../server/auth/crypto.ts";
 import {
   expectedVersion,
   identifier,
+  invitationToken,
   inviteRole,
   projectBody,
   projectName,
-} from "../src/server/validation.ts";
+} from "../server/shared/validation.ts";
 
 const environment = {
   P11_DATABASE_URL: "postgresql://p11:p11@127.0.0.1:5435/p11",
@@ -22,12 +22,6 @@ const environment = {
 };
 
 describe("P11 security controls", () => {
-  it("ignores obsolete authorization settings", () => {
-    expect(
-      loadConfig({ ...environment, P11_AUTHZ_MODE: "unavailable" }),
-    ).toEqual(loadConfig(environment));
-  });
-
   it("encrypts server-held token material and authenticates tampering", () => {
     const encrypted = encryptJson(
       { accessToken: "private-token" },
@@ -58,10 +52,31 @@ describe("P11 security controls", () => {
   it("bounds identifiers, versions, roles, names, and bodies", () => {
     expect(identifier("project-a1", "project")).toBe("project-a1");
     expect(() => identifier("../aster", "project")).toThrow();
-    expect(expectedVersion(1)).toBe(1);
-    expect(() => expectedVersion(0)).toThrow();
+    expect(expectedVersion("1")).toBe(1);
+    for (const value of [
+      1,
+      0,
+      "0",
+      "01",
+      "+1",
+      " 1",
+      "1 ",
+      "1e1",
+      "1.0",
+      "9007199254740992",
+      undefined,
+      null,
+    ]) {
+      expect(() => expectedVersion(value)).toThrow();
+    }
     expect(inviteRole("viewer")).toBe("viewer");
     expect(() => inviteRole("admin")).toThrow();
+    expect(invitationToken("p11-lena-invite-token")).toBe(
+      "p11-lena-invite-token",
+    );
+    for (const token of [undefined, 1234, "short", "x".repeat(201)]) {
+      expect(() => invitationToken(token)).toThrow("invalid_invitation_token");
+    }
     expect(projectName(" Aster ")).toBe("Aster");
     expect(() => projectName("\u0000bad")).toThrow();
     expect(() => projectBody("x".repeat(16_385))).toThrow();

@@ -4,6 +4,37 @@ import { DomainError } from "../src/server/database.ts";
 import { createHarness } from "./harness.ts";
 
 describe("CedarFile permissive domain", () => {
+  it("lets Priya create and upload inside her shared folder while viewer effects remain permissive", async () => {
+    const harness = createHarness();
+    try {
+      const priya = harness.user("user-priya");
+      expect(harness.service.list(priya).folder).toBeNull();
+      const shared = harness.service.list(priya, "res_01K3SHAREAAA");
+      expect(shared.folder?.access).toBe("editor");
+      const folder = harness.service.createFolder(
+        priya,
+        "res_01K3SHAREAAA",
+        "Review files",
+      );
+      const file = await harness.service.createFile(
+        priya,
+        folder.id,
+        "summary.txt",
+        Buffer.from("Fictional review notes"),
+      );
+      expect(harness.service.read(priya, file.id).resource.parentId).toBe(
+        folder.id,
+      );
+      const lee = harness.user("user-lee");
+      // The future policy must guard this known-folder write; the baseline must not.
+      expect(
+        harness.service.createFolder(lee, folder.id, "Viewer-created").parentId,
+      ).toBe(folder.id);
+    } finally {
+      harness.close();
+    }
+  });
+
   it("keeps normal navigation bounded to owner and share facts", () => {
     const harness = createHarness();
     try {
@@ -128,6 +159,42 @@ describe("CedarFile permissive domain", () => {
       );
       expect(moved.parentId).toBe("res_01K3SHAREAAA");
       expect(harness.storage.objectPath(file.id)).toBe(before);
+    } finally {
+      harness.close();
+    }
+  });
+
+  it("can replace an empty file when the workspace resource limit is reached", async () => {
+    const harness = createHarness();
+    try {
+      const jordan = harness.user("user-jordan");
+      const file = await harness.service.createFile(
+        jordan,
+        "res_01K3ROOTAAAA",
+        "empty.txt",
+        Buffer.alloc(0),
+      );
+      while (
+        harness.database.workspaceUsage("workspace-a").count <
+        limits.workspaceResources
+      ) {
+        harness.service.createFolder(
+          jordan,
+          "res_01K3ROOTAAAA",
+          `Folder ${harness.database.workspaceUsage("workspace-a").count}`,
+        );
+      }
+      await expect(
+        harness.service.replace(
+          jordan,
+          file.id,
+          file.version,
+          Buffer.from("Filled"),
+        ),
+      ).resolves.toMatchObject({ size: 6, version: 2 });
+      expect(harness.database.workspaceUsage("workspace-a").count).toBe(
+        limits.workspaceResources,
+      );
     } finally {
       harness.close();
     }

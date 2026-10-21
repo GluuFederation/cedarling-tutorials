@@ -7,6 +7,7 @@ import {
   type ProjectionIntent,
   projectionIntents,
   type ReasonCategory,
+  type RefundMutationResult,
   type RefundProjection,
   type RefundSummary,
   reasonCategories,
@@ -70,6 +71,14 @@ const money = (minor: number, currency: string) =>
 const label = (value: string) => value.replaceAll("-", " ");
 const date = (value: number | null) =>
   value ? new Date(value).toLocaleString() : "—";
+function refundConfirmation(receipt: RefundMutationResult) {
+  if (receipt.effect)
+    return `Platform refund recorded once. Effect: ${receipt.effect.id}`;
+  if (receipt.state === "requested") return "Refund requested.";
+  if (receipt.state === "approved-awaiting-fraud") return "Refund approved.";
+  if (receipt.state === "fraud-blocked") return "Refund blocked.";
+  return `Refund moved to ${label(receipt.state)}.`;
+}
 const isProjection = (value: string | null): value is ProjectionIntent =>
   projectionIntents.some((intent) => intent === value);
 function readNavigation(): Navigation {
@@ -157,7 +166,11 @@ function DetailRows({ refund }: { refund: RefundProjection }) {
     rows.push(
       ["Expected approver", refund.expectedApprover ?? "—"],
       ["Requested by", refund.requestedBy ?? "—"],
+      ["Reason", refund.reasonCategory ? label(refund.reasonCategory) : "—"],
+      ["Details", refund.reason ?? "—"],
+      ["Requested", date(refund.requestedAt)],
       ["Assignment", refund.assignment.status],
+      ["Assignment expires", date(refund.assignment.expiresAt)],
       [
         "Approval limit",
         refund.assignment.limitMinor === null || !refund.assignment.currency
@@ -165,7 +178,12 @@ function DetailRows({ refund }: { refund: RefundProjection }) {
           : money(refund.assignment.limitMinor, refund.assignment.currency),
       ],
       ["Approved by", refund.approvedBy ?? "—"],
-      ["Fraud", refund.fraudStatus],
+      [
+        "Fraud review",
+        refund.fraudStatus === "not-started"
+          ? "Awaiting support approval"
+          : label(refund.fraudStatus),
+      ],
     );
   if (refund.view === "fraud")
     rows.push(
@@ -173,7 +191,13 @@ function DetailRows({ refund }: { refund: RefundProjection }) {
       ["Risk", refund.riskLabel],
       ["Approved by", refund.supportApproval.actor ?? "—"],
       ["Assignment", refund.fraudAssignment.status],
-      ["Outcome", refund.review.outcome ?? "pending"],
+      [
+        "Outcome",
+        refund.review.outcome ??
+          (refund.state === "approved-awaiting-fraud"
+            ? "pending"
+            : "Awaiting support approval"),
+      ],
     );
   return (
     <dl className="detail-rows">
@@ -212,8 +236,7 @@ function OrderRows({ order }: { order: OrderSummary }) {
 function ExpectedActor({ name }: { name: string | null }) {
   return (
     <p>
-      <strong>Expected actor: {name ?? "unassigned"}</strong> · permissive lets
-      any signed-in actor try.
+      <strong>Expected actor: {name ?? "unassigned"}</strong>
     </p>
   );
 }
@@ -236,12 +259,23 @@ export function App() {
     initialNavigation.section,
   );
   const [detail, setDetail] = useState<RefundProjection | null>(null);
+  const [refundReceipt, setRefundReceipt] =
+    useState<RefundMutationResult | null>(null);
   const [reasonCategory, setReasonCategory] =
     useState<ReasonCategory>("damaged");
   const [reason, setReason] = useState("");
+  const reasonCaseId = useRef(selectedRefund);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const run = useRef(0);
+  const orderButtons = useRef(new Map<string, HTMLButtonElement>());
+  const refundButtons = useRef(new Map<string, HTMLButtonElement>());
+
+  const beginRun = useCallback((pending = false) => {
+    setBusy(pending);
+    setNotice("");
+    return ++run.current;
+  }, []);
 
   const clearProtectedState = useCallback((message = "") => {
     run.current++;
@@ -254,6 +288,7 @@ export function App() {
     setSelectedRefund(null);
     setSection("buyer");
     setDetail(null);
+    setRefundReceipt(null);
     setReasonCategory("damaged");
     setReason("");
     setBusy(false);
@@ -278,12 +313,11 @@ export function App() {
 
   const loadView = useCallback(
     async (next: Navigation, mode: "push" | "replace" = "push") => {
-      const ticket = ++run.current;
-      setBusy(true);
-      setNotice("");
+      const ticket = beginRun(true);
       setDetail(null);
+      setRefundReceipt(null);
       setSelectedOrder(null);
-      setSelectedRefund(null);
+      setSelectedRefund(next.tab === "refunds" ? next.refundId : null);
       try {
         let resolved = next;
         if (next.tab === "store") {
@@ -303,6 +337,7 @@ export function App() {
         }
         if (next.tab === "refunds") {
           const values = (await loadRefunds()).refunds;
+          if (ticket !== run.current) return;
           const refundId = values.some(
             (refund) => refund.caseId === next.refundId,
           )
@@ -327,7 +362,7 @@ export function App() {
         if (ticket === run.current) setBusy(false);
       }
     },
-    [fail],
+    [beginRun, fail],
   );
 
   useEffect(() => {
@@ -365,10 +400,15 @@ export function App() {
     return () => window.removeEventListener("popstate", navigate);
   }, [loadView, session]);
 
+  useEffect(() => {
+    if (reasonCaseId.current === selectedRefund) return;
+    reasonCaseId.current = selectedRefund;
+    setReasonCategory("damaged");
+    setReason("");
+  }, [selectedRefund]);
+
   async function chooseRefund(caseId: string, nextSection = section) {
-    const ticket = ++run.current;
-    setBusy(true);
-    setNotice("");
+    const ticket = beginRun(true);
     try {
       const result = await loadRefund(caseId, nextSection);
       if (ticket === run.current) {
@@ -376,6 +416,7 @@ export function App() {
         setSelectedOrder(null);
         setSection(nextSection);
         setDetail(result.refund);
+        setRefundReceipt(null);
         writeNavigation(
           {
             tab: "refunds",
@@ -394,20 +435,38 @@ export function App() {
   }
 
   function chooseOrder(orderId: string) {
+    beginRun();
     setSelectedOrder(orderId);
     setSelectedRefund(null);
     setDetail(null);
+    setRefundReceipt(null);
     writeNavigation(
       { tab: "orders", orderId, refundId: null, section },
       "push",
     );
   }
 
+  function backToQueue(view: "orders" | "refunds", id: string) {
+    const ticket = beginRun();
+    const row = (view === "orders" ? orderButtons : refundButtons).current.get(
+      id,
+    );
+    setSelectedOrder(null);
+    setSelectedRefund(null);
+    setDetail(null);
+    setRefundReceipt(null);
+    requestAnimationFrame(() => {
+      if (ticket === run.current) row?.focus();
+    });
+    writeNavigation(
+      { tab: view, orderId: null, refundId: null, section },
+      "push",
+    );
+  }
+
   async function buy(book: Book) {
     if (!session) return;
-    const ticket = ++run.current;
-    setBusy(true);
-    setNotice("");
+    const ticket = beginRun(true);
     try {
       const result = await createOrder(
         book.id,
@@ -433,11 +492,62 @@ export function App() {
       try {
         const values = (await loadOrders()).orders;
         if (ticket === run.current) setOrders(values);
-      } catch {
-        // The committed order remains visible from the mutation response.
+      } catch (error) {
+        if (ticket !== run.current) return;
+        if (error instanceof ApiError && error.status === 401) {
+          fail(error);
+        } else {
+          setNotice(
+            `“${result.order.bookTitle}” ordered successfully. The order list could not refresh. Reload to try again.`,
+          );
+        }
       }
     } catch (error) {
       if (ticket === run.current) fail(error);
+    } finally {
+      if (ticket === run.current) setBusy(false);
+    }
+  }
+
+  async function refreshRefund(
+    receipt: RefundMutationResult,
+    projection: ProjectionIntent,
+    ticket: number,
+  ) {
+    // An expired session must clear the UI even if the other read is still pending.
+    const checkSession = <T,>(request: Promise<T>) =>
+      request.catch((error: unknown) => {
+        if (
+          ticket === run.current &&
+          error instanceof ApiError &&
+          error.status === 401
+        )
+          fail(error);
+        throw error;
+      });
+    const [nextRefunds, nextDetail] = await Promise.allSettled([
+      checkSession(loadRefunds()),
+      checkSession(loadRefund(receipt.caseId, projection)),
+    ]);
+    if (ticket !== run.current) return;
+    if (nextRefunds.status === "rejected" || nextDetail.status === "rejected") {
+      setRefunds([]);
+      setNotice(
+        "The case details could not refresh. Reload the case to continue.",
+      );
+      return;
+    }
+    setNotice(refundConfirmation(receipt));
+    setRefunds(nextRefunds.value.refunds);
+    setDetail(nextDetail.value.refund);
+    setRefundReceipt(null);
+  }
+
+  async function reloadRefund() {
+    if (!session || !refundReceipt) return;
+    const ticket = beginRun(true);
+    try {
+      await refreshRefund(refundReceipt, section, ticket);
     } finally {
       if (ticket === run.current) setBusy(false);
     }
@@ -448,26 +558,19 @@ export function App() {
     body: object,
   ) {
     if (!session || !detail) return;
-    const ticket = ++run.current;
+    const ticket = beginRun(true);
     const caseId = detail.caseId;
     const projection = section;
-    setBusy(true);
-    setNotice("");
     try {
       const result = await mutateRefund(caseId, path, body, session.csrfToken);
       if (ticket !== run.current) return;
-      const [nextRefunds, nextDetail] = await Promise.all([
-        loadRefunds(),
-        loadRefund(caseId, projection),
-      ]);
-      if (ticket !== run.current) return;
-      setNotice(
-        result.effect
-          ? `Platform refund recorded once. Effect: ${result.effect.id}`
-          : `Refund moved to ${label(result.state)}.`,
-      );
-      setRefunds(nextRefunds.refunds);
-      setDetail(nextDetail.refund);
+      setRefundReceipt(result);
+      setDetail(null);
+      if (path === "request") {
+        setReasonCategory("damaged");
+        setReason("");
+      }
+      await refreshRefund(result, projection, ticket);
     } catch (error) {
       if (ticket === run.current) fail(error);
     } finally {
@@ -481,10 +584,12 @@ export function App() {
     const ticket = run.current;
     if (!current) return;
     try {
-      await fetch("/auth/logout", {
+      const response = await fetch("/auth/logout", {
         method: "POST",
         headers: { "x-csrf-token": current.csrfToken },
       });
+      if (!response.ok && response.status !== 401)
+        throw new Error("Sign-out failed");
     } catch {
       if (ticket === run.current)
         setNotice(
@@ -641,6 +746,10 @@ export function App() {
                       className={`queue-row ${selectedOrder === order.id ? "selected" : ""}`}
                       aria-current={selectedOrder === order.id}
                       key={order.id}
+                      ref={(node) => {
+                        if (node) orderButtons.current.set(order.id, node);
+                        else orderButtons.current.delete(order.id);
+                      }}
                       onClick={() => chooseOrder(order.id)}
                     >
                       <div>
@@ -662,18 +771,7 @@ export function App() {
                       <button
                         type="button"
                         className="back"
-                        onClick={() => {
-                          setSelectedOrder(null);
-                          writeNavigation(
-                            {
-                              tab: "orders",
-                              orderId: null,
-                              refundId: null,
-                              section,
-                            },
-                            "push",
-                          );
-                        }}
+                        onClick={() => backToQueue("orders", orderDetail.id)}
                       >
                         ← Back to orders
                       </button>
@@ -733,6 +831,11 @@ export function App() {
                       className={`queue-row ${selectedRefund === refund.caseId ? "selected" : ""}`}
                       aria-current={selectedRefund === refund.caseId}
                       key={refund.caseId}
+                      ref={(node) => {
+                        if (node)
+                          refundButtons.current.set(refund.caseId, node);
+                        else refundButtons.current.delete(refund.caseId);
+                      }}
                       onClick={() =>
                         void chooseRefund(refund.caseId, session.user.role)
                       }
@@ -756,19 +859,7 @@ export function App() {
                       <button
                         type="button"
                         className="back"
-                        onClick={() => {
-                          setSelectedRefund(null);
-                          setDetail(null);
-                          writeNavigation(
-                            {
-                              tab: "refunds",
-                              orderId: null,
-                              refundId: null,
-                              section,
-                            },
-                            "push",
-                          );
-                        }}
+                        onClick={() => backToQueue("refunds", detail.caseId)}
                       >
                         ← Back to refunds
                       </button>
@@ -898,6 +989,19 @@ export function App() {
                         </p>
                       )}
                     </>
+                  ) : refundReceipt?.caseId === selectedRefund ? (
+                    <div className="empty-detail refund-receipt">
+                      <h2>Refund update saved</h2>
+                      <p>{refundConfirmation(refundReceipt)}</p>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => void reloadRefund()}
+                      >
+                        {busy ? "Loading case details…" : "Reload case"}
+                      </button>
+                    </div>
                   ) : (
                     <div className="empty-detail">
                       <h2>Choose a refund</h2>
@@ -920,13 +1024,37 @@ export function App() {
       </main>
       <footer className="site-footer">
         <nav aria-label="Related resources">
-          <a href="https://cedarling.dev">Cedarling.dev</a>
-          <a href="https://docs.jans.io/stable/cedarling/">Cedarling Docs</a>
-          <a href="https://gluu.org/agama-lab/">Agama Lab</a>
-          <a href="https://docs.jans.io/stable/cedarling/reference/cedarling-lock-server/">
+          <a
+            href="https://cedarling.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Cedarling.dev
+          </a>
+          <a
+            href="https://docs.jans.io/stable/cedarling/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Cedarling Docs
+          </a>
+          <a
+            href="https://gluu.org/agama-lab/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Agama Lab
+          </a>
+          <a
+            href="https://docs.jans.io/stable/cedarling/reference/cedarling-lock-server/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             Lock Server
           </a>
-          <a href="https://gluu.org">Gluu</a>
+          <a href="https://gluu.org" target="_blank" rel="noopener noreferrer">
+            Gluu
+          </a>
         </nav>
       </footer>
     </div>

@@ -5,6 +5,7 @@
     "noEmit": true,
     "esModuleInterop": true,
     "isolatedModules": true,
+    "erasableSyntaxOnly": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,

@@ -360,7 +360,7 @@ flowchart TD
 From P5, install Cedarling and match the completed app's dependencies:
 
 ```bash
-pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 hono@4.13.7
+pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 hono@4.13.11
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
 ```
 

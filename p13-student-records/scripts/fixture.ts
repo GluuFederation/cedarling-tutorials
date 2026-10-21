@@ -1,1 +1,1 @@
-import "../src/server/fixture-cli.ts";
+import "../src/server/data/fixture-cli.ts";

@@ -19,6 +19,33 @@ export type Actor = {
   version: number;
 };
 
+type OrderRow = Omit<OrderSummary, "refund"> & {
+  refundId: string;
+  refundState: RefundState;
+  refundVersion: number;
+};
+const orderProjection = `
+  SELECT o.id, o.bookId, o.itemSummary bookTitle, o.buyerActorId buyerId,
+    buyer.name buyerDisplayName, s.name sellerDisplayName, o.amountMinor,
+    o.currency, o.paymentState, o.fulfillmentState, o.createdAt, o.version,
+    r.id refundId, r.state refundState, r.version refundVersion
+  FROM orders o
+  JOIN actors buyer ON buyer.id = o.buyerActorId
+  JOIN stores s ON s.id = o.storeId
+  JOIN refunds r ON r.orderId = o.id
+`;
+function orderSummary({
+  refundId,
+  refundState,
+  refundVersion,
+  ...order
+}: OrderRow): OrderSummary {
+  return {
+    ...order,
+    refund: { id: refundId, state: refundState, version: refundVersion },
+  };
+}
+
 type RefundRow = {
   id: string;
   orderId: string;
@@ -220,6 +247,7 @@ type SeedRefund = {
   buyerId: ActorId;
   state: RefundState;
   createdAt: number;
+  reasonCategory?: ReasonCategory;
   reason?: string;
   requestedBy?: ActorId;
   supportLimit?: number;
@@ -259,6 +287,7 @@ const seedRefunds: SeedRefund[] = [
     state: "requested",
     createdAt: seedTime + 6_000,
     reason: "The package did not arrive.",
+    reasonCategory: "not-received",
     requestedBy: "bao",
     supportLimit: 20_000,
   },
@@ -268,7 +297,8 @@ const seedRefunds: SeedRefund[] = [
     buyerId: "bao",
     state: "requested",
     createdAt: seedTime + 5_000,
-    reason: "Requested by another actor.",
+    reason: "Several pages are torn.",
+    reasonCategory: "damaged",
     requestedBy: "nia",
   },
   {
@@ -277,7 +307,8 @@ const seedRefunds: SeedRefund[] = [
     buyerId: "sela",
     state: "requested",
     createdAt: seedTime + 4_000,
-    reason: "Refund amount exceeds the approval limit.",
+    reason: "The book arrived with a broken spine.",
+    reasonCategory: "damaged",
     requestedBy: "sela",
     supportLimit: 4_000,
   },
@@ -288,6 +319,7 @@ const seedRefunds: SeedRefund[] = [
     state: "approved-awaiting-fraud",
     createdAt: seedTime + 3_000,
     reason: "Cover arrived damaged.",
+    reasonCategory: "damaged",
     requestedBy: "nia",
     supportLimit: 20_000,
     approved: true,
@@ -299,6 +331,7 @@ const seedRefunds: SeedRefund[] = [
     state: "completed",
     createdAt: seedTime + 2_000,
     reason: "The package did not arrive.",
+    reasonCategory: "not-received",
     requestedBy: "bao",
     supportLimit: 20_000,
     approved: true,
@@ -311,6 +344,7 @@ const seedRefunds: SeedRefund[] = [
     state: "fraud-blocked",
     createdAt: seedTime + 1_000,
     reason: "Item was not as described.",
+    reasonCategory: "item-not-as-described",
     requestedBy: "sela",
     supportLimit: 20_000,
     approved: true,
@@ -349,6 +383,7 @@ export class Store {
 
   private seed() {
     this.db.transaction(() => {
+      if (this.db.prepare("SELECT 1 FROM actors LIMIT 1").get()) return;
       const actor = this.db.prepare(
         `INSERT OR IGNORE INTO actors (id, name, role, version) VALUES (?, ?, ?, 1)`,
       );
@@ -460,7 +495,7 @@ export class Store {
         orderId,
         fixture.state,
         version,
-        requested ? "damaged" : null,
+        requested ? (fixture.reasonCategory ?? null) : null,
         fixture.reason ?? null,
         fixture.requestedBy ?? null,
         requestedAt,
@@ -550,45 +585,18 @@ export class Store {
 
   orders(): OrderSummary[] {
     return this.db
-      .prepare<
-        [],
-        {
-          id: string;
-          bookId: string;
-          bookTitle: string;
-          buyerId: ActorId;
-          buyerDisplayName: string;
-          sellerDisplayName: string;
-          amountMinor: number;
-          currency: string;
-          paymentState: "paid";
-          fulfillmentState: "fulfilled";
-          createdAt: number;
-          version: number;
-          refundId: string;
-          refundState: RefundState;
-          refundVersion: number;
-        }
-      >(`
-      SELECT o.id, o.bookId, o.itemSummary bookTitle, o.buyerActorId buyerId,
-        buyer.name buyerDisplayName, s.name sellerDisplayName, o.amountMinor,
-        o.currency, o.paymentState, o.fulfillmentState, o.createdAt, o.version,
-        r.id refundId, r.state refundState, r.version refundVersion
-      FROM orders o
-      JOIN actors buyer ON buyer.id = o.buyerActorId
-      JOIN stores s ON s.id = o.storeId
-      JOIN refunds r ON r.orderId = o.id
-      ORDER BY o.createdAt DESC, o.id
-    `)
+      .prepare<[], OrderRow>(
+        `${orderProjection} ORDER BY o.createdAt DESC, o.id`,
+      )
       .all()
-      .map(({ refundId, refundState, refundVersion, ...order }) => ({
-        ...order,
-        refund: { id: refundId, state: refundState, version: refundVersion },
-      }));
+      .map(orderSummary);
   }
 
   order(id: string): OrderSummary | undefined {
-    return this.orders().find((order) => order.id === id);
+    const row = this.db
+      .prepare<[string], OrderRow>(`${orderProjection} WHERE o.id = ?`)
+      .get(id);
+    return row ? orderSummary(row) : undefined;
   }
 
   refunds(): RefundSummary[] {

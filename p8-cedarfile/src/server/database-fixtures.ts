@@ -162,6 +162,7 @@ export function initializeDatabase(
   storage?: SafeStorage,
 ): void {
   database.exec(schema);
+  if (database.prepare("SELECT 1 FROM users LIMIT 1").get()) return;
   database.transaction(() => {
     database
       .prepare("INSERT OR IGNORE INTO workspaces (id, name) VALUES (?, ?)")

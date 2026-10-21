@@ -1,49 +1,78 @@
 import type {
-  Audience,
   DraftInput,
   GradeView,
   Publication,
   SessionView,
 } from "../shared/contracts.ts";
-
 export class ApiError extends Error {
   readonly status: number;
   readonly requestId: string;
-  constructor(status: number, message: string, requestId: string) {
+  readonly code: string;
+  constructor(
+    status: number,
+    message: string,
+    requestId = "",
+    code = "REQUEST_FAILED",
+  ) {
     super(message);
     this.status = status;
     this.requestId = requestId;
+    this.code = code;
   }
 }
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    cache: "no-store",
-    ...init,
-  });
-  if (!response.ok) {
-    const status = response.status;
-    const message =
-      status === 401
-        ? "Session expired. Choose an identity again."
-        : status === 404
-          ? "Grade not found or unavailable."
-          : status === 409
-            ? "The grade or its relationships changed. Reload and try again."
-            : status === 503
-              ? "Authorization unavailable. Try again."
-              : status === 400 || status === 422
-                ? "Check the grade fields before trying again."
-                : "Request failed. Try again.";
+export async function request<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (init.signal?.aborted || !(error instanceof TypeError)) throw error;
     throw new ApiError(
-      status,
-      message,
-      response.headers.get("x-request-id") ?? "",
+      503,
+      "The request could not be confirmed. Check your connection.",
+      "",
+      "REQUEST_UNCONFIRMED",
     );
   }
-  return response.status === 204
-    ? (undefined as T)
-    : ((await response.json()) as T);
+  const requestId = response.headers.get("x-request-id") ?? "";
+  console.info(
+    "P13 browser | HTTP " +
+      response.status +
+      " | " +
+      (init.method ?? "GET") +
+      " " +
+      path.split("?")[0] +
+      " | " +
+      (requestId || "unavailable"),
+  );
+  if (response.status === 204) return undefined as T;
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    throw new ApiError(
+      response.ok ? 502 : response.status,
+      "The server returned an unreadable response. Retry the request.",
+      requestId,
+      response.ok ? "REQUEST_UNCONFIRMED" : "REQUEST_FAILED",
+    );
+  }
+  if (!response.ok) {
+    const body = value as { message?: string; error?: string };
+    throw new ApiError(
+      response.status,
+      body.message ?? "The request failed. Try again.",
+      requestId,
+      body.error,
+    );
+  }
+  return value as T;
 }
 const mutation = (
   method: string,
@@ -59,20 +88,19 @@ export const api = {
     request<SessionView>("/api/session", signal ? { signal } : {}),
   logout: (csrf: string) =>
     request<void>("/auth/logout", mutation("POST", csrf)),
-  list: (audience: Audience, signal: AbortSignal) =>
-    request<{ grades: GradeView[] }>(`/api/grades/${audience}`, { signal }),
-  read: (audience: Audience, id: string, signal: AbortSignal) =>
-    request<GradeView>(`/api/grades/${audience}/${encodeURIComponent(id)}`, {
-      signal,
+  save: (id: string, input: DraftInput, csrf: string, signal?: AbortSignal) =>
+    request<GradeView>(`/api/grades/${encodeURIComponent(id)}`, {
+      ...mutation("PATCH", csrf, input),
+      ...(signal ? { signal } : {}),
     }),
-  save: (id: string, input: DraftInput, csrf: string) =>
-    request<GradeView>(
-      `/api/grades/${encodeURIComponent(id)}`,
-      mutation("PATCH", csrf, input),
-    ),
-  publish: (id: string, expectedVersion: number, csrf: string) =>
-    request<Publication>(
-      `/api/grades/${encodeURIComponent(id)}/publish`,
-      mutation("POST", csrf, { expectedVersion }),
-    ),
+  publish: (
+    id: string,
+    expectedVersion: number,
+    csrf: string,
+    signal?: AbortSignal,
+  ) =>
+    request<Publication>(`/api/grades/${encodeURIComponent(id)}/publish`, {
+      ...mutation("POST", csrf, { expectedVersion }),
+      ...(signal ? { signal } : {}),
+    }),
 };

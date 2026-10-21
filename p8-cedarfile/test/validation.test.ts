@@ -34,7 +34,14 @@ describe("virtual names", () => {
       name: "Café notes (v1).md",
       nameKey: "café notes (v1).md",
     });
+    expect(normalizeVirtualName("عقد\u200Dجديد").name).toBe("عقد\u200Dجديد");
+    expect(normalizeVirtualName("👩‍🔧").name).toBe("👩‍🔧");
   });
+
+  it.each(["\u200B", "\u200C\u200D", "\u2060", "\uFE0F"])(
+    "rejects names without visible characters %j",
+    (name) => expect(() => normalizeVirtualName(name)).toThrow(InputError),
+  );
 
   it.each(["", ".", "..", " ../x", "a/b", "a\\b", "x\u0000y", "x\u202Ey"])(
     "rejects ambiguous name %j",

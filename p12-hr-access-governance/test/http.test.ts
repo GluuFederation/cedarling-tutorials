@@ -2,11 +2,12 @@ import { randomBytes } from "node:crypto";
 import type { Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/server/app.ts";
-import { hash } from "../src/server/auth.ts";
-import { fakeAuthorize, unavailable } from "../src/server/authorization.ts";
-import { loadConfig } from "../src/server/config.ts";
-import { Database } from "../src/server/database.ts";
-import { denied } from "../src/server/errors.ts";
+import { hash } from "../src/server/auth/routes.ts";
+import { loadConfig } from "../src/server/config/environment.ts";
+import { Database } from "../src/server/data/database.ts";
+import { fakeAuthorize } from "../src/server/hr/authorization.ts";
+import { denied } from "../src/server/http/errors.ts";
+import { unavailable } from "./support.ts";
 
 const dbs: Database[] = [];
 const servers: Server[] = [];
@@ -23,7 +24,7 @@ afterEach(async () => {
 });
 async function start(
   mode: "permissive" | "unavailable" = "permissive",
-  contactDenied = false,
+  contactDenied: boolean | "employee.medical.view" = false,
 ) {
   const db = new Database(":memory:");
   dbs.push(db);
@@ -45,7 +46,11 @@ async function start(
   };
   const app = contactDenied
     ? createApp(config, db, oidc, async (input) => {
-        if (input.capability === "employee.contact.view") throw denied();
+        if (
+          input.capability ===
+          (contactDenied === true ? "employee.contact.view" : contactDenied)
+        )
+          throw denied();
         await fakeAuthorize(input);
       })
     : createApp(
@@ -76,9 +81,9 @@ async function start(
   };
 }
 describe("native HTTP safeguards", () => {
-  it("admits the three sign-in choices without treating employee fixtures as identities", async () => {
+  it("admits the four sign-in choices without treating employee fixtures as identities", async () => {
     const { base } = await start();
-    for (const actor of ["lin", "nia", "ben"])
+    for (const actor of ["lin", "nia", "ben", "aya"])
       expect(
         (
           await fetch(`${base}/auth/login?login_hint=${actor}`, {
@@ -105,6 +110,8 @@ describe("native HTTP safeguards", () => {
           headers: { ...headers, Origin: "http://foreign.test" },
           body: JSON.stringify({
             employeeId: "cora",
+            packageId: "team-support",
+            reason: "Coordinate employee support arrangements.",
             days: 1,
           }),
         })
@@ -117,6 +124,8 @@ describe("native HTTP safeguards", () => {
           headers,
           body: JSON.stringify({
             employeeId: "cora",
+            packageId: "team-support",
+            reason: "Coordinate employee support arrangements.",
             days: 1,
             intent: "read",
           }),
@@ -130,6 +139,8 @@ describe("native HTTP safeguards", () => {
           headers,
           body: JSON.stringify({
             employeeId: "cora",
+            packageId: "team-support",
+            reason: "Coordinate employee support arrangements.",
             days: 8,
           }),
         })
@@ -156,7 +167,12 @@ describe("native HTTP safeguards", () => {
     const valid = await fetch(`${base}/api/grants`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ employeeId: "cora", days: 1 }),
+      body: JSON.stringify({
+        employeeId: "cora",
+        packageId: "team-support",
+        reason: "Coordinate employee support arrangements.",
+        days: 1,
+      }),
     });
     expect(valid.status).toBe(201);
   });
@@ -198,11 +214,72 @@ describe("native HTTP safeguards", () => {
           headers,
           body: JSON.stringify({
             employeeId: "cora",
+            packageId: "team-support",
+            reason: "Coordinate employee support arrangements.",
             days: 1,
           }),
         })
       ).status,
     ).toBe(503);
     expect(db.sql.prepare("SELECT id FROM grants").all()).toHaveLength(0);
+  });
+});
+
+it("keeps medical disclosure independent and omits clinical bytes on denial and outage", async () => {
+  const { base, headers } = await start("permissive", "employee.medical.view");
+  const response = await fetch(`${base}/api/employees/cora/medical`, {
+    headers,
+  });
+  expect(response.status).toBe(403);
+  expect(await response.text()).not.toMatch(
+    /Seasonal|allergies|1992|consultations|testResults/,
+  );
+  const profile = await fetch(`${base}/api/employees/cora/profile`, {
+    headers,
+  });
+  expect(profile.status).toBe(200);
+  const { base: offline, headers: offlineHeaders } = await start("unavailable");
+  const unavailable = await fetch(`${offline}/api/employees/cora/medical`, {
+    headers: offlineHeaders,
+  });
+  expect(unavailable.status).toBe(503);
+  expect(await unavailable.text()).not.toMatch(/Seasonal|allergies|1992/);
+});
+it("routes medical requests and rejections through validated JSON effects", async () => {
+  const { base, headers } = await start();
+  const created = await fetch(`${base}/api/grants`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      employeeId: "cora",
+      packageId: "occupational-health",
+      beneficiaryId: "aya",
+      days: 3,
+      reason: "Review the occupational-health case.",
+    }),
+  });
+  expect(created.status).toBe(201);
+  const { data: request } = await created.json();
+  expect(request).toMatchObject({
+    beneficiaryId: "aya",
+    status: "pending",
+    expiresAt: null,
+  });
+  const invalid = await fetch(`${base}/api/grants/${request.id}/reject`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ version: 1, note: "" }),
+  });
+  expect(invalid.status).toBe(400);
+  const rejected = await fetch(`${base}/api/grants/${request.id}/reject`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ version: 1, note: "The case has already closed." }),
+  });
+  expect(rejected.status).toBe(200);
+  expect((await rejected.json()).data).toMatchObject({
+    status: "rejected",
+    reviewedBy: "lin",
+    version: 2,
   });
 });

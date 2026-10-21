@@ -201,6 +201,20 @@ export class ChatRepository {
     );
   }
 
+  recentMessages(roomId: string): Message[] {
+    const rows = this.connection
+      .prepare(`
+      SELECT m.*, u.name AS author_name FROM messages m
+      JOIN users u ON u.id = m.author_id
+      WHERE m.room_id = ? ORDER BY m.sequence DESC LIMIT ?
+    `)
+      .all(roomId, limits.history) as Row[];
+    return rows.reverse().flatMap((value) => {
+      const mapped = message(value);
+      return mapped ? [mapped] : [];
+    });
+  }
+
   publish(
     input: Readonly<{
       userId: string;
@@ -219,7 +233,11 @@ export class ChatRepository {
         "publish",
         requestHash,
       );
-      if (previous) return { value: previous, duplicate: true };
+      if (previous) {
+        const current = this.message(previous.id);
+        if (!current) throw new DomainError("message_not_found", 404);
+        return { value: current, duplicate: true };
+      }
       const currentRoom = this.room(input.roomId);
       if (!currentRoom) throw new DomainError("room_not_found", 404);
       this.connection
@@ -412,7 +430,7 @@ export class AppDatabase {
     this.connection.pragma("journal_mode = WAL");
     this.connection.pragma("busy_timeout = 5000");
     this.migrate();
-    this.seed(issuer);
+    this.connection.transaction(() => this.seed(issuer))();
     this.chat = new ChatRepository(this.connection);
   }
 
@@ -504,6 +522,7 @@ export class AppDatabase {
   }
 
   private seed(issuer: string): void {
+    if (this.connection.prepare("SELECT 1 FROM users LIMIT 1").get()) return;
     const insertTenant = this.connection.prepare(
       "INSERT OR IGNORE INTO tenants (id, name) VALUES (?, ?)",
     );
@@ -511,9 +530,7 @@ export class AppDatabase {
     insertTenant.run("tenant-b", "Tenant B");
     const insertUser = this.connection.prepare(
       `INSERT INTO users (id, issuer, subject, name, tenant_id)
-       VALUES (?, ?, ?, ?, 'tenant-a')
-       ON CONFLICT(id) DO UPDATE SET issuer = excluded.issuer,
-         subject = excluded.subject, name = excluded.name`,
+       VALUES (?, ?, ?, ?, 'tenant-a')`,
     );
     insertUser.run("user-mei", issuer, "mei", "Mei");
     insertUser.run("user-kwame", issuer, "kwame", "Kwame");

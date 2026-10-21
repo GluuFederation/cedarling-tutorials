@@ -6,8 +6,8 @@ import {
   writePrivateEnvironment,
 } from "../../shared/identity-provider/scripts/project-environment.mjs";
 import { ensureProjectIdentity } from "../../shared/identity-provider/scripts/setup.mjs";
-import { loadConfig, prepareData } from "../src/server/config.ts";
-import { SchoolDatabase } from "../src/server/database.ts";
+import { loadConfig, prepareData } from "../src/server/config/environment.ts";
+import { SchoolDatabase } from "../src/server/data/database.ts";
 
 export function setupProject(
   root = process.cwd(),
@@ -32,15 +32,17 @@ export function setupProject(
   const merged = mergeProjectEnvironment(current.text, {
     managed: {
       P13_BASE_URL: baseUrl,
+      P13_PORT:
+        new URL(baseUrl).port || (baseUrl.startsWith("https:") ? "443" : "80"),
       P13_ISSUER: issuer,
+      P13_IDP_PORT:
+        new URL(issuer).port || (issuer.startsWith("https:") ? "443" : "80"),
       P13_API_RESOURCE: url("P13_API_RESOURCE"),
       P13_CLIENT_ID: required("P13_CLIENT_ID"),
       P13_CLIENT_SECRET: required("P13_CLIENT_SECRET"),
     },
     defaults: {
       P13_HOST: "127.0.0.1",
-      P13_PORT: new URL(baseUrl).port || "80",
-      P13_IDP_PORT: new URL(issuer).port || "80",
       P13_DATA_DIR: ".local/p13-data",
     },
   });

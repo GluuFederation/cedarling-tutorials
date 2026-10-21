@@ -55,6 +55,12 @@ async function services() {
       },
     },
     {
+      name: "P12 web build watcher",
+      command: pnpm,
+      args: ["exec", "vite", "build", "--watch", "--emptyOutDir=false"],
+      cwd: root,
+    },
+    {
       name: "P12 application",
       command: node,
       args: ["--watch", "--env-file=.env", "src/server/main.ts"],

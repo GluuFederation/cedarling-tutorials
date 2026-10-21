@@ -34,13 +34,16 @@ beforeEach(async () => {
     },
     Date.now(),
   );
+  await startServer(allow);
+});
+async function startServer(adapter: AuthorizationAdapter) {
   const config = loadConfig({ P15_CLIENT_SECRET: randomToken() });
   server = createApp(
     config,
     store,
     key,
     { authorization: vi.fn(), exchange: vi.fn() },
-    allow,
+    adapter,
     vi.fn(),
   ).listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -48,7 +51,7 @@ beforeEach(async () => {
   if (!address || typeof address === "string")
     throw new Error("Missing address");
   base = `http://127.0.0.1:${address.port}`;
-});
+}
 afterEach(async () => {
   await new Promise<void>((done) => {
     server.close(() => done());
@@ -179,22 +182,9 @@ it("returns no false success or mutation when authorization is unavailable", asy
     server.close(() => done());
     server.closeAllConnections();
   });
-  const config = loadConfig({ P15_CLIENT_SECRET: randomToken() });
-  server = createApp(
-    config,
-    store,
-    key,
-    { authorization: vi.fn(), exchange: vi.fn() },
-    () => {
-      throw new Error("secret dependency details");
-    },
-    vi.fn(),
-  ).listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const address = server.address();
-  if (!address || typeof address === "string")
-    throw new Error("Missing address");
-  base = `http://127.0.0.1:${address.port}`;
+  await startServer(() => {
+    throw new Error("secret dependency details");
+  });
   const response = await request("/api/refunds/refund-bao-001/request", {
     reasonCategory: "damaged",
     expectedVersion: 0,
@@ -204,7 +194,30 @@ it("returns no false success or mutation when authorization is unavailable", asy
   expect(store.refund("refund-bao-001")?.state).toBe("eligible");
 });
 
-it("expires, tampers, and logs out sessions without affecting another session", async () => {
+it("clears expired sessions before a protected mutation", async () => {
+  const before = store.refund("refund-bao-001");
+  store.db
+    .prepare("UPDATE sessions SET expiresAt = ? WHERE hash = ?")
+    .run(Date.now() - 1, hashToken(raw));
+  const response = await request("/api/refunds/refund-bao-001/request", {
+    reasonCategory: "damaged",
+    expectedVersion: 0,
+  });
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({
+    error: { code: "SESSION_EXPIRED" },
+    requestId: expect.any(String),
+  });
+  expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  expect(
+    store.db
+      .prepare("SELECT hash FROM sessions WHERE hash = ?")
+      .get(hashToken(raw)),
+  ).toBeUndefined();
+  expect(store.refund("refund-bao-001")).toEqual(before);
+});
+
+it("clears logged-out and tampered sessions without affecting another session", async () => {
   const otherRaw = randomToken();
   const current = store.session(hashToken(raw), Date.now());
   if (!current) throw new Error("Missing test session");

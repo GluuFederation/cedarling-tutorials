@@ -27,6 +27,22 @@ afterEach(() => {
 });
 
 describe("collaborative document repository", () => {
+  it("returns the newest 50 comments in posting order", () => {
+    const db = database();
+    for (let index = 1; index <= 51; index += 1) {
+      db.addComment({
+        documentId: "doc-launch-brief",
+        principalId: "user-lena",
+        idempotencyKey: randomUUID(),
+        body: `Comment ${index}`,
+      });
+    }
+    const relations = db.documentRelations("doc-launch-brief");
+    expect(relations.comments).toHaveLength(50);
+    expect(relations.comments[0]?.body).toBe("Comment 2");
+    expect(relations.comments.at(-1)?.body).toBe("Comment 51");
+    expect(relations.hasOlderComments).toBe(true);
+  });
   it("seeds a shared document and a private document", () => {
     const db = database();
     expect(db.listDocuments("user-noah")).toEqual([

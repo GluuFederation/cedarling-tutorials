@@ -7,7 +7,7 @@ export function authorizePresentation(input: {
   resourceId: string;
 }): boolean {
   console.info(
-    `P6 browser | FAKE ALLOW | ${input.capability} | ${input.principalId} -> ${input.resourceId}`,
+    `P6 browser | FAKE ALLOW (presentation only) | ${input.capability} | ${input.principalId} -> ${input.resourceId}`,
   );
   return true;
 }

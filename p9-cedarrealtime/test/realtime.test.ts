@@ -232,8 +232,25 @@ describe("Socket.IO authorization boundaries", () => {
       const replay = await emit(yukiReconnected, "room:enter", {
         roomId: "room-a-general",
         lastSequence: first.message.sequence,
+        refresh: true,
       });
       expect(replay.replayed).toBe(true);
+      expect(replay.reset).toBe(true);
+      expect(
+        replay.messages.find(
+          (message) => message.id === moderatorMessage.message.id,
+        ),
+      ).toMatchObject({ deleted: true, content: null, version: 2 });
+      const oldPublication = await emit(kwame, "message:publish", {
+        roomId: "room-a-general",
+        commandId: "scenario_publish_3",
+        content: "moderator-owned",
+      });
+      expect(oldPublication.message).toMatchObject({
+        deleted: true,
+        content: null,
+        version: 2,
+      });
       expect(new Set(replay.messages.map((message) => message.id)).size).toBe(
         replay.messages.length,
       );

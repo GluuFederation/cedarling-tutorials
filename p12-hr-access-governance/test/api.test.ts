@@ -49,3 +49,31 @@ it("retains a failed mutation's status and correlation without returning its dat
     message: "Refresh and try again. (req_conflict)",
   });
 });
+
+it("logs the HTTP result and correlation without logging request or response content", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      new Response(
+        JSON.stringify({
+          data: { medical: "fictional-private-value" },
+          requestId: "req_safe",
+        }),
+        { status: 200 },
+      ),
+  );
+  try {
+    await mutate("/api/grants", "csrf-private", {
+      reason: "private-request-reason",
+    });
+    expect(log).toHaveBeenCalledWith(
+      "P12 browser | HTTP 200 | POST /api/grants | req_safe",
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(
+      /fictional-private|private-request|csrf-private/,
+    );
+  } finally {
+    log.mockRestore();
+  }
+});

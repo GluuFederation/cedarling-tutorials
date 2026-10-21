@@ -13,6 +13,40 @@ const verifier = {
 };
 
 describe("Warehouse API", () => {
+  it.each([
+    { transferId: "trf_north_south_planned" },
+    { type: "transfer.release" },
+  ])("rejects body overrides of the route command: %j", async (extra) => {
+    const database = new WarehouseDatabase(":memory:");
+    databases.push(database);
+    const app = await createApiApp({
+      database,
+      verifier,
+      authorization: { authorize: async () => true },
+    });
+    try {
+      const before = database.listInventory();
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/transfers/trf_absent/release",
+        headers: { authorization: "Bearer valid-token" },
+        payload: {
+          expectedVersion: 1,
+          idempotencyKey: "55555555-5555-4555-8555-555555555555",
+          ...extra,
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe("body_fields_invalid");
+      expect(database.getTransfer("trf_north_south_planned")?.status).toBe(
+        "planned",
+      );
+      expect(database.listInventory()).toEqual(before);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("authorizes transfer-list candidates independently", async () => {
     const database = new WarehouseDatabase(":memory:");
     databases.push(database);

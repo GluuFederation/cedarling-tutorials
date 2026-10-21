@@ -5,6 +5,7 @@
 }
 
 .workspace {
+  position: relative;
   min-height: 0;
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr) 276px;
@@ -155,6 +156,7 @@
 
 .message > div {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: baseline;
 }
@@ -174,6 +176,9 @@
   margin: 4px 0 0;
   color: var(--charcoal);
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 0.875rem;
 }
 
 .message.deleted p {
@@ -182,8 +187,9 @@
 }
 
 .text-danger {
-  min-height: 28px;
-  padding: 2px 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 4px;
   color: var(--coral-dark);
   background: transparent;
   border: 0;
@@ -203,21 +209,54 @@
 
 .composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 8px;
+  gap: 5px;
   padding: 12px 18px;
   background: var(--surface-soft);
   border-top: 1px solid var(--border);
 }
 
+.composer-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid #8fa09a;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.composer-input:focus-within {
+  outline: 2px solid var(--green-dark);
+  outline-offset: 2px;
+}
+
 .composer textarea {
   min-height: 42px;
   max-height: 88px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.composer textarea:focus-visible {
+  outline: none;
+}
+
+.composer .send-message {
+  width: 44px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.composer-hint {
+  color: var(--slate);
+  font-size: 0.72rem;
 }
 
 .member-panel .icon-button {
   display: none;
+  padding: 0;
 }
 
 .member {
@@ -250,6 +289,7 @@
   font-size: 0.68rem;
   line-height: 1.3;
   text-transform: capitalize;
+  overflow-wrap: anywhere;
 }
 
 .member-panel h3 {
@@ -287,6 +327,50 @@
   text-align: center;
 }
 
+.status-strip:empty {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+
+.status-strip p {
+  margin: 0;
+}
+
+.transient-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  background: var(--surface-green);
+  color: var(--green-dark);
+  padding-inline: 12px 2px;
+}
+
+.transient-notice.error {
+  color: var(--coral-dark);
+  background: var(--surface-coral);
+}
+
+.notice-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.notice-dismiss:hover {
+  background: rgb(0 0 0 / 6%);
+}
+
 @media (max-width: 960px) {
   .workspace {
     grid-template-columns: 210px minmax(0, 1fr);
@@ -297,21 +381,33 @@
   }
 
   .member-panel {
-    position: fixed;
+    position: absolute;
     z-index: 30;
-    inset: 64px 0 0 auto;
+    inset: 0 0 0 auto;
     width: min(320px, 88vw);
     transform: translateX(100%);
-    box-shadow: -18px 0 40px rgb(6 29 51 / 18%);
+    visibility: hidden;
     transition: transform 160ms ease;
   }
 
   .member-panel.open {
     transform: translateX(0);
+    visibility: visible;
+    box-shadow: -18px 0 40px rgb(6 29 51 / 18%);
   }
 
   .member-panel .icon-button {
     display: inline-flex;
+  }
+  .member-panel .section-heading {
+    position: sticky;
+    top: -16px;
+    padding-block: 8px;
+    background: var(--surface);
+    z-index: 1;
+  }
+  .message p {
+    font-size: 1rem;
   }
 }
 
@@ -345,7 +441,7 @@
 
   .room {
     flex: 0 0 142px;
-    min-height: 42px;
+    min-height: 44px;
     padding: 6px 8px;
   }
 
@@ -376,5 +472,18 @@
 
   .status-strip {
     padding-inline: 10px;
+  }
+}
+
+@media (max-height: 500px) {
+  .conversation-header {
+    min-height: 56px;
+    padding-block: 6px;
+  }
+  .composer {
+    padding-block: 6px;
+  }
+  .composer textarea {
+    height: 44px;
   }
 }

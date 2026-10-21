@@ -57,6 +57,7 @@ a {
 }
 
 button:focus-visible,
+summary:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
@@ -193,6 +194,8 @@ p {
 }
 
 .account-menu-items button {
+  min-height: 44px;
+  cursor: pointer;
   display: block;
   width: 100%;
   padding: 0.55rem 0.65rem;
@@ -246,9 +249,8 @@ p {
 
 .primary,
 .secondary,
-.icon-button,
-button:not(.rail-identity, .room, .text-danger) {
-  min-height: 42px;
+.icon-button {
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -260,8 +262,7 @@ button:not(.rail-identity, .room, .text-danger) {
   line-height: 1;
 }
 
-.primary,
-button:not(.secondary, .icon-button, .rail-identity, .room, .text-danger) {
+.primary {
   color: #ffffff;
   background: var(--green-dark);
   border: 1px solid var(--green-dark);
@@ -284,7 +285,8 @@ button:not(.secondary, .icon-button, .rail-identity, .room, .text-danger) {
 }
 
 .icon-button {
-  width: 42px;
+  width: 44px;
+  flex-shrink: 0;
   padding: 0;
   color: var(--navy);
   background: #ffffff;
@@ -308,6 +310,9 @@ select {
   border: 1px solid #9aa9a3;
   border-radius: 5px;
   padding: 9px 11px;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 1rem;
 }
 
 textarea {
@@ -317,7 +322,7 @@ textarea {
 .landing {
   min-height: 0;
   display: grid;
-  place-items: center;
+  place-items: start center;
   overflow: auto;
   padding: 24px;
   background: var(--surface-soft);
@@ -325,6 +330,7 @@ textarea {
 
 .login-panel,
 .service-state {
+  margin-block: auto;
   width: min(448px, 100%);
   background: #ffffff;
   border: 1px solid var(--border);
@@ -408,7 +414,7 @@ textarea {
   min-height: 40px;
   display: grid;
   place-items: center;
-  padding: 8px 20px;
+  padding: 0 12px;
   color: var(--slate);
   background: #ffffff;
   border-top: 1px solid var(--border);
@@ -418,10 +424,16 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 7px 18px;
+  gap: 0 14px;
 }
 
 .program-footer a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  white-space: nowrap;
   color: var(--navy);
   font-size: 0.72rem;
   font-weight: 700;
@@ -446,7 +458,7 @@ textarea {
   color: var(--slate);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   .brand-rail {
     min-height: 64px;
     grid-template-columns: 52px minmax(0, 1fr) 52px;
@@ -494,10 +506,19 @@ textarea {
     padding-inline: 10px;
   }
   .program-footer nav {
-    gap: 6px 12px;
+    gap: 0 10px;
   }
   .program-footer a {
     font-size: 0.68rem;
+  }
+}
+
+@media (max-height: 500px) {
+  .brand-rail {
+    min-height: 60px;
+  }
+  .topbar-copy p {
+    display: none;
   }
 }
 

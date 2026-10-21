@@ -8,6 +8,7 @@ export type AuthorizationRequest = Readonly<{
 }>;
 
 export interface AuthorizationPort {
+  readonly mode?: "fake";
   authorize(request: AuthorizationRequest): Promise<boolean>;
   authorizeMany(
     requests: readonly AuthorizationRequest[],
@@ -16,6 +17,7 @@ export interface AuthorizationPort {
 
 export function fakeAuthorization(): AuthorizationPort {
   return {
+    mode: "fake",
     async authorize(request) {
       console.info(
         `P6 server | FAKE ALLOW | ${request.capability} | ${request.principalId} -> ${request.resourceId} | ${request.requestId}`,
@@ -23,14 +25,11 @@ export function fakeAuthorization(): AuthorizationPort {
       return true;
     },
     async authorizeMany(requests) {
-      const first = requests[0];
-      if (!first) return {} as Readonly<Record<Capability, boolean>>;
-      console.info(
-        `P6 server | FAKE ALLOW | ${requests.map((item) => item.capability).join(",")} | ${first.principalId} -> ${first.resourceId} | ${first.requestId}`,
-      );
-      return Object.fromEntries(
-        requests.map((request) => [request.capability, true]),
-      ) as Readonly<Record<Capability, boolean>>;
+      const decisions = {} as Record<Capability, boolean>;
+      for (const request of requests) {
+        decisions[request.capability] = await this.authorize(request);
+      }
+      return decisions;
     },
   };
 }

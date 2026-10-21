@@ -1,7 +1,11 @@
 import type { Capability } from "./capabilities.ts";
 
 export type Role = "technician" | "supervisor";
-export type WorkOrderStatus = "open" | "completed";
+type WorkOrderStatus =
+  | "open"
+  | "awaiting_review"
+  | "changes_requested"
+  | "completed";
 
 export type User = Readonly<{
   id: string;
@@ -10,9 +14,9 @@ export type User = Readonly<{
 }>;
 
 export type Checklist = Readonly<{
-  safetyGuardSecured: boolean;
-  fluidLevelChecked: boolean;
-  operatingTemperatureRecorded: boolean;
+  equipmentConditionPassed: boolean;
+  safetyChecksPassed: boolean;
+  functionalCheckPassed: boolean;
 }>;
 
 export type WorkOrder = Readonly<{
@@ -34,7 +38,17 @@ export type AuthorizationEnvelope = Readonly<{
 export type WorkOrderDetail = WorkOrder &
   Readonly<{
     envelope: AuthorizationEnvelope;
+    inspections: readonly Inspection[];
+    assignmentHistory: readonly AssignmentChange[];
   }>;
+
+export type AssignmentChange = Readonly<{
+  previousAssignee: string;
+  newAssignee: string;
+  changedBy: string;
+  changedAt: string;
+  assignmentEpoch: number;
+}>;
 
 export type Inspection = Readonly<{
   id: string;
@@ -43,6 +57,20 @@ export type Inspection = Readonly<{
   checklist: Checklist;
   notes: string;
   createdAt: string;
+  review?: Readonly<{
+    reviewedBy: string;
+    outcome: InspectionReview["outcome"];
+    notes: string;
+    createdAt: string;
+  }>;
+}>;
+
+export type InspectionReview = Readonly<{
+  inspectionId: string;
+  expectedWorkOrderVersion: number;
+  idempotencyKey: string;
+  outcome: "complete" | "request_corrections";
+  notes: string;
 }>;
 
 export type Session = Readonly<{

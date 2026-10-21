@@ -29,7 +29,7 @@ export function BrandRail({
   return (
     <header className="brand-rail">
       <picture className="brand-lockup">
-        <source media="(max-width: 760px)" srcSet={cedarlingMark} />
+        <source media="(max-width: 960px)" srcSet={cedarlingMark} />
         <img src={cedarlingWordmark} alt="Cedarling" />
       </picture>
       <div className="topbar-copy">
@@ -48,10 +48,18 @@ export function BrandRail({
             </span>
           </summary>
           <div className="account-menu-items">
-            <button type="button" onClick={onSwitchAccount}>
+            <button
+              className="account-menu-action"
+              type="button"
+              onClick={onSwitchAccount}
+            >
               Change account
             </button>
-            <button type="button" onClick={onSwitchAccount}>
+            <button
+              className="account-menu-action"
+              type="button"
+              onClick={onSwitchAccount}
+            >
               Sign out
             </button>
           </div>
@@ -67,13 +75,37 @@ export function ProgramFooter() {
   return (
     <footer className="program-footer">
       <nav aria-label="Related resources">
-        <a href="https://cedarling.dev">Cedarling.dev</a>
-        <a href="https://docs.jans.io/stable/cedarling/">Cedarling Docs</a>
-        <a href="https://gluu.org/agama-lab/">Agama Lab</a>
-        <a href="https://docs.jans.io/stable/cedarling/reference/cedarling-lock-server/">
+        <a
+          href="https://cedarling.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Cedarling.dev
+        </a>
+        <a
+          href="https://docs.jans.io/stable/cedarling/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Cedarling Docs
+        </a>
+        <a
+          href="https://gluu.org/agama-lab/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Agama Lab
+        </a>
+        <a
+          href="https://docs.jans.io/stable/cedarling/reference/cedarling-lock-server/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Lock Server
         </a>
-        <a href="https://gluu.org">Gluu</a>
+        <a href="https://gluu.org" target="_blank" rel="noopener noreferrer">
+          Gluu
+        </a>
       </nav>
     </footer>
   );

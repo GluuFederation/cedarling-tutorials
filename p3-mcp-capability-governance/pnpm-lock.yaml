@@ -9,23 +9,23 @@ importers:
   .:
     dependencies:
       '@modelcontextprotocol/client':
-        specifier: 2.2.0
-        version: 2.2.0
+        specifier: 2.3.0
+        version: 2.3.0
       '@modelcontextprotocol/express':
-        specifier: 2.0.0
-        version: 2.0.0(@modelcontextprotocol/server@2.0.0)(express@5.2.1)
+        specifier: 2.0.2
+        version: 2.0.2(@modelcontextprotocol/server@2.3.0)(express@5.2.1)
       '@modelcontextprotocol/node':
         specifier: 2.0.0
-        version: 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.7)
+        version: 2.0.0(@modelcontextprotocol/server@2.3.0)(hono@4.13.11)
       '@modelcontextprotocol/server':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.3.0
+        version: 2.3.0
       express:
         specifier: 5.2.1
         version: 5.2.1
       hono:
-        specifier: 4.13.7
-        version: 4.13.7
+        specifier: 4.13.11
+        version: 4.13.11
       jose:
         specifier: 6.2.10
         version: 6.2.10
@@ -63,9 +63,12 @@ importers:
       typescript-eslint:
         specifier: 8.68.0
         version: 8.68.0(eslint@10.11.0)(typescript@6.0.3)
+      vite:
+        specifier: 8.2.4
+        version: 8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3)
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.19.0)(vite@8.2.2(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3))
+        version: 4.1.11(@types/node@24.19.0)(vite@8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3))
 
 packages:
 
@@ -311,23 +314,19 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@modelcontextprotocol/client@2.2.0':
-    resolution: {integrity: sha512-LxCou/CSYQ6dwEnjhLZY0KnEuc8V4UJ3IEQCl/uR2yHobSQIEdJKUlKLRYRF5i5FqRGHy1eK7une3aAWDHLtig==}
+  '@modelcontextprotocol/client@2.3.0':
+    resolution: {integrity: sha512-pbHtGj6EeFCHngFE8gtNPaKrsj8Mb1IMw45BLcaPML/m2WTxI7pyYmeNQvaux88Lw8BSO5r7nyRbUyIkICmGrg==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/core@2.0.0':
-    resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
+  '@modelcontextprotocol/core@2.3.0':
+    resolution: {integrity: sha512-09BHFaNVBe5pB2AhzCfLj0cqmsKLERvZQ4FblzP90UMGLaXVqdZPByFjURwsUYCmxonUW2yAwgTTvle+8O2/8w==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/core@2.2.0':
-    resolution: {integrity: sha512-iLhmprRmWI8EcosOA3wVvww22z02NkgqhV4fBH6f/odQBsi7xnJc0HGmi21yWO+/iKw2yzqVE127Zhna5/+JXw==}
-    engines: {node: '>=20'}
-
-  '@modelcontextprotocol/express@2.0.0':
-    resolution: {integrity: sha512-Snlr8j9FR9LcVvEJPF7qJ7d5zTL4Bes2dk7RcacN9eSZ7OLohwxqhEvWu1+UxELyScgLbLLOdeVEGdwKI1iwVQ==}
+  '@modelcontextprotocol/express@2.0.2':
+    resolution: {integrity: sha512-lUvfV7gT/tgP8nLRs0ajUtgL+MlMNWWHAls5c9cf4PyBexq3EgmhWWrS4irQOC9OoKuUsHHcNjUw9urhHz542g==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/server': ^2.0.0
+      '@modelcontextprotocol/server': ^2.3.0
       express: ^4.18.0 || ^5.0.0
 
   '@modelcontextprotocol/node@2.0.0':
@@ -340,8 +339,8 @@ packages:
       hono:
         optional: true
 
-  '@modelcontextprotocol/server@2.0.0':
-    resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
+  '@modelcontextprotocol/server@2.3.0':
+    resolution: {integrity: sha512-+6b0LdsQLmHsvS7J6sQJ4weTpzUn61fU1JKS+321/+IyDYoHW5CR2Tgqcs6GgAAQvlesCo6yX3xttgmx+XGtJw==}
     engines: {node: '>=20'}
 
   '@oxc-project/types@0.151.0':
@@ -864,8 +863,8 @@ packages:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
 
-  hono@4.13.7:
-    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
+  hono@4.13.11:
+    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
     engines: {node: '>=16.9.0'}
 
   hookified@1.15.1:
@@ -1277,8 +1276,8 @@ packages:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
 
-  vite@8.2.2:
-    resolution: {integrity: sha512-cFKLV/PRgAUlIRm5WjMjJ86jrftzpqcgH+Us+DS8mI3CDNiH30Whrz8uHL3+MOLPAgqbMBAqWdAHAphOAM+z/Q==}
+  vite@8.2.4:
+    resolution: {integrity: sha512-lfauXnrf2x0p+UoA+wXh0dgFWnUjCyG6Js95KBkgaCwUU9k0DAHI4W6Q0WCx+h+5g+Alce1y4Zi2QjjK0UvGBw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -1518,9 +1517,9 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@hono/node-server@1.19.17(hono@4.13.7)':
+  '@hono/node-server@1.19.17(hono@4.13.11)':
     dependencies:
-      hono: 4.13.7
+      hono: 4.13.11
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -1548,9 +1547,9 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@modelcontextprotocol/client@2.2.0':
+  '@modelcontextprotocol/client@2.3.0':
     dependencies:
-      '@modelcontextprotocol/core': 2.2.0
+      '@modelcontextprotocol/core': 2.3.0
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
@@ -1558,30 +1557,26 @@ snapshots:
       pkce-challenge: 5.0.1
       zod: 4.6.5
 
-  '@modelcontextprotocol/core@2.0.0':
+  '@modelcontextprotocol/core@2.3.0':
     dependencies:
       zod: 4.6.5
 
-  '@modelcontextprotocol/core@2.2.0':
+  '@modelcontextprotocol/express@2.0.2(@modelcontextprotocol/server@2.3.0)(express@5.2.1)':
     dependencies:
-      zod: 4.6.5
-
-  '@modelcontextprotocol/express@2.0.0(@modelcontextprotocol/server@2.0.0)(express@5.2.1)':
-    dependencies:
-      '@modelcontextprotocol/server': 2.0.0
+      '@modelcontextprotocol/server': 2.3.0
       cors: 2.8.6
       express: 5.2.1
 
-  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.7)':
+  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.3.0)(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 1.19.17(hono@4.13.7)
-      '@modelcontextprotocol/server': 2.0.0
+      '@hono/node-server': 1.19.17(hono@4.13.11)
+      '@modelcontextprotocol/server': 2.3.0
     optionalDependencies:
-      hono: 4.13.7
+      hono: 4.13.11
 
-  '@modelcontextprotocol/server@2.0.0':
+  '@modelcontextprotocol/server@2.3.0':
     dependencies:
-      '@modelcontextprotocol/core': 2.0.0
+      '@modelcontextprotocol/core': 2.3.0
       zod: 4.6.5
 
   '@oxc-project/types@0.151.0': {}
@@ -1789,13 +1784,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.1
 
-  '@vitest/mocker@4.1.11(vite@8.2.2(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3))':
+  '@vitest/mocker@4.1.11(vite@8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.2.2(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3)
+      vite: 8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3)
 
   '@vitest/pretty-format@4.1.11':
     dependencies:
@@ -2163,7 +2158,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.13.7: {}
+  hono@4.13.11: {}
 
   hookified@1.15.1: {}
 
@@ -2543,7 +2538,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vite@8.2.2(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3):
+  vite@8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -2557,10 +2552,10 @@ snapshots:
       tsx: 4.23.12
       yaml: 2.8.3
 
-  vitest@4.1.11(@types/node@24.19.0)(vite@8.2.2(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3)):
+  vitest@4.1.11(@types/node@24.19.0)(vite@8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@8.2.2(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3))
+      '@vitest/mocker': 4.1.11(vite@8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
@@ -2577,7 +2572,7 @@ snapshots:
       tinyexec: 1.3.0
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.1
-      vite: 8.2.2(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3)
+      vite: 8.2.4(@types/node@24.19.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.8.3)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.19.0

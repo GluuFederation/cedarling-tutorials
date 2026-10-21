@@ -21,7 +21,7 @@ afterEach(() => {
   }
 });
 
-function fixture() {
+function fixture(port = 17008) {
   const root = mkdtempSync(resolve(tmpdir(), "p8-setup-"));
   temporaryRoots.push(root);
   const project = resolve(root, "p8-cedarfile");
@@ -33,9 +33,9 @@ function fixture() {
     `IDP_ISSUER=http://localhost:18008
 P8_CLIENT_ID=p8-cedarfile
 P8_CLIENT_SECRET=${"p8".repeat(16)}
-P8_API_RESOURCE=http://localhost:17008/api
-P8_REDIRECT_URI=http://localhost:17008/auth/callback
-P8_POST_LOGOUT_REDIRECT_URI=http://localhost:17008
+P8_API_RESOURCE=http://localhost:${port}/api
+P8_REDIRECT_URI=http://localhost:${port}/auth/callback
+P8_POST_LOGOUT_REDIRECT_URI=http://localhost:${port}
 `,
     { mode: 0o600 },
   );
@@ -72,15 +72,26 @@ describe("P8 setup", () => {
       expect(statSync(target).mode & 0o777).toBe(0o600);
   });
 
-  it("repairs a project registration mismatch", () => {
-    const { project, run } = fixture();
-    writeFileSync(resolve(project, ".env"), "P8_CLIENT_ID=wrong-client\n", {
-      mode: 0o600,
-    });
-    const result = run();
-    expect(result.status, result.stderr).toBe(0);
-    expect(
-      parseEnv(readFileSync(resolve(project, ".env"), "utf8")),
-    ).toMatchObject({ P8_CLIENT_ID: "p8-cedarfile" });
-  });
+  it.each([17008, 4208])(
+    "repairs stale registration settings for port %s",
+    (port) => {
+      const { project, run } = fixture(port);
+      writeFileSync(
+        resolve(project, ".env"),
+        "P8_CLIENT_ID=wrong-client\nP8_PORT=3008\n",
+        {
+          mode: 0o600,
+        },
+      );
+      const result = run();
+      expect(result.status, result.stderr).toBe(0);
+      expect(
+        parseEnv(readFileSync(resolve(project, ".env"), "utf8")),
+      ).toMatchObject({
+        P8_CLIENT_ID: "p8-cedarfile",
+        P8_PORT: String(port),
+        P8_BASE_URL: `http://localhost:${port}`,
+      });
+    },
+  );
 });

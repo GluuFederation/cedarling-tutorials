@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { AppConfig } from "../src/server/config.ts";
+import type { AppConfig } from "../src/server/config/environment.ts";
 import type { AccountId, SessionView } from "../src/shared/contracts.ts";
 
 class CookieJar {

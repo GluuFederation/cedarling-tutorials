@@ -8,7 +8,7 @@
   },
   "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "admin": "node scripts/admin.ts",
+    "admin": "node --env-file=.env scripts/admin.ts",
     "build": "react-router build",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "dev": "node scripts/dev.mjs",
@@ -19,7 +19,7 @@
     "test:e2e": "node scripts/verify-docker.ts",
     "preflight": "node scripts/preflight.mjs",
     "reset": "node --env-file=.env scripts/reset.ts",
-    "start": "pnpm preflight && node --env-file=.env server.js",
+    "start": "pnpm preflight && node --env-file=.env server/index.js",
     "test": "vitest run",
     "typecheck": "react-router typegen && tsc -b --pretty false"
   },
@@ -43,7 +43,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "typescript": "6.0.3",
-    "vite": "8.2.2",
+    "vite": "8.2.4",
     "vitest": "4.1.11"
   }
 }
