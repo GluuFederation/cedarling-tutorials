@@ -143,16 +143,19 @@ export type SupportProjection = CommonProjection & {
   view: "support";
   expectedApprover: string | null;
   requestedBy: string | null;
+  reasonCategory: ReasonCategory | null;
+  reason: string | null;
+  requestedAt: number | null;
   assignment: {
     caseId: string | null;
     expiresAt: number | null;
     limitMinor: number | null;
     currency: string | null;
-    status: "active" | "revoked" | "missing";
+    status: "active" | "expired" | "revoked" | "missing";
   };
   approvedBy: string | null;
   approvedAt: number | null;
-  fraudStatus: "pending" | "cleared" | "blocked";
+  fraudStatus: "not-started" | "pending" | "cleared" | "blocked";
 };
 export type FraudProjection = CommonProjection & {
   view: "fraud";

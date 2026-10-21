@@ -128,7 +128,9 @@ export function createApp(
       ...value,
       requestId: response.getHeader("x-request-id"),
     });
-  app.get("/health", (_request, response) => response.json({ status: "ok" }));
+  app.get("/health", (_request, response) =>
+    response.json({ status: "ok", service: "p15-marketplace" }),
+  );
   app.get("/auth/login", async (request, response) => {
     const hint = request.query.login_hint;
     if (

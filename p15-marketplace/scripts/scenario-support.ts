@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { prepareData } from "../src/server/prepare-data.ts";
 import { randomToken } from "../src/server/security.ts";
 import type {
   ActorId,
+  OrderSummary,
   ProjectionIntent,
   RefundMutationResult,
   RefundViewResult,
@@ -54,20 +55,10 @@ export async function isolatedState() {
     IDP_PORT: String(idpPort),
     IDP_ISSUER: issuer,
   };
-  const envFile = `${directory}/scenario.env`;
-  writeFileSync(
-    envFile,
-    Object.entries(values)
-      .map(([name, value]) => `${name}=${JSON.stringify(value)}`)
-      .join("\n"),
-    { mode: 0o600 },
-  );
   return {
     baseUrl,
     issuer,
     env: { ...process.env, ...values },
-    envFile,
-    project: `p15-${basename(directory).toLowerCase()}`,
     cleanup: () => {
       if (!directory.startsWith(`${resolve(".local")}/scenario-`))
         throw new Error("Unsafe scenario root");
@@ -153,7 +144,7 @@ class Jar {
   }
 }
 
-export async function login(state: ScenarioState, actor: ActorId) {
+async function login(state: ScenarioState, actor: ActorId) {
   const app = new Jar();
   const idp = new Jar();
   let response = await app.fetch(
@@ -235,43 +226,61 @@ export async function proveNormal(state: ScenarioState) {
   const sela = await login(state, "sela");
   const diego = await login(state, "diego");
   const nia = await login(state, "nia");
-  assert.equal(
-    (await bao.view("refund-bao-001", "buyer")).refund.state,
-    "eligible",
-  );
-  const requested = await bao.mutate("refund-bao-001/request", {
+  const checkout = await bao.app.fetch(`${state.baseUrl}/api/orders`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: state.baseUrl,
+      "x-csrf-token": bao.session.csrfToken,
+    },
+    body: JSON.stringify({ bookId: "book-oauth-action", expectedVersion: 1 }),
+  });
+  assert.equal(checkout.status, 200);
+  const { order } = (await checkout.json()) as { order: OrderSummary };
+  assert.equal(order.buyerId, "bao");
+  assert.equal(order.amountMinor, 4_999);
+  const caseId = order.refund.id;
+  assert.equal((await bao.view(caseId, "buyer")).refund.state, "eligible");
+  const requested = await bao.mutate(`${caseId}/request`, {
     reasonCategory: "damaged",
-    reason: "Handle split during delivery.",
+    reason: "The cover arrived damaged.",
     expectedVersion: 0,
   });
   assert.equal(requested.state, "requested");
-  const seller = await sela.view("refund-bao-001", "seller");
+  const seller = await sela.view(caseId, "seller");
   assert.equal(seller.refund.state, "requested");
   assert.equal("reason" in seller.refund, false);
-  const approved = await diego.mutate("refund-bao-001/approval", {
+  const support = await diego.view(caseId, "support");
+  assert.equal(support.refund.view, "support");
+  if (support.refund.view !== "support")
+    throw new Error("Expected support view");
+  assert.equal(support.refund.reasonCategory, "damaged");
+  assert.equal(support.refund.reason, "The cover arrived damaged.");
+  assert.equal(typeof support.refund.requestedAt, "number");
+  assert.equal(support.refund.fraudStatus, "not-started");
+  const approved = await diego.mutate(`${caseId}/approval`, {
     expectedVersion: 1,
   });
   assert.equal(approved.state, "approved-awaiting-fraud");
-  const completed = await nia.mutate("refund-bao-001/fraud-review", {
+  const completed = await nia.mutate(`${caseId}/fraud-review`, {
     outcome: "clear",
     expectedVersion: 2,
   });
   assert.equal(completed.state, "completed");
   assert.equal(completed.effect?.synthetic, true);
-  const repeated = await nia.mutate("refund-bao-001/fraud-review", {
+  const repeated = await nia.mutate(`${caseId}/fraud-review`, {
     outcome: "clear",
     expectedVersion: 2,
   });
   assert.equal(repeated.effect?.id, completed.effect?.id);
   console.info(
-    "✓ Bao → Sela → Diego → Nia completes one synthetic refund effect",
+    "✓ Fresh checkout → Bao → Sela → Diego → Nia completes one synthetic refund effect",
   );
   return {
-    nia,
     async persisted() {
-      const current = await nia.view("refund-bao-001", "fraud");
+      const current = await nia.view(caseId, "fraud");
       assert.equal(current.refund.state, "completed");
-      const retry = await nia.mutate("refund-bao-001/fraud-review", {
+      const retry = await nia.mutate(`${caseId}/fraud-review`, {
         outcome: "clear",
         expectedVersion: 2,
       });

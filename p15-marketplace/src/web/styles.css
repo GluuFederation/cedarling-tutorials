@@ -39,7 +39,8 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+summary:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
@@ -51,6 +52,7 @@ p {
 }
 .account-menu {
   position: relative;
+  justify-self: end;
 }
 .account-menu > summary {
   list-style: none;
@@ -72,6 +74,7 @@ p {
   box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 12%);
 }
 .account-menu-items button {
+  min-height: 44px;
   display: block;
   width: 100%;
   padding: 0.55rem 0.65rem;
@@ -93,6 +96,8 @@ p {
   overflow: hidden;
 }
 .brand-rail {
+  position: relative;
+  z-index: 4;
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(300px, 2fr) minmax(
       150px,
@@ -116,6 +121,7 @@ p {
   object-position: left;
 }
 .topbar-copy {
+  min-width: 0;
   text-align: center;
 }
 .topbar-copy h1 {
@@ -128,6 +134,7 @@ p {
   font-size: 0.76rem;
 }
 .rail-identity {
+  min-width: 44px;
   justify-self: end;
   display: flex;
   align-items: center;
@@ -154,12 +161,19 @@ p {
 }
 .workspace,
 .landing {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }
+.workspace {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .landing {
   display: grid;
-  place-items: center;
+  align-items: safe center;
+  justify-items: center;
   padding: 32px 20px;
   background: var(--soft);
 }
@@ -208,6 +222,7 @@ p {
   font-size: 0.73rem;
 }
 .tabs {
+  flex-shrink: 0;
   position: sticky;
   top: 0;
   z-index: 3;
@@ -244,6 +259,8 @@ p {
   margin: 0;
 }
 .catalog {
+  min-height: 0;
+  overflow-y: auto;
   padding: 0 clamp(20px, 4vw, 48px) 30px;
 }
 .book-grid {
@@ -298,7 +315,7 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 14px;
   border: 1px solid var(--green);
   border-radius: 5px;
@@ -314,13 +331,15 @@ p {
   border-color: #8fa09a;
 }
 .queue-view {
+  flex: 1;
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(280px, 38%) minmax(0, 1fr);
-  height: calc(100% - 49px);
   min-height: 0;
 }
 .queue,
 .detail {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }
@@ -382,6 +401,7 @@ button.queue-row.selected {
   padding: 16px clamp(18px, 3vw, 30px);
 }
 .detail-heading {
+  flex-wrap: wrap;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -404,12 +424,13 @@ button.queue-row.selected {
   border-bottom: 1px solid var(--border);
 }
 .section-tabs button {
-  min-height: 36px;
+  min-height: 44px;
+  min-width: 44px;
   text-transform: capitalize;
 }
 .detail-rows {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   column-gap: 22px;
   margin: 0;
 }
@@ -433,7 +454,7 @@ button.queue-row.selected {
 }
 .action-panel {
   display: grid;
-  grid-template-columns: minmax(150px, 0.7fr) minmax(220px, 1.3fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   align-items: end;
   gap: 9px;
   margin-top: 12px;
@@ -448,6 +469,7 @@ button.queue-row.selected {
   font-size: 0.75rem;
 }
 .action-panel label {
+  min-width: 0;
   display: grid;
   gap: 5px;
   color: var(--navy);
@@ -466,6 +488,8 @@ textarea {
   border: 1px solid #acbab5;
   border-radius: 4px;
   resize: vertical;
+  font-size: 1rem;
+  min-height: 44px;
 }
 .action-panel .primary {
   justify-self: start;
@@ -494,8 +518,28 @@ textarea {
 .empty-detail button {
   justify-self: center;
 }
+.refund-receipt {
+  min-height: 0;
+  padding: 16px;
+  gap: 16px;
+  overflow-wrap: anywhere;
+}
+.refund-receipt h2,
+.refund-receipt p {
+  margin: 0;
+}
+.refund-receipt h2 {
+  font-size: 1.15rem;
+}
 .back {
   display: none;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 18px;
+  padding: 5px 0;
+  color: var(--blue);
+  background: transparent;
+  border: 0;
 }
 .effect-result,
 .global-notice,
@@ -517,12 +561,11 @@ textarea {
   overflow-wrap: anywhere;
 }
 .global-notice {
-  position: fixed;
-  right: 24px;
-  bottom: 62px;
-  z-index: 5;
-  max-width: min(480px, calc(100% - 48px));
-  box-shadow: 0 8px 24px #061d3322;
+  position: static;
+  flex-shrink: 0;
+  margin: 8px 16px;
+  max-height: 25dvh;
+  overflow-y: auto;
 }
 .state {
   padding: 30px;
@@ -539,10 +582,21 @@ textarea {
   border-top: 1px solid var(--border);
 }
 .site-footer nav {
+  min-width: 0;
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  justify-content: safe center;
 }
 .site-footer a {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding-inline: 6px;
+  white-space: nowrap;
   color: var(--blue);
   font-size: 0.72rem;
   text-underline-offset: 3px;
@@ -554,7 +608,7 @@ textarea {
 }
 @media (max-width: 760px) {
   .brand-rail {
-    grid-template-columns: 44px 1fr 50px;
+    grid-template-columns: 44px minmax(0, 1fr) 50px;
     gap: 9px;
     min-height: 72px;
     padding: 8px 14px;
@@ -593,6 +647,7 @@ textarea {
   .queue-view {
     display: block;
     height: auto;
+    overflow-y: auto;
   }
   .queue {
     padding: 0 14px 18px;
@@ -610,19 +665,9 @@ textarea {
   }
   .back {
     display: inline-flex;
-    margin-bottom: 18px;
-    padding: 5px 0;
-    color: var(--blue);
-    background: transparent;
-    border: 0;
-  }
-  .global-notice {
-    right: 16px;
-    bottom: 58px;
-    max-width: calc(100% - 32px);
   }
   .detail-rows > div {
-    grid-template-columns: 100px 1fr;
+    grid-template-columns: 100px minmax(0, 1fr);
   }
   .login-panel {
     padding: 24px 18px;
@@ -666,5 +711,52 @@ textarea {
   .split-actions button,
   .action-panel .primary {
     width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .queue-row strong,
+  .detail-rows dd,
+  .account-copy strong {
+    font-size: 1rem;
+  }
+  .detail-rows dt,
+  .action-panel label,
+  .action-panel p,
+  .queue-row small,
+  .account-copy small,
+  .global-notice {
+    font-size: 0.875rem;
+  }
+  .site-footer {
+    padding-inline: 8px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .site-footer a {
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 1000px) and (max-height: 480px) {
+  .brand-rail {
+    min-height: 56px;
+    padding-block: 6px;
+  }
+  .topbar-copy p {
+    display: none;
+  }
+  .queue-view {
+    display: block;
+    overflow-y: auto;
+  }
+  .queue-view .detail,
+  .queue-view.has-detail .queue {
+    display: none;
+  }
+  .queue-view.has-detail .detail {
+    display: block;
+  }
+  .back {
+    display: inline-flex;
   }
 }

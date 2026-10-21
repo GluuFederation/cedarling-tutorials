@@ -84,7 +84,7 @@ export class CapabilityGateway {
     }
     if (!validDecision(result)) throw authorizationError();
     this.log(
-      `P15 server | FAKE ${result.decision} | ${input.capability} | ${input.actor.id} -> ${input.resource.id}`,
+      `P15 server | FAKE ${result.decision} | ${input.capability} | ${input.actor.id} -> ${input.resource.id} | ${input.requestId}`,
     );
     if (result.decision === "DENY") {
       if (input.hideDenial) throw unavailableCase();
@@ -245,6 +245,7 @@ export class MarketplaceService {
         refund,
         this.store.supportForCase(refund.id),
         this.store.fraudForCase(refund.id),
+        this.now(),
       ),
     };
   }
@@ -576,16 +577,13 @@ function validReason(value: unknown) {
     value === undefined ||
     (typeof value === "string" &&
       value.trim().length <= 240 &&
-      !hasControlCharacter(value, true))
+      !hasControlCharacter(value))
   );
 }
-function hasControlCharacter(value: string, allowFormatting = false) {
+function hasControlCharacter(value: string) {
   return [...value].some((character) => {
     const code = character.charCodeAt(0);
-    return (
-      (code < 32 && !(allowFormatting && [9, 10, 13].includes(code))) ||
-      code === 127
-    );
+    return (code < 32 && ![9, 10, 13].includes(code)) || code === 127;
   });
 }
 function supportFacts(
@@ -620,6 +618,7 @@ function project(
   refund: RefundSnapshot,
   support: SupportAssignment | undefined,
   fraud: FraudAssignment | undefined,
+  now: number,
 ): RefundProjection {
   const base = {
     ...common(refund),
@@ -650,12 +649,18 @@ function project(
       view: intent,
       expectedApprover: support?.actorName ?? null,
       requestedBy: refund.requestedByName,
+      reasonCategory: refund.reasonCategory,
+      reason: refund.reason,
+      requestedAt: refund.requestedAt,
       assignment: {
         caseId: support?.refundId ?? null,
         expiresAt: support?.expiresAt ?? null,
         limitMinor: support?.limitMinor ?? null,
         currency: support?.currency ?? null,
-        status: support?.status ?? "missing",
+        status:
+          support?.status === "active" && support.expiresAt <= now
+            ? "expired"
+            : (support?.status ?? "missing"),
       },
       approvedBy: refund.approvedByName,
       approvedAt: refund.approvedAt,
@@ -664,7 +669,9 @@ function project(
           ? "cleared"
           : refund.fraudOutcome === "block"
             ? "blocked"
-            : "pending",
+            : refund.state === "approved-awaiting-fraud"
+              ? "pending"
+              : "not-started",
     } satisfies SupportProjection;
   return {
     ...base,

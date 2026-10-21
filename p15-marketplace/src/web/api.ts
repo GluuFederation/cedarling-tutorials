@@ -9,7 +9,7 @@ import type {
   SessionView,
 } from "../shared/protocol.ts";
 
-type Failure = { error?: { code?: string }; requestId?: string };
+type Failure = { error?: { code?: unknown }; requestId?: unknown };
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -20,14 +20,19 @@ export class ApiError extends Error {
   }
 }
 async function payload<T>(response: Response): Promise<T> {
-  const value = (await response.json()) as T & Failure;
-  if (!response.ok)
+  if (!response.ok) {
+    const value: Failure | null = await response.json().catch(() => null);
     throw new ApiError(
       response.status,
-      value.error?.code ?? "REQUEST_FAILED",
-      value.requestId ?? "unknown",
+      typeof value?.error?.code === "string"
+        ? value.error.code
+        : "REQUEST_FAILED",
+      typeof value?.requestId === "string"
+        ? value.requestId
+        : (response.headers.get("x-request-id") ?? "unknown"),
     );
-  return value;
+  }
+  return response.json() as Promise<T>;
 }
 const get = <T>(path: string) =>
   fetch(path, { cache: "no-store" }).then(payload<T>);

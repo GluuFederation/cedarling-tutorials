@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { parseEnv } from "node:util";
 import { afterEach, expect, it } from "vitest";
 import { loadConfig } from "../src/server/config.ts";
 import { Store } from "../src/server/database.ts";
@@ -77,38 +78,43 @@ it("prepares private state idempotently without overwriting learner data", () =>
   expect(() => prepareData(directory)).toThrow("Invalid private state");
 });
 
-it("repairs shared registration values and preserves project settings", () => {
-  const directory = testDirectory();
-  const project = join(directory, "project");
-  const identity = join(project, ".local/idp");
-  mkdirSync(project);
-  mkdirSync(identity, { recursive: true });
-  const secret = randomToken();
-  writeFileSync(
-    join(identity, ".env"),
-    [
-      "IDP_ISSUER=http://localhost:18015",
-      "P15_CLIENT_ID=p15-client",
-      `P15_CLIENT_SECRET=${secret}`,
-      "P15_API_RESOURCE=http://localhost:17015/api",
-      "P15_REDIRECT_URI=http://localhost:17015/auth/callback",
-      "P15_POST_LOGOUT_REDIRECT_URI=http://localhost:17015",
-      "",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(project, ".env"),
-    `P15_CLIENT_SECRET=${randomToken()}\nP15_LOCAL_NOTE=keep\n`,
-  );
-  execFileSync(process.execPath, [resolve("scripts/setup.ts")], {
-    cwd: project,
-    stdio: "pipe",
-    timeout: 20_000,
-  });
-  const configured = readFileSync(join(project, ".env"), "utf8");
-  expect(configured).toContain(`P15_CLIENT_SECRET="${secret}"`);
-  expect(configured).toContain("P15_LOCAL_NOTE=keep");
-}, 30_000);
+it.each([17015, 4215])(
+  "repairs stale port for registration %s and preserves project settings",
+  (port) => {
+    const directory = testDirectory();
+    const project = join(directory, "project");
+    const identity = join(project, ".local/idp");
+    mkdirSync(project);
+    mkdirSync(identity, { recursive: true });
+    const secret = randomToken();
+    writeFileSync(
+      join(identity, ".env"),
+      [
+        "IDP_ISSUER=http://localhost:18015",
+        "P15_CLIENT_ID=p15-client",
+        `P15_CLIENT_SECRET=${secret}`,
+        `P15_API_RESOURCE=http://localhost:${port}/api`,
+        `P15_REDIRECT_URI=http://localhost:${port}/auth/callback`,
+        `P15_POST_LOGOUT_REDIRECT_URI=http://localhost:${port}`,
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(project, ".env"),
+      `P15_CLIENT_SECRET=${randomToken()}\nP15_LOCAL_NOTE=keep\nP15_PORT=3015\n`,
+    );
+    execFileSync(process.execPath, [resolve("scripts/setup.ts")], {
+      cwd: project,
+      stdio: "pipe",
+      timeout: 20_000,
+    });
+    const configured = readFileSync(join(project, ".env"), "utf8");
+    expect(parseEnv(configured).P15_PORT).toBe(String(port));
+    expect(configured).toContain(`P15_CLIENT_SECRET="${secret}"`);
+    expect(configured).toContain("P15_LOCAL_NOTE=keep");
+  },
+  30_000,
+);
 
 it("refuses linked state paths before opening the database", () => {
   const directory = testDirectory();

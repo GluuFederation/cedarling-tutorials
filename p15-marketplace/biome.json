@@ -6,6 +6,8 @@
       "!!dist",
       "!!node_modules",
       "!!.local",
+      "!!playwright-report",
+      "!!test-results",
       "!!pnpm-lock.yaml"
     ]
   },
