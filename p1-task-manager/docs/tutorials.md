@@ -5,8 +5,8 @@ summary: Secure a task manager with Token-Based Access Control (TBAC) on the ser
 order: 20
 socialImage: ./assets/social-card.webp
 socialImageAlt: Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.
-lastVerified: 2026-10-09T13:42:36Z
-lastUpdated: 2026-10-19T17:11:47Z
+lastVerified: 2026-10-22T17:09:42Z
+lastUpdated: 2026-10-22T17:09:42Z
 ---
 
 # Protect a Node.js REST API with Cedarling
@@ -18,17 +18,19 @@ tasks they neither own nor are assigned to, even across tenants. Creation,
 assignment, completion, and deletion lack authorization checks, and a
 task can be assigned to someone in another tenant.
 
-We'll enforce permissions for all six operations in the API and reflect them
-in browser controls. Alex, a contributor who can create tasks reserved for
-Mina, the owner, will be our main example. We'll block his creation request,
-preserve his assigned-task edits, and verify the other permissions too.
+We'll follow `Create` from policy to API handler: Alex, a contributor, must not
+create tasks reserved for Mina, the owner. We'll block his request, check that
+his assigned-task edits still work, and apply the remaining permissions.
+The API will protect all six operations, and browser controls will reflect
+those permissions.
 
 If you are new to Cedarling, please read [What is Cedarling?](https://cedarling.dev/learn/what-is-cedarling) before continuing.
 
 ## The task manager we'll secure
 
-The app uses React, a Fastify Node.js API, and SQLite. A bundled identity
-provider (IdP), built with `oidc-provider`, handles sign-in and issues tokens.
+The app uses React, a Fastify Node.js API, and SQLite. The repository's shared
+local identity provider (IdP), built with `oidc-provider`, runs as a separate
+Node.js service and handles sign-in and tokens.
 After OIDC login, the API maps the verified issuer and subject (the IdP's user
 identifier) to a local user. SQLite supplies that user's current tenant, role,
 and assurance level.[^1]
@@ -78,7 +80,7 @@ node ../shared/tools/step/run.mjs p1 init --source 850e38fd5dc4758848e3fcb05af40
 Run the remaining commands from `p1-task-manager/`. Paths under `shared/` are
 relative to the repository root.
 
-For the coding path, start Node.js in two terminals.[^7] In the first:
+Start the app and IdP in two terminals.[^7] In the first:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
@@ -237,11 +239,18 @@ node ../shared/tools/step/run.mjs p1 policy-store
 
 </details>
 
-We'll supply current user and task facts with each request.[^4] Cedar's schema
-defines the types those requests may contain: `principal` is who acts,
-`action` is the operation, `resource` is its target, and `context` holds
-additional facts. See the [schema syntax reference](https://docs.cedarpolicy.com/schema/human-readable-schema.html)
-when reading `schema.cedarschema`.
+We'll supply current user and task facts with each request.[^4] In Cedar,
+`principal` is who acts, `action` is the operation, `resource` is its target,
+and `context` holds additional facts. `schema.cedarschema` defines their types;
+the [Cedar schema reference](https://docs.cedarpolicy.com/schema/human-readable-schema.html)
+explains the syntax.
+
+For `Create`, the resource is the user's tenant. The trusted-issuer file points
+Cedarling to the local IdP so it can validate the access token intended for
+`http://localhost:17001/api`. The ID token is used during OIDC login.
+
+<details>
+<summary>How the schema and trusted-issuer mapping fit together</summary>
 
 The server supplies tokens instead of a principal entity. `Task::Any` satisfies
 Cedar's principal-type declaration; browser requests use `Task::User`.
@@ -280,9 +289,9 @@ the issuer and how to map its tokens:
 }
 ```
 
-For authorization, we use the access token intended for
-`http://localhost:17001/api`. Cedarling validates it and exposes its claims
-through `context.tokens`. The ID token is used during OIDC login.
+Cedarling exposes the validated access-token claims through `context.tokens`.
+
+</details>
 
 ### Set the conditions for `Create`
 
@@ -361,8 +370,9 @@ From `p1-task-manager/`, install the integration's dependencies:
 
 ```bash
 pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
-pnpm add --save-exact @fastify/static@10.1.5 @fastify/swagger@9.9.0
-pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
+pnpm add --save-exact @fastify/cookie@11.1.3 @fastify/helmet@13.2.0 @fastify/static@10.1.6 @fastify/swagger@9.9.2
+pnpm add --save-exact react@19.3.1 react-dom@19.3.1
+pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 
 `cedar-wasm` checks policy and schema syntax; `cedarling_wasm` evaluates
@@ -592,6 +602,9 @@ Use **Change account** between users or separate browser profiles; ordinary
 tabs share a session. Rerun the console snippet to get the signed-in user's
 CSRF token. The baseline-created task may still exist.
 
+Switch back to Alex, open **Prepare launch brief**, change its description,
+and save. His assigned-task edit should still succeed.
+
 ### Show the actions each user can take
 
 The API now denies Alex's creation request, but the browser still offers the
@@ -617,7 +630,14 @@ brief, but browser evaluation cannot give him `Create` permission.
 
 The API sends this list with user facts, policy information, versions, and an
 expiry time in an **authorization envelope**. Tokens and session IDs stay on the
-server. In `src/web/authorization-trace.ts`, `loadPolicy()` fetches the archive
+server. `loadPolicy()` fetches the browser's policy archive from the app and
+checks its hash before initializing Cedarling. The unsigned browser instance
+uses server-supplied facts; server token validation stays enabled.
+
+<details>
+<summary>Browser policy loading</summary>
+
+In `src/web/authorization-trace.ts`, `loadPolicy()` fetches the archive
 from `/policy-store/<sha256>.cjar` on the app's origin, verifies its hash, and
 passes the bytes to Cedarling:
 
@@ -647,8 +667,9 @@ async function loadPolicy(
 }
 ```
 
-JWT checks are disabled in this unsigned browser instance, which receives no
-JWTs. Server token validation remains enabled.
+JWT checks are disabled in this browser instance because it receives no JWTs.
+
+</details>
 
 `authorizePresentation()` builds a `Task::User` principal from the server's
 user facts and batches the control checks. Each item contains its action,
@@ -994,4 +1015,4 @@ The complete source is available in the
 
 [^6]: Cedar returns an empty list of determining policies when no policy permits or forbids the request. A matched `forbid` would instead appear as a determining policy. See [How Cedar authorization works](https://docs.cedarpolicy.com/auth/authorization.html).
 
-[^7]: These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+[^7]: Follow these commands on Linux, macOS, or Windows with Git, Node.js, and pnpm installed. Native project checks run in CI on all three systems. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).

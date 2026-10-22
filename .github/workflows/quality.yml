@@ -27,7 +27,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24.21.0
       - name: Check tutorial step helper
@@ -47,7 +47,7 @@ jobs:
         with:
           version: 10.17.1
           run_install: false
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24.21.0
           cache: pnpm
@@ -85,7 +85,7 @@ jobs:
         with:
           version: 10.17.1
           run_install: false
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24.21.0
           cache: pnpm
@@ -133,7 +133,7 @@ jobs:
         with:
           version: 10.17.1
           run_install: false
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24.21.0
           cache: pnpm
@@ -153,7 +153,7 @@ jobs:
         project: ${{ fromJSON(needs.changes.outputs.compose) }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24.21.0
       - name: Validate Compose
@@ -189,7 +189,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24.21.0
       - name: Start independent stacks

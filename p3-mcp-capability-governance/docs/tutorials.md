@@ -6,7 +6,7 @@ order: 40
 socialImage: ./assets/social-card.webp
 socialImageAlt: An MCP server checks incident capabilities with a private Cedarling sidecar before protected effects.
 lastVerified: 2026-10-09T11:47:10Z
-lastUpdated: 2026-10-09T17:29:36Z
+lastUpdated: 2026-10-22T17:09:42Z
 ---
 
 # Govern MCP Capabilities with Cedarling
@@ -45,8 +45,9 @@ and changes we'll need.
 - New to Cedarling? [Read the short introduction](https://cedarling.dev/learn/what-is-cedarling) when you need it.
 - Keep the [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy while editing policies.
 
-These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
-on macOS and Windows. If a platform-specific step fails,
+Follow these commands on Linux, macOS, or Windows with the listed prerequisites
+installed. Native project checks run in CI on all three systems; the sidecar
+checks run on Linux. If a platform-specific step fails,
 [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
 
 </details>
@@ -72,8 +73,9 @@ use Cedarling to protect MCP tools, resources, and prompts.
 unassigned audit incident in the mitigated state. Amir should not resolve the
 second incident just because the model selected its update tool.
 
-The bundled Node.js `oidc-provider` authenticates these users and issues their
-access tokens. Cedarling uses Token-Based Access Control (TBAC): policies evaluate
+The repository's shared local IdP runs as a separate Node.js service using
+`oidc-provider`. It authenticates these users and issues their access tokens.
+Cedarling uses Token-Based Access Control (TBAC): policies evaluate
 signed tokens from trusted issuers together with the request's facts.[^6]
 In P3, the token identifies the caller. The MCP server looks up roles in its
 account map and assignments in the incident repository.
@@ -398,7 +400,7 @@ From P3, install the build dependencies and update the MCP client to match the c
 
 ```bash
 pnpm add --save-exact @modelcontextprotocol/client@2.3.0 @modelcontextprotocol/express@2.0.2 @modelcontextprotocol/server@2.3.0 hono@4.13.11
-pnpm add --save-dev --save-exact fflate@0.8.3 @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
+pnpm add --save-dev --save-exact fflate@0.8.3 @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 node ../shared/policy-store.mjs
 ```
 
@@ -820,8 +822,9 @@ Adapting it requires a separate review of local HTTP and the development IdP,
 fixed account permissions, in-memory incidents, sidecar access, provider data
 handling, and audit logging.
 
-Optional components include Jans Auth for identity, Agama Lab Policy Designer
-for policy authoring, and Lock Server for decision logs. See
+Optional components include Jans Auth for identity, Agama Lab Cedar Policy
+Designer for policy authoring, and Lock Server for policy-store distribution
+and decision-log collection. This tutorial loads a local archive. See
 [Cedarling production solutions](https://cedarling.dev/solutions).
 
 </details>
@@ -849,7 +852,7 @@ permission changes.
 
 [^3]: The [OpenID AuthZEN Authorization API](https://openid.net/specs/authorization-api-1_0-final.html) defines the decision request's subject, action, resource, and context and the response's decision. P3 uses the Cedarling sidecar's own endpoint and token/entity mapping fields to implement this pattern.
 
-[^4]: Here `JSON.stringify()` creates the JSON body for an HTTP POST to the Cedarling sidecar. P3 uses the sidecar's AuthZen endpoint, not the `cedarling_wasm` JavaScript authorization method.
+[^4]: Here `JSON.stringify()` creates the JSON body for an HTTP POST to the Cedarling sidecar's AuthZEN endpoint.
 
 [^5]: [Mutual TLS (mTLS)](https://istio.io/latest/docs/concepts/security/#mutual-tls-authentication) authenticates both ends of a service connection. A service mesh can manage that transport between application and policy decision service; the local tutorial uses a private shared network namespace instead.
 

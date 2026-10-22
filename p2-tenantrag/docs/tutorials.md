@@ -6,7 +6,7 @@ order: 30
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Fastify RAG service checks corpus and documents with Cedarling before sending retrieved evidence to the answer model.
 lastVerified: 2026-10-09T10:23:54Z
-lastUpdated: 2026-10-09T17:29:36Z
+lastUpdated: 2026-10-22T17:09:42Z
 ---
 
 # Prevent Cross-Tenant RAG Leaks with Cedarling
@@ -69,7 +69,8 @@ Postman or curl, using an access token from the tutorial's sign-in flow.
 - **Mallory** belongs to Tenant B and must not retrieve Tenant A's documents.
 
 "Public" means public within that tenant, not available to every caller.
-The bundled Node.js `oidc-provider` handles sign-in and issues access tokens.
+The repository's shared local identity provider (IdP) runs as a separate Node.js service using
+`oidc-provider`. It handles sign-in and issues access tokens.
 The API verifies a token, then looks up the caller's tenant in its repository;
 the document metadata lists who may read confidential content.
 
@@ -408,7 +409,7 @@ Install the pinned dependencies from the project directory:
 
 ```bash
 pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
-pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
+pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 
 We'll use a shared builder to validate the policy files and package them for Cedarling.
@@ -898,8 +899,9 @@ fixture-based permissions, provider data handling, and logging. Cedarling
 controls document access; it does not guarantee answer accuracy or prevent
 prompt injection. An allowed document can still contain instructions.
 
-Optional components include Jans Auth for identity, Agama Lab Policy Designer
-for policy authoring, and Lock Server for decision logs. See
+Optional components include Jans Auth for identity, Agama Lab Cedar Policy
+Designer for policy authoring, and Lock Server for policy-store distribution
+and decision-log collection. This tutorial loads a local archive. See
 [Cedarling production solutions](https://cedarling.dev/solutions).
 
 </details>
@@ -926,4 +928,4 @@ operations that let an assistant read information and change incident state.
 
 [^3]: Cedar reports determining policies, not a list of conditions that failed. With these permit-only rules, a denied request has no determining policy. A matched `forbid` would instead be reported. See [How Cedar authorization works](https://docs.cedarpolicy.com/auth/authorization.html).
 
-[^4]: These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI on macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+[^4]: Follow these commands on Linux, macOS, or Windows with the listed prerequisites installed. Native project checks run in CI on all three systems. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
