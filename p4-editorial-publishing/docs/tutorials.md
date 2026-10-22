@@ -6,7 +6,7 @@ order: 50
 socialImage: ./assets/social-card.webp
 socialImageAlt: Next.js Server Actions check current editorial facts with Cedarling before protected publishing effects.
 lastVerified: 2026-10-09T12:21:40Z
-lastUpdated: 2026-10-09T17:29:36Z
+lastUpdated: 2026-10-22T17:09:42Z
 ---
 
 # Secure Editorial Publishing with Cedarling
@@ -43,7 +43,7 @@ and changes we'll need.
 - Familiarity with TypeScript, Next.js Server Actions, sessions, and basic HTTP requests.
 - New to Cedarling? [Read the short introduction](https://cedarling.dev/learn/what-is-cedarling) when you need it.
 - Keep the [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy while editing policies.
-- These steps were prepared on Ubuntu 24.04+. The repository also has native CI checks for macOS and Windows. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+- Follow these commands on Linux, macOS, or Windows with the listed prerequisites installed. Native project checks run in CI on all three systems. If a platform-specific step fails, [open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
 
 </details>
 
@@ -66,9 +66,10 @@ reviewing fixed versions of their content, and publishing approved work.
 All three can create articles in their tenant. Writing, reviewing, and publishing
 require separate permissions. Editors cannot approve their own content.
 
-Cedarling runs on the server using `authorizeUnsigned()`. The bundled Node.js
-`oidc-provider` authenticates the user first. The server then loads the current
-user, revision, and authority records from SQLite for Cedarling to evaluate.
+Cedarling runs on the server using `authorizeUnsigned()`. The shared local IdP
+runs as a separate Node.js service using `oidc-provider` and authenticates the
+user first. The server then loads the current user, revision, and authority
+records from SQLite for Cedarling to evaluate.
 "Unsigned" describes this authorization request; it does not skip sign-in.
 The browser uses the server's decisions to enable or disable controls.
 
@@ -384,7 +385,7 @@ validate our policy store, along with the Next.js security update:
 
 ```bash
 pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 next@16.3.8
-pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
+pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 
 We'll use a shared builder to validate the policy files and package them for Cedarling.
@@ -806,8 +807,9 @@ A production application needs HTTPS and a production OIDC provider in place
 of the local HTTP/IdP setup, plus a review of permission administration,
 session and storage controls, and durable audit logging.
 
-For those components, consider Agama Lab Policy Designer for policy authoring,
-Jans Auth for identity, and Lock Server for centralized decision logs:
+For those components, consider Agama Lab Cedar Policy Designer for policy
+authoring, Jans Auth for identity, and Lock Server for policy-store distribution
+and decision-log collection. This tutorial loads a local archive. See
 [Cedarling production solutions](https://cedarling.dev/solutions).
 
 </details>

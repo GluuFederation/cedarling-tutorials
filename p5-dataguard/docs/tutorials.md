@@ -6,7 +6,7 @@ order: 60
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Hono API checks query plans with embedded Cedarling before releasing rows, aggregates, or CSV exports.
 lastVerified: 2026-10-07T19:56:00Z
-lastUpdated: 2026-10-09T17:29:36Z
+lastUpdated: 2026-10-22T17:09:42Z
 ---
 
 # Protect Sensitive Data Exports with Cedarling
@@ -44,6 +44,11 @@ and changes we'll need.
 - New to Cedarling? [Read the short introduction](https://cedarling.dev/learn/what-is-cedarling) when you need it.
 - Keep the [Cedar policy syntax](https://docs.cedarpolicy.com/policies/syntax-policy.html) and [Cedar schema syntax](https://docs.cedarpolicy.com/schema/human-readable-schema.html) references handy while editing policies.
 
+Follow these commands on Linux, macOS, or Windows with the listed prerequisites
+installed. Native project checks run in CI on all three systems. If a
+platform-specific step fails,
+[open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+
 </details>
 
 Run the commands from `p5-dataguard/`. Paths under `shared/` are relative to
@@ -70,9 +75,10 @@ such as a count of employees by department.[^1]
 An aggregate must include at least five records in every returned group.
 This minimum applies even when the purpose and role are allowed.
 
-Cedarling runs only on the server, using `authorizeUnsigned()`. The bundled
-Node.js `oidc-provider` authenticates the user first; SQLite supplies the
-current analyst's role and tenant. "Unsigned" describes the authorization
+Cedarling runs only on the server, using `authorizeUnsigned()`. The shared local
+IdP runs as a separate Node.js service using `oidc-provider`. It authenticates
+the user first; SQLite supplies the current analyst's role and tenant.
+"Unsigned" describes the authorization
 request built from those facts. The browser cannot supply its own identity or
 permissions.
 
@@ -361,7 +367,8 @@ From P5, install Cedarling and match the completed app's dependencies:
 
 ```bash
 pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 hono@4.13.11
-pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0
+pnpm add --save-exact react@19.3.1 react-dom@19.3.1
+pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 
 We'll use a shared builder to validate the policy files and package them for Cedarling.
@@ -937,12 +944,9 @@ minimum is a teaching rule; it does not prevent sensitive facts from being
 inferred across repeated queries.
 
 For components to consider, see [Cedarling production solutions](https://cedarling.dev/solutions):
-Agama Lab Policy Designer for policy authoring, Jans Auth for identity, and
-Lock Server for centralized decision logs.
-
-These steps were prepared on Ubuntu 24.04+. Native project checks also run in CI
-on macOS and Windows. If a platform-specific step fails,
-[open an issue](https://github.com/GluuFederation/cedarling-tutorials/issues).
+Agama Lab Cedar Policy Designer for policy authoring, Jans Auth for identity,
+and Lock Server for policy-store distribution and decision-log collection.
+This tutorial loads a local archive.
 
 </details>
 
