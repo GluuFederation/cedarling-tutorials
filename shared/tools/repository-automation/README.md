@@ -6,7 +6,11 @@ macOS, and Windows, with separate Docker checks. Tutorial text, images, and READ
 changes run source validation. Shared runtime or workflow changes run the full
 portfolio, as do scheduled and manually dispatched checks.
 
-The Linux browser setup uses Ubuntu 24.04 and official HTTPS package sources.
+The concurrent-stack scenario runs when P1, P4, or P10 is affected, or when the
+full portfolio is selected. Other project changes run their own Compose checks.
+
+Browser checks install Chromium's headless shell. Linux setup uses Ubuntu 24.04
+and official HTTPS package sources.
 Each attempt has a three-minute budget. A transport failure can trigger one
 retry; signature, package-configuration, and timeout failures stop setup.
 The final Quality result check requires every selected job to succeed.

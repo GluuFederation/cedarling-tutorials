@@ -23,6 +23,15 @@ export const tutorialProjects = [
 ];
 export const projects = [...tutorialProjects, "shared/identity-provider"];
 export const composeProjects = new Set(tutorialProjects);
+const concurrentProjects = new Set([
+  "p1-task-manager",
+  "p4-editorial-publishing",
+  "p10-warehouse-workloads",
+]);
+
+export function needsConcurrentStacks(selected) {
+  return selected.some((project) => concurrentProjects.has(project));
+}
 
 function changedFiles(environment = process.env) {
   const event = environment.EVENT_NAME;
@@ -53,7 +62,12 @@ function changedFiles(environment = process.env) {
 }
 
 export function selectProjects(files) {
-  const all = () => ({ projects, compose: [...composeProjects], helper: true });
+  const all = () => ({
+    projects,
+    compose: [...composeProjects],
+    helper: true,
+    concurrent: true,
+  });
   if (files === null) return all();
   const affected = new Set();
   let helper = false;
@@ -88,6 +102,7 @@ export function selectProjects(files) {
     projects: selected,
     compose: selected.filter((project) => composeProjects.has(project)),
     helper,
+    concurrent: needsConcurrentStacks(selected),
   };
 }
 
@@ -102,7 +117,7 @@ function main(environment = process.env) {
     files = null;
   }
   const selected = selectProjects(files);
-  const output = `projects=${JSON.stringify(selected.projects)}\ncompose=${JSON.stringify(selected.compose)}\nhelper=${selected.helper}\n`;
+  const output = `projects=${JSON.stringify(selected.projects)}\ncompose=${JSON.stringify(selected.compose)}\nhelper=${selected.helper}\nconcurrent=${selected.concurrent}\n`;
   if (environment.GITHUB_OUTPUT)
     appendFileSync(environment.GITHUB_OUTPUT, output);
   else process.stdout.write(output);

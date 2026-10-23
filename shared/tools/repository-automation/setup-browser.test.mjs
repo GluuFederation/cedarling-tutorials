@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,6 +9,29 @@ import {
   installPhase,
   prepareUbuntu,
 } from "./setup-browser.mjs";
+
+test(
+  "the browser installer requests Chromium's headless shell",
+  { skip: process.platform !== "linux", timeout: 15_000 },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "ci-browser-args-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const cli = join(root, "fixture.mjs");
+    const output = join(root, "args.json");
+    await writeFile(
+      cli,
+      'import { writeFileSync } from "node:fs"; writeFileSync(' +
+        JSON.stringify(output) +
+        ", JSON.stringify(process.argv.slice(2)));\n",
+    );
+    await installPhase("browser", 10_000, { cli });
+    assert.deepEqual(JSON.parse(await readFile(output, "utf8")), [
+      "install",
+      "--only-shell",
+      "chromium",
+    ]);
+  },
+);
 
 test("Ubuntu preparation supports the hosted runner mirror list and preserves repository signing", async () => {
   const path = "/etc/apt/sources.list.d/ubuntu.sources";

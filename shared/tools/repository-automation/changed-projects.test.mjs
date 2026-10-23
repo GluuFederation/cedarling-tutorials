@@ -24,6 +24,7 @@ test("selects only the changed project", () => {
       projects: ["p7-collaborative-docs"],
       compose: ["p7-collaborative-docs"],
       helper: false,
+      concurrent: false,
     },
   );
 });
@@ -35,6 +36,7 @@ test("selects Capital District for a P14 game change", () => {
       projects: ["p14-capital-district"],
       compose: ["p14-capital-district"],
       helper: false,
+      concurrent: false,
     },
   );
 });
@@ -46,25 +48,52 @@ test("selects P3 Compose without a separate shared-provider stack", () => {
       projects: ["p3-mcp-capability-governance"],
       compose: ["p3-mcp-capability-governance"],
       helper: false,
+      concurrent: false,
     },
   );
   assert.equal(composeProjects.has("shared/identity-provider"), false);
 });
 
 test("selects the complete portfolio for shared and workflow changes", () => {
-  assert.deepEqual(
-    selectProjects(["shared/identity-provider/src/config.ts"]).projects,
-    projects,
+  for (const path of [
+    "shared/identity-provider/src/config.ts",
+    "shared/dev-supervisor.mjs",
+    "shared/tools/repository-automation/setup-browser.mjs",
+    ".github/workflows/quality.yml",
+  ]) {
+    assert.deepEqual(selectProjects([path]), {
+      projects,
+      compose: [...composeProjects],
+      helper: true,
+      concurrent: true,
+    });
+  }
+});
+
+test("selects concurrent stacks only when their applications are affected", () => {
+  for (const project of [
+    "p1-task-manager",
+    "p4-editorial-publishing",
+    "p10-warehouse-workloads",
+  ]) {
+    const selected = selectProjects([`${project}/src/server/app.ts`]);
+    assert.deepEqual(selected.projects, [project]);
+    assert.deepEqual(selected.compose, [project]);
+    assert.equal(selected.concurrent, true);
+  }
+  for (const project of ["p2-tenantrag", "p6-field-inspection"]) {
+    const selected = selectProjects([`${project}/compose.yaml`]);
+    assert.deepEqual(selected.projects, [project]);
+    assert.deepEqual(selected.compose, [project]);
+    assert.equal(selected.concurrent, false);
+  }
+  assert.equal(
+    selectProjects([
+      "p2-tenantrag/src/app.ts",
+      "p4-editorial-publishing/compose.yaml",
+    ]).concurrent,
+    true,
   );
-  assert.deepEqual(
-    selectProjects(["shared/dev-supervisor.mjs"]).projects,
-    projects,
-  );
-  assert.deepEqual(
-    selectProjects([".github/workflows/quality.yml"]).projects,
-    projects,
-  );
-  assert.deepEqual(selectProjects(null).projects, projects);
 });
 
 test("does not run project jobs for root documentation alone", () => {
@@ -72,6 +101,7 @@ test("does not run project jobs for root documentation alone", () => {
     projects: [],
     compose: [],
     helper: false,
+    concurrent: false,
   });
 });
 
@@ -83,7 +113,7 @@ test("tutorial and README changes need validation without application matrices",
       "p6-field-inspection/README.md",
       "shared/tools/repository-automation/README.md",
     ]),
-    { projects: [], compose: [], helper: false },
+    { projects: [], compose: [], helper: false, concurrent: false },
   );
 });
 
@@ -92,6 +122,7 @@ test("helper changes select its portable tests without unrelated applications", 
     projects: [],
     compose: [],
     helper: true,
+    concurrent: false,
   });
   assert.deepEqual(
     selectProjects([
@@ -102,6 +133,7 @@ test("helper changes select its portable tests without unrelated applications", 
       projects: ["p1-task-manager"],
       compose: ["p1-task-manager"],
       helper: true,
+      concurrent: true,
     },
   );
 });
@@ -117,6 +149,7 @@ test("unknown paths and scheduled runs conservatively select everything", () => 
       projects,
       compose: [...composeProjects],
       helper: true,
+      concurrent: true,
     });
   }
   assert.deepEqual(
@@ -149,6 +182,22 @@ test("reports when project detection falls back to the full matrix", () => {
     /Changed-project detection failed; selecting the full project matrix/,
   );
   assert.ok(result.stdout.includes(`projects=${JSON.stringify(projects)}`));
+  assert.match(result.stdout, /concurrent=true/);
+});
+
+test("scheduled and manual runs select concurrent stacks with the full portfolio", () => {
+  for (const event of ["schedule", "workflow_dispatch"]) {
+    const env = { ...process.env, EVENT_NAME: event };
+    delete env.GITHUB_OUTPUT;
+    const result = spawnSync(process.execPath, [selectorScript], {
+      encoding: "utf8",
+      env,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(result.stdout.includes(`projects=${JSON.stringify(projects)}`));
+    assert.match(result.stdout, /concurrent=true/);
+    assert.equal(result.stderr, "");
+  }
 });
 
 test("CLI accounts for deleted files, source-to-doc renames, and embedded newlines", async (t) => {
@@ -207,4 +256,5 @@ test("CLI accounts for deleted files, source-to-doc renames, and embedded newlin
     /projects=\["p1-task-manager","p7-collaborative-docs"\]/,
   );
   assert.match(result.stdout, /helper=false/);
+  assert.match(result.stdout, /concurrent=true/);
 });

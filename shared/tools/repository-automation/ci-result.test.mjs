@@ -16,9 +16,24 @@ test("the final workflow result waits for every verification job", async () => {
     new Set(Object.keys(workflow.jobs).filter((id) => id !== "result")),
   );
   assert.equal(workflow.jobs.result.if, "always()");
+  assert.equal(
+    workflow.jobs["compose-concurrency"].if,
+    "needs.changes.outputs.concurrent == 'true'",
+  );
+  assert.equal(
+    workflow.jobs.changes.outputs.concurrent,
+    `\${{ steps.select.outputs.concurrent }}`,
+  );
 });
 
 function needs(selected = [], compose = [], helper = false) {
+  const concurrent = selected.some((id) =>
+    [
+      "p1-task-manager",
+      "p4-editorial-publishing",
+      "p10-warehouse-workloads",
+    ].includes(id),
+  );
   return {
     changes: {
       result: "success",
@@ -26,6 +41,7 @@ function needs(selected = [], compose = [], helper = false) {
         projects: JSON.stringify(selected),
         compose: JSON.stringify(compose),
         helper: String(helper),
+        concurrent: String(concurrent),
       },
     },
     step: { result: helper ? "success" : "skipped" },
@@ -36,7 +52,7 @@ function needs(selected = [], compose = [], helper = false) {
         : "skipped",
     },
     "compose-config": { result: compose.length ? "success" : "skipped" },
-    "compose-concurrency": { result: compose.length ? "success" : "skipped" },
+    "compose-concurrency": { result: concurrent ? "success" : "skipped" },
   };
 }
 
@@ -67,6 +83,17 @@ test("quality rejects failed selection, malformed outputs, and absent job result
   assert.throws(() => qualityResult(needs(["unknown-project"], [])), /outputs/);
 });
 
+test("quality rejects missing or inconsistent concurrent-stack selection", () => {
+  const required = needs(["p1-task-manager"], ["p1-task-manager"]);
+  for (const value of [undefined, "", "false", "TRUE"]) {
+    required.changes.outputs.concurrent = value;
+    assert.throws(() => qualityResult(required), /outputs/);
+  }
+  const unrelated = needs(["p2-tenantrag"], ["p2-tenantrag"]);
+  unrelated.changes.outputs.concurrent = "true";
+  assert.throws(() => qualityResult(unrelated), /outputs/);
+});
+
 test("every selected verification must succeed, including sidecar and concurrency", () => {
   for (const job of [
     "step",
@@ -77,8 +104,8 @@ test("every selected verification must succeed, including sidecar and concurrenc
   ]) {
     for (const result of ["failure", "cancelled", "skipped"]) {
       const scenario = needs(
-        ["p3-mcp-capability-governance"],
-        ["p3-mcp-capability-governance"],
+        ["p1-task-manager", "p3-mcp-capability-governance"],
+        ["p1-task-manager", "p3-mcp-capability-governance"],
         true,
       );
       scenario[job].result = result;

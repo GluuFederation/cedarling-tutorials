@@ -1,6 +1,10 @@
 // Fails the workflow when selected verification did not complete successfully.
 import { appendFile } from "node:fs/promises";
-import { composeProjects, projects } from "./changed-projects.mjs";
+import {
+  composeProjects,
+  needsConcurrentStacks,
+  projects,
+} from "./changed-projects.mjs";
 
 export function qualityResult(needs) {
   if (needs?.changes?.result !== "success")
@@ -16,7 +20,8 @@ export function qualityResult(needs) {
     !compose.every((id) => composeProjects.has(id) && selected.includes(id)) ||
     JSON.stringify(compose) !==
       JSON.stringify(selected.filter((id) => composeProjects.has(id))) ||
-    !["true", "false"].includes(outputs.helper)
+    !["true", "false"].includes(outputs.helper) ||
+    outputs.concurrent !== String(needsConcurrentStacks(selected))
   )
     throw new Error("Invalid CI selection outputs");
   const expected = {
@@ -24,7 +29,7 @@ export function qualityResult(needs) {
     project: selected.length > 0,
     "p3-sidecar": selected.includes("p3-mcp-capability-governance"),
     "compose-config": compose.length > 0,
-    "compose-concurrency": compose.length > 0,
+    "compose-concurrency": outputs.concurrent === "true",
   };
   const rows = Object.entries(expected).map(([job, required]) => {
     const result = needs[job]?.result ?? "missing";

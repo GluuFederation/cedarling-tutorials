@@ -46,6 +46,7 @@ jobs:
       projects: ${{ steps.select.outputs.projects }}
       compose: ${{ steps.select.outputs.compose }}
       helper: ${{ steps.select.outputs.helper }}
+      concurrent: ${{ steps.select.outputs.concurrent }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,7 +133,7 @@ jobs:
         timeout-minutes: 3
         if: (matrix.project == 'p1-task-manager' || matrix.project == 'p4-editorial-publishing' || matrix.project == 'p5-dataguard' || matrix.project == 'p6-field-inspection' || matrix.project == 'p7-collaborative-docs' || matrix.project == 'p10-warehouse-workloads' || matrix.project == 'p14-capital-district' || matrix.project == 'p15-marketplace') && runner.os != 'Linux'
         working-directory: ${{ matrix.project }}
-        run: pnpm exec playwright install chromium
+        run: pnpm exec playwright install --only-shell chromium
         env:
           PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: 30000
       - name: Check
@@ -230,7 +231,7 @@ jobs:
   compose-concurrency:
     name: Concurrent project stacks
     needs: changes
-    if: needs.changes.outputs.compose != '[]'
+    if: needs.changes.outputs.concurrent == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

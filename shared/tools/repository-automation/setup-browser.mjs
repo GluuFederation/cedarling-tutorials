@@ -126,7 +126,7 @@ export function installPhase(
   const args =
     phase === "dependencies"
       ? ["-n", ...timeout, "install-deps", "chromium"]
-      : [...timeout, "install", "chromium"];
+      : [...timeout, "install", "--only-shell", "chromium"];
   return new Promise((done, reject) => {
     // Root's timeout owns the APT process group; the browser download runs as the runner user.
     const child = spawn(command, args, {
