@@ -39,5 +39,5 @@ Replay the steps in a separate checkout of that baseline before publishing.
 Run the helper tests from the repository root:
 
 ```sh
-node --test shared/tools/step/run.test.mjs
+node --test shared/tools/step/run.test.mjs shared/tools/step/source.test.mjs
 ```

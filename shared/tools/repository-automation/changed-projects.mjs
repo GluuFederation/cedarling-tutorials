@@ -1,7 +1,7 @@
 // Selects the tutorial projects that CI must verify for the current change.
 
-import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 export const tutorialProjects = [
@@ -21,8 +21,6 @@ export const tutorialProjects = [
   "p14-capital-district",
   "p15-marketplace",
 ];
-
-
 export const projects = [...tutorialProjects, "shared/identity-provider"];
 export const composeProjects = new Set(tutorialProjects);
 
@@ -38,32 +36,58 @@ function changedFiles(environment = process.env) {
   const separator = event === "pull_request" ? "..." : "..";
   return execFileSync(
     "git",
-    ["diff", "--name-only", `${base}${separator}${head}`],
+    [
+      "diff",
+      "--name-only",
+      "-z",
+      "--no-renames",
+      `${base}${separator}${head}`,
+      "--",
+    ],
     {
       encoding: "utf8",
     },
   )
-    .trim()
-    .split("\n")
+    .split("\0")
     .filter(Boolean);
 }
 
 export function selectProjects(files) {
-  const affectsAll =
-    files === null ||
-    files.some(
-      (file) =>
-        file.startsWith(".github/") ||
-        file.startsWith("shared/"),
-    );
-  const selected = affectsAll
-    ? projects
-    : projects.filter((project) =>
-        files.some((file) => file.startsWith(`${project}/`)),
-      );
+  const all = () => ({ projects, compose: [...composeProjects], helper: true });
+  if (files === null) return all();
+  const affected = new Set();
+  let helper = false;
+  for (const file of files) {
+    if (
+      [
+        "README.md",
+        "LICENSE",
+        "shared/tools/repository-automation/README.md",
+      ].includes(file)
+    )
+      continue;
+    if (file.startsWith("shared/tools/step/")) {
+      helper = true;
+      continue;
+    }
+    const project = projects.find((name) => file.startsWith(`${name}/`));
+    if (!project) return all();
+    const path = file.slice(project.length + 1);
+    if (
+      path === "README.md" ||
+      path === "docs/tutorials.md" ||
+      /^docs\/assets\/[A-Za-z0-9_./-]+\.(avif|jpe?g|png|svg|webp)$/.test(path)
+    )
+      continue;
+    // Shared runtime changes affect every application using that runtime.
+    if (project === "shared/identity-provider") return all();
+    affected.add(project);
+  }
+  const selected = projects.filter((project) => affected.has(project));
   return {
     projects: selected,
     compose: selected.filter((project) => composeProjects.has(project)),
+    helper,
   };
 }
 
@@ -78,7 +102,7 @@ function main(environment = process.env) {
     files = null;
   }
   const selected = selectProjects(files);
-  const output = `projects=${JSON.stringify(selected.projects)}\ncompose=${JSON.stringify(selected.compose)}\n`;
+  const output = `projects=${JSON.stringify(selected.projects)}\ncompose=${JSON.stringify(selected.compose)}\nhelper=${selected.helper}\n`;
   if (environment.GITHUB_OUTPUT)
     appendFileSync(environment.GITHUB_OUTPUT, output);
   else process.stdout.write(output);
