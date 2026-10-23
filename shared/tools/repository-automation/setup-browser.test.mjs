@@ -7,7 +7,67 @@ import {
   hardenSources,
   installBrowser,
   installPhase,
+  prepareUbuntu,
 } from "./setup-browser.mjs";
+
+test("Ubuntu preparation supports the hosted runner mirror list and preserves repository signing", async () => {
+  const path = "/etc/apt/sources.list.d/ubuntu.sources";
+  const source =
+    "Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n";
+  const writes = new Map();
+  await prepareUbuntu({
+    read: async (file) => {
+      if (file === path) return source;
+      throw Object.assign(new Error("missing fixture"), { code: "ENOENT" });
+    },
+    execute: (command, args, options) => {
+      assert.equal(command, "sudo");
+      assert.deepEqual(args.slice(0, 2), ["-n", "tee"]);
+      writes.set(args[2], options.input);
+    },
+  });
+  assert.equal(
+    writes.get(path),
+    source.replace(
+      "mirror+file:/etc/apt/apt-mirrors.txt",
+      "https://archive.ubuntu.com/ubuntu",
+    ),
+  );
+  assert.match(
+    writes.get("/etc/apt/apt.conf.d/99tutorial-ci"),
+    /Acquire::https::Timeout "30"/,
+  );
+  assert.equal(writes.size, 2);
+});
+
+test("Ubuntu preparation also handles legacy direct sources", async () => {
+  const path = "/etc/apt/sources.list";
+  const source =
+    "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://azure.archive.ubuntu.com/ubuntu/ noble main\n";
+  const writes = new Map();
+  await prepareUbuntu({
+    read: async (file) => {
+      if (file === path) return source;
+      throw Object.assign(new Error("missing fixture"), { code: "ENOENT" });
+    },
+    execute: (_command, args, options) => writes.set(args[2], options.input),
+  });
+  assert.equal(
+    writes.get(path),
+    source.replace("http://azure.archive", "https://archive"),
+  );
+  assert.equal(writes.size, 2);
+});
+
+test("Ubuntu preparation rejects unknown mirror files without changing configuration", async () => {
+  await assert.rejects(
+    prepareUbuntu({
+      read: async () => "URIs: mirror+file:/tmp/untrusted-mirrors.txt\n",
+      execute: () => assert.fail("unsupported sources must not be written"),
+    }),
+    /Expected official Ubuntu package sources/,
+  );
+});
 
 test("Ubuntu sources use official HTTPS endpoints and retain signing configuration", () => {
   const source =

@@ -7,6 +7,10 @@ import { join, resolve } from "node:path";
 export function hardenSources(text) {
   return text
     .replace(
+      /mirror\+file:\/etc\/apt\/apt-mirrors\.txt(?=\s|$)/g,
+      "https://archive.ubuntu.com/ubuntu",
+    )
+    .replace(
       /https?:\/\/(?:azure\.archive|archive)\.ubuntu\.com\/ubuntu(?=[/\s]|$)/g,
       "https://archive.ubuntu.com/ubuntu",
     )
@@ -63,35 +67,40 @@ export async function installBrowser({ install, report = () => {} }) {
   }
 }
 
-async function prepareUbuntu() {
+export async function prepareUbuntu({
+  read = readFile,
+  execute = execFileSync,
+} = {}) {
   let found = false;
+  const updates = [];
   for (const path of [
     "/etc/apt/sources.list.d/ubuntu.sources",
     "/etc/apt/sources.list",
   ]) {
     let before;
     try {
-      before = await readFile(path, "utf8");
+      before = await read(path, "utf8");
     } catch (error) {
       if (error.code === "ENOENT") continue;
       throw error;
     }
+    const after = hardenSources(before);
     if (
-      /https?:\/\/(?:azure\.archive|archive|security)\.ubuntu\.com\/ubuntu/.test(
-        before,
+      /https:\/\/(?:archive|security)\.ubuntu\.com\/ubuntu(?=[/\s]|$)/.test(
+        after,
       )
     )
       found = true;
-    const after = hardenSources(before);
-    if (after !== before)
-      execFileSync("sudo", ["-n", "tee", path], {
-        input: after,
-        stdio: ["pipe", "ignore", "pipe"],
-      });
+    if (after !== before) updates.push({ path, after });
   }
   if (!found)
     throw new Error("Expected official Ubuntu package sources on this runner");
-  execFileSync("sudo", ["-n", "tee", "/etc/apt/apt.conf.d/99tutorial-ci"], {
+  for (const { path, after } of updates)
+    execute("sudo", ["-n", "tee", path], {
+      input: after,
+      stdio: ["pipe", "ignore", "pipe"],
+    });
+  execute("sudo", ["-n", "tee", "/etc/apt/apt.conf.d/99tutorial-ci"], {
     input:
       'Acquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::Retries "0";\nDpkg::Use-Pty "0";\n',
     stdio: ["pipe", "ignore", "pipe"],
