@@ -27,7 +27,7 @@
     "@fastify/helmet": "13.1.1",
     "@fastify/static": "10.1.5",
     "better-sqlite3": "13.0.3",
-    "fastify": "5.12.5",
+    "fastify": "5.12.6",
     "openid-client": "6.8.8",
     "react": "19.3.0",
     "react-dom": "19.3.0"

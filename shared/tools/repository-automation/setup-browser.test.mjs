@@ -1,0 +1,206 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import {
+  hardenSources,
+  installBrowser,
+  installPhase,
+  prepareUbuntu,
+} from "./setup-browser.mjs";
+
+test(
+  "the browser installer requests Chromium's headless shell",
+  { skip: process.platform !== "linux", timeout: 15_000 },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "ci-browser-args-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const cli = join(root, "fixture.mjs");
+    const output = join(root, "args.json");
+    await writeFile(
+      cli,
+      'import { writeFileSync } from "node:fs"; writeFileSync(' +
+        JSON.stringify(output) +
+        ", JSON.stringify(process.argv.slice(2)));\n",
+    );
+    await installPhase("browser", 10_000, { cli });
+    assert.deepEqual(JSON.parse(await readFile(output, "utf8")), [
+      "install",
+      "--only-shell",
+      "chromium",
+    ]);
+  },
+);
+
+test("Ubuntu preparation supports the hosted runner mirror list and preserves repository signing", async () => {
+  const path = "/etc/apt/sources.list.d/ubuntu.sources";
+  const source =
+    "Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n";
+  const writes = new Map();
+  await prepareUbuntu({
+    read: async (file) => {
+      if (file === path) return source;
+      throw Object.assign(new Error("missing fixture"), { code: "ENOENT" });
+    },
+    execute: (command, args, options) => {
+      assert.equal(command, "sudo");
+      assert.deepEqual(args.slice(0, 2), ["-n", "tee"]);
+      writes.set(args[2], options.input);
+    },
+  });
+  assert.equal(
+    writes.get(path),
+    source.replace(
+      "mirror+file:/etc/apt/apt-mirrors.txt",
+      "https://archive.ubuntu.com/ubuntu",
+    ),
+  );
+  assert.match(
+    writes.get("/etc/apt/apt.conf.d/99tutorial-ci"),
+    /Acquire::https::Timeout "30"/,
+  );
+  assert.equal(writes.size, 2);
+});
+
+test("Ubuntu preparation also handles legacy direct sources", async () => {
+  const path = "/etc/apt/sources.list";
+  const source =
+    "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://azure.archive.ubuntu.com/ubuntu/ noble main\n";
+  const writes = new Map();
+  await prepareUbuntu({
+    read: async (file) => {
+      if (file === path) return source;
+      throw Object.assign(new Error("missing fixture"), { code: "ENOENT" });
+    },
+    execute: (_command, args, options) => writes.set(args[2], options.input),
+  });
+  assert.equal(
+    writes.get(path),
+    source.replace("http://azure.archive", "https://archive"),
+  );
+  assert.equal(writes.size, 2);
+});
+
+test("Ubuntu preparation rejects unknown mirror files without changing configuration", async () => {
+  await assert.rejects(
+    prepareUbuntu({
+      read: async () => "URIs: mirror+file:/tmp/untrusted-mirrors.txt\n",
+      execute: () => assert.fail("unsupported sources must not be written"),
+    }),
+    /Expected official Ubuntu package sources/,
+  );
+});
+
+test("Ubuntu sources use official HTTPS endpoints and retain signing configuration", () => {
+  const source =
+    "URIs: http://azure.archive.ubuntu.com/ubuntu/\nSuites: noble noble-updates\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n";
+  assert.equal(
+    hardenSources(source),
+    source.replace(
+      "http://azure.archive.ubuntu.com",
+      "https://archive.ubuntu.com",
+    ),
+  );
+  assert.equal(
+    hardenSources("deb http://security.ubuntu.com/ubuntu noble-security main"),
+    "deb https://security.ubuntu.com/ubuntu noble-security main",
+  );
+  assert.equal(
+    hardenSources("URIs: https://packages.microsoft.com/repos/code"),
+    "URIs: https://packages.microsoft.com/repos/code",
+  );
+});
+
+test(
+  "the installer enforces real process deadlines and cancellation",
+  { skip: process.platform !== "linux", timeout: 15_000 },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "ci-installer-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const cli = join(root, "fixture.mjs");
+    await writeFile(cli, "setInterval(() => {}, 1000);\n");
+    await assert.rejects(installPhase("browser", 1000, { cli }), /timed out/);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 100);
+    try {
+      await assert.rejects(
+        installPhase("browser", 10_000, { cli, signal: controller.signal }),
+        /cancelled/,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+);
+
+test("browser setup retries a transport failure once and keeps successful dependency setup", async () => {
+  const calls = [];
+  let downloads = 0;
+  await installBrowser({
+    install: async (phase) => {
+      calls.push(phase);
+      if (phase === "browser" && ++downloads === 1)
+        throw new Error("ECONNRESET");
+    },
+  });
+  assert.deepEqual(calls, ["dependencies", "browser", "browser"]);
+});
+
+test("browser setup fails after its single network retry", async () => {
+  let calls = 0;
+  await assert.rejects(
+    installBrowser({
+      install: async () => {
+        calls++;
+        throw new Error("Temporary failure resolving archive.ubuntu.com");
+      },
+    }),
+    /Temporary failure/,
+  );
+  assert.equal(calls, 2);
+});
+
+test("browser setup does not retry verification, package, timeout, or cancellation failures", async () => {
+  for (const message of [
+    "NO_PUBKEY; Failed to fetch",
+    "Hash Sum mismatch",
+    "dpkg was interrupted",
+    "Unable to locate package",
+    "certificate verification failed",
+    "setup timed out",
+    "setup cancelled",
+    "unrecognized failure",
+  ]) {
+    let calls = 0;
+    await assert.rejects(
+      installBrowser({
+        install: async () => {
+          calls++;
+          throw new Error(message);
+        },
+      }),
+      new RegExp(message),
+    );
+    assert.equal(calls, 1, message);
+  }
+});
+
+test("setup reports each phase and a finite remaining attempt budget", async () => {
+  const reports = [];
+  await installBrowser({
+    install: async (_phase, budget) =>
+      assert.ok(budget > 0 && budget <= 180_000),
+    report: (row) => reports.push(row),
+  });
+  assert.deepEqual(
+    reports.map((row) => row.phase),
+    ["dependencies", "browser"],
+  );
+  assert.ok(
+    reports.every(
+      (row) =>
+        row.attempt === 1 && row.result === "success" && row.seconds >= 0,
+    ),
+  );
+});

@@ -384,7 +384,7 @@ From the P4 directory, let's install Cedarling and the tools that package and
 validate our policy store, along with the Next.js security update:
 
 ```bash
-pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 next@16.3.8
+pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 next@16.4.1
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 

@@ -5,14 +5,15 @@ import {
   lstat,
   mkdir,
   open,
-  readFile,
   readdir,
+  readFile,
   realpath,
   rename,
   unlink,
 } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { readSources } from "./source.mjs";
 
 const toolPath = "shared/tools/step";
 const statePath = ".local/step";
@@ -196,24 +197,6 @@ function requireCommit(root, sha) {
   }
 }
 
-function sourceFile(root, commit, path) {
-  const entry = git(root, ["ls-tree", "-z", commit, "--", path]).toString(
-    "utf8",
-  );
-  if (!entry) return null;
-  const match = /^(100644|100755) blob ([0-9a-f]{40})\t([^\0]+)\0$/.exec(entry);
-  requireThat(
-    match && match[3] === path,
-    `Source must be a regular file: ${path}`,
-  );
-  const size = Number(git(root, ["cat-file", "-s", match[2]]).toString());
-  requireThat(size <= maxFileBytes, `Source file exceeds 2 MiB: ${path}`);
-  return {
-    bytes: git(root, ["cat-file", "blob", match[2]]),
-    mode: match[1] === "100755" ? 0o755 : 0o644,
-  };
-}
-
 // Check every existing component, including ignored state directories.
 async function safePath(root, path, directory = false) {
   const parts = path.split("/");
@@ -271,7 +254,7 @@ async function writeAtomic(root, path, bytes, mode = 0o600) {
   }
 }
 
-async function verifyTools(root, source) {
+async function verifyTools(root, source, sourceFile) {
   const entries = git(root, [
     "ls-tree",
     "-r",
@@ -293,7 +276,7 @@ async function verifyTools(root, source) {
     requireThat(
       equal(
         await currentFile(root, path),
-        sourceFile(root, source, path)?.bytes ?? null,
+        sourceFile(source, path)?.bytes ?? null,
       ),
       `Helper differs from its pinned source: ${path}. Use a fresh checkout and the matching helper.`,
     );
@@ -306,15 +289,15 @@ function packageScripts(bytes, label) {
   return value;
 }
 
-async function prepare(root, manifest, source, step) {
+async function prepare(root, manifest, source, step, sourceFile) {
   const changes = [];
   for (const [paths, removing] of [
     [step.files, false],
     [step.remove, true],
   ]) {
     for (const path of paths) {
-      const baseline = sourceFile(root, manifest.baseline, path);
-      const target = sourceFile(root, source, path);
+      const baseline = sourceFile(manifest.baseline, path);
+      const target = sourceFile(source, path);
       requireThat(
         removing ? baseline && !target : target,
         `Missing or inconsistent source operation: ${path}`,
@@ -337,10 +320,10 @@ async function prepare(root, manifest, source, step) {
     requireThat(before !== null, `Missing ${path}`);
     const current = packageScripts(before, path);
     const baseline = packageScripts(
-      sourceFile(root, manifest.baseline, path)?.bytes,
+      sourceFile(manifest.baseline, path)?.bytes,
       path,
     );
-    const target = packageScripts(sourceFile(root, source, path)?.bytes, path);
+    const target = packageScripts(sourceFile(source, path)?.bytes, path);
     requireThat(
       current.name === baseline.name && target.name === baseline.name,
       `Unexpected package name: ${path}`,
@@ -517,9 +500,19 @@ export async function runTutorial(
     );
   requireCommit(root, source);
   requireCommit(root, manifest.baseline);
-  await verifyTools(root, source);
+  const sourceFile = readSources(
+    root,
+    [source, manifest.baseline],
+    [
+      toolPath,
+      path,
+      `${manifest.directory}/package.json`,
+      ...manifest.steps.flatMap((step) => [...step.files, ...step.remove]),
+    ],
+  );
+  await verifyTools(root, source, sourceFile);
   requireThat(
-    equal(bytes, sourceFile(root, source, path)?.bytes ?? null),
+    equal(bytes, sourceFile(source, path)?.bytes ?? null),
     "Project manifest is not registered in the pinned source",
   );
 
@@ -561,12 +554,18 @@ export async function runTutorial(
       }
       // Check the declared starting files, including the files the integration will delete.
       for (const step of manifest.steps) {
-        for (const change of await prepare(root, manifest, source, step)) {
+        for (const change of await prepare(
+          root,
+          manifest,
+          source,
+          step,
+          sourceFile,
+        )) {
           if (!change.scripts)
             requireThat(
               equal(
                 change.before,
-                sourceFile(root, manifest.baseline, change.path)?.bytes ?? null,
+                sourceFile(manifest.baseline, change.path)?.bytes ?? null,
               ),
               `Start from the declared baseline; ${change.path} is already changed`,
             );
@@ -595,7 +594,13 @@ export async function runTutorial(
       );
     let changes;
     try {
-      changes = await prepare(root, manifest, source, manifest.steps[index]);
+      changes = await prepare(
+        root,
+        manifest,
+        source,
+        manifest.steps[index],
+        sourceFile,
+      );
     } catch (error) {
       if (!(error instanceof LocalEditsError)) throw error;
       const next = manifest.steps[state.completed.length]?.id;
