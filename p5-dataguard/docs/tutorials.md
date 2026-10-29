@@ -1,15 +1,15 @@
 ---
 slug: protect-sensitive-data-exports
-title: Protect Sensitive Data Exports with Cedarling
-summary: Control access to sensitive fields, reports, and CSV exports with server-side Cedarling decisions.
+title: Protect Data and Exports in a React App with Cedarling
+summary: Protect sensitive fields, reports, and CSV exports in a React application, with Cedarling authorization enforced by its Hono API.
 order: 60
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Hono API checks query plans with embedded Cedarling before releasing rows, aggregates, or CSV exports.
 lastVerified: 2026-10-07T19:56:00Z
-lastUpdated: 2026-10-22T17:09:42Z
+lastUpdated: 2026-10-29T14:16:17Z
 ---
 
-# Protect Sensitive Data Exports with Cedarling
+# Protect Data and Exports in a React App with Cedarling
 
 Good to have you here! We're working with a reporting app used by support staff,
 finance staff, and external reviewers. They need different views of the data,
@@ -632,8 +632,8 @@ Stop the stack with `Ctrl+C` before continuing with the browser files.
 
 ### Show which actions are available
 
-We've denied the direct request. Now let's make the query and export controls
-reflect the server's decisions.
+We've denied the direct request. Now let's make the React query and export
+controls reflect the server's decisions.
 
 <details>
 <summary>Required step: Update the query form and export controls</summary>

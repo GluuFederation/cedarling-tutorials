@@ -1,10 +1,10 @@
-# P1 - Protecting a Node.js REST API with Cedarling
+# P1 - Secure a React App and Node.js API with Cedarling
 
 ![Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.](docs/assets/social-card.webp)
 
-P1 is a multi-tenant task manager. Its Node.js API asks Cedarling before reading
-or changing a task. The browser evaluates the same policy release to hide
-unavailable controls; the server checks every protected request.
+P1 is a multi-tenant React task manager. Its Fastify Node.js API asks Cedarling
+before reading or changing a task. The browser evaluates the same policy release
+to hide unavailable controls; the server checks every protected request.
 
 The application handles authentication, sessions, request integrity, validation,
 tenant-scoped lists, and optimistic concurrency. Follow the

@@ -1,15 +1,15 @@
 ---
 slug: secure-editorial-publishing
-title: Secure Editorial Publishing with Cedarling
-summary: Use Cedarling in Next.js to require independent review and publish only the approved revision while reviewer permissions remain valid.
+title: Authorize Next.js Publishing Workflows with Cedarling
+summary: Secure a React publishing app built with Next.js. Require independent review of the exact revision and current reviewer permission before publication.
 order: 50
 socialImage: ./assets/social-card.webp
 socialImageAlt: Next.js Server Actions check current editorial facts with Cedarling before protected publishing effects.
 lastVerified: 2026-10-09T12:21:40Z
-lastUpdated: 2026-10-22T17:09:42Z
+lastUpdated: 2026-10-29T14:16:17Z
 ---
 
-# Secure Editorial Publishing with Cedarling
+# Authorize Next.js Publishing Workflows with Cedarling
 
 Welcome! Our example is an editorial app where Riley writes articles and Ana
 reviews and publishes them. We'll use Cedarling to check permissions as an
@@ -56,7 +56,7 @@ the repository root.
 
 _Riley writes; Ana reviews and publishes. Omar lets us test what happens when a reviewer loses permission._
 
-P4 is a small Next.js App Router application for creating articles,
+P4 is a React application built with Next.js App Router for creating articles,
 reviewing fixed versions of their content, and publishing approved work.
 
 - **Riley** writes and submits articles, but has no permission to review them.
@@ -71,7 +71,7 @@ runs as a separate Node.js service using `oidc-provider` and authenticates the
 user first. The server then loads the current user, revision, and authority
 records from SQLite for Cedarling to evaluate.
 "Unsigned" describes this authorization request; it does not skip sign-in.
-The browser uses the server's decisions to enable or disable controls.
+The React interface uses the server's decisions to enable or disable controls.
 
 ## Try the workflow before adding Cedarling
 
@@ -589,8 +589,8 @@ The Server Actions in `app/actions.ts` keep authentication, same-origin and
 CSRF verification. `"use server"` does not restrict who may call an action;
 these functions are reachable by network requests.
 
-Page rendering uses server permission previews to disable denied controls with
-a short explanation. Each submitted action reloads facts and authorizes again.
+The React interface uses server permission previews to disable denied controls
+with a short explanation. Each submitted action reloads facts and authorizes again.
 OAuth tokens and raw policy diagnostics stay on the server; successful forms
 show readable outcomes without internal request IDs.
 

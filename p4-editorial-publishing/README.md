@@ -1,10 +1,11 @@
-# P4 - Securing Editorial Publishing with Cedarling
+# P4 - Authorize Next.js Publishing Workflows with Cedarling
 
 ![Next.js Server Actions check current editorial facts with Cedarling before protected publishing effects.](docs/assets/social-card.webp)
 
-P4 lets authors submit article revisions for review and publishers release
-approved content. Server-side Cedarling checks prevent self-review, reuse of
-approval across revisions, and publication after a reviewer's authority is revoked.
+P4 is a React publishing application built with Next.js. Authors submit article
+revisions for review, and publishers release approved content. Server-side
+Cedarling checks prevent self-review, reuse of approval across revisions, and
+publication after a reviewer's authority is revoked.
 
 Follow the [tutorial](docs/tutorials.md) to add these checks to the [starting
 application](https://github.com/GluuFederation/cedarling-tutorials/tree/21b0832be4b31271320df992d04e9d97667d0e38/p4-editorial-publishing).

@@ -1,4 +1,4 @@
-# Cedarling Tutorials
+# Cedarling Authorization Tutorials for React and Node.js
 
 ![Cedarling Tutorials: learn authorization by building real applications.](./.github/assets/tutorials-banner.png)
 
@@ -9,10 +9,10 @@
   <a href="https://docs.jans.io/stable/cedarling/">Cedarling docs</a>
 </p>
 
-Practice authorization with fifteen independent applications, from a task board
-to AI assistants and machine-to-machine transfers. Each project has sample users
-or workloads, a setup guide, exercises, and tests. Start with P1 or pick a problem
-that matches your own application.
+Practice authorization in React applications and Node.js services. The fifteen
+independent projects range from a task board to AI assistants and machine-to-machine
+transfers. Each has sample users or workloads, a setup guide, exercises, and tests.
+Start with P1 or pick a problem that matches your own application.
 
 > [!NOTE]
 > P1-P5 include Cedarling authorization. P6-P15 retain the tutorial starting
@@ -31,11 +31,11 @@ Project links open the setup guides; article links open the published tutorials.
 
 | Project                                                                                            | Stack                                                     | What you'll learn                                                                         | Articles                                                                                        |
 | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [P1 - Protecting a Node.js REST API with Cedarling](./p1-task-manager/)                            | Node.js, Fastify, React, SQLite                           | Keep tenants' tasks separate and control who can read or change them.                     | [Read tutorial](https://cedarling.dev/learn/protect-a-nodejs-rest-api-with-cedarling)           |
+| [P1 - Secure a React App and Node.js API with Cedarling](./p1-task-manager/)                            | Node.js, Fastify, React, SQLite                           | Keep tenants' tasks separate and control who can read or change them.                     | [Read tutorial](https://cedarling.dev/learn/protect-a-nodejs-rest-api-with-cedarling)           |
 | [P2 - Preventing Cross-Tenant RAG Data Leaks with Cedarling](./p2-tenantrag/)                      | Node.js, Fastify, Orama, Voyage, OpenRouter               | Check access to search results before documents reach AI generation.                      | [Read tutorial](https://cedarling.dev/learn/prevent-cross-tenant-rag-data-leaks-with-cedarling) |
 | [P3 - Authorizing MCP Incident Operations with Cedarling](./p3-mcp-capability-governance/)         | Node.js, MCP, Express, OpenRouter                         | Control an assistant's access to incident tools, runbooks, and triage prompts.            | [Read tutorial](https://cedarling.dev/learn/govern-mcp-capabilities)                            |
-| [P4 - Securing Editorial Publishing with Cedarling](./p4-editorial-publishing/)                    | Node.js, Next.js App Router, React, SQLite                | Tie publishing approval to the reviewed revision and current reviewer authority.          | [Read tutorial](https://cedarling.dev/learn/secure-editorial-publishing)                        |
-| [P5 - Protecting Sensitive Fields and Data Exports with Cedarling](./p5-dataguard/)                | Node.js, Hono, React, SQLite                              | Protect individual records, sensitive fields, aggregates, and data exports.               | [Read tutorial](https://cedarling.dev/learn/protect-sensitive-data-exports)                     |
+| [P4 - Authorize Next.js Publishing Workflows with Cedarling](./p4-editorial-publishing/)                    | Node.js, Next.js App Router, React, SQLite                | Tie publishing approval to the reviewed revision and current reviewer authority.          | [Read tutorial](https://cedarling.dev/learn/secure-editorial-publishing)                        |
+| [P5 - Protect Data and Exports in a React App with Cedarling](./p5-dataguard/)                | Node.js, Hono, React, SQLite                              | Protect individual records, sensitive fields, aggregates, and data exports.               | [Read tutorial](https://cedarling.dev/learn/protect-sensitive-data-exports)                     |
 | [P6 - Reauthorizing Offline Field Inspections with Cedarling](./p6-field-inspection/)              | Node.js, Fastify, React, SQLite, IndexedDB                | Check current assignments before accepting work saved while offline.                      | -                                                                                               |
 | [P7 - Securing Real-Time Collaborative Documents with Cedarling](./p7-collaborative-docs/)         | Node.js, Fastify, React, SQLite, SSE                      | Apply changing permissions to document edits, comments, sharing, and live updates.        | -                                                                                               |
 | [P8 - Securing File Sharing and Blocking Path Traversal with Cedarling](./p8-cedarfile/)           | Node.js, Express, React, SQLite                           | Combine file-access decisions with application-owned filesystem safeguards.               | -                                                                                               |
