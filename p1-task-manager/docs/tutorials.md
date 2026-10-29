@@ -1,15 +1,15 @@
 ---
 slug: protect-a-nodejs-rest-api-with-cedarling
-title: Protect a Node.js REST API with Cedarling
-summary: Secure a task manager with Token-Based Access Control (TBAC) on the server and permission-aware browser controls.
+title: Secure a React App and Node.js API with Cedarling
+summary: Add Cedarling authorization to a React task manager and Fastify API. Enforce task permissions on the server and reflect them in React controls.
 order: 20
 socialImage: ./assets/social-card.webp
 socialImageAlt: Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.
 lastVerified: 2026-10-22T17:09:42Z
-lastUpdated: 2026-10-22T17:09:42Z
+lastUpdated: 2026-10-29T14:16:17Z
 ---
 
-# Protect a Node.js REST API with Cedarling
+# Secure a React App and Node.js API with Cedarling
 
 Hello! In this tutorial, we'll add Cedarling authorization to a task manager app.
 
@@ -607,8 +607,9 @@ and save. His assigned-task edit should still succeed.
 
 ### Show the actions each user can take
 
-The API now denies Alex's creation request, but the browser still offers the
-action. We'll connect its controls to the server's permissions next.
+The API now denies Alex's creation request, but the React interface still offers
+the action. We'll connect its controls to browser Cedarling decisions, limited
+by the server's permissions.
 
 <details>
 <summary>Required step: Update browser authorization and controls</summary>

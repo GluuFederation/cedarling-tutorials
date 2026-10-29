@@ -30,7 +30,7 @@
     "openid-client": "6.8.8",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
@@ -50,7 +50,7 @@
       "better-sqlite3"
     ],
     "overrides": {
-      "qs@<6.16.0": "6.16.0"
+      "qs@<6.16.1": "6.16.1"
     }
   }
 }

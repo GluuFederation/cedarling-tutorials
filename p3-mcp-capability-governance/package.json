@@ -22,14 +22,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.3.0",
+    "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/express": "2.0.2",
-    "@modelcontextprotocol/node": "2.0.0",
-    "@modelcontextprotocol/server": "2.3.0",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
     "express": "5.2.1",
     "hono": "4.13.11",
     "jose": "6.2.10",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@cedar-policy/cedar-wasm": "4.12.0",

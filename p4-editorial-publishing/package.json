@@ -30,7 +30,7 @@
     "openid-client": "6.8.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@cedar-policy/cedar-wasm": "4.12.0",

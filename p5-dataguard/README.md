@@ -1,11 +1,11 @@
-# P5 - Protecting Sensitive Fields and Data Exports with Cedarling
+# P5 - Protect Data and Exports in a React App with Cedarling
 
 ![A Hono API checks query plans with embedded Cedarling before releasing rows, aggregates, or CSV exports.](docs/assets/social-card.webp)
 
-P5 is a workforce analytics application. It compiles bounded query plans to
-parameterized SQLite queries and creates expiring CSV exports. Cedarling checks
-permission separately for fields, rows, aggregates, export creation, downloads,
-and revocation.
+P5 is a workforce analytics application with a React interface and a Hono API.
+The API compiles bounded query plans to parameterized SQLite queries and creates
+expiring CSV exports. Cedarling checks permission separately for fields, rows,
+aggregates, export creation, downloads, and revocation.
 
 The server authenticates the analyst and enforces those decisions before
 releasing data. Follow the [tutorial](docs/tutorials.md) to add the checks to
