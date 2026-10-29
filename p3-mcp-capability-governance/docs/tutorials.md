@@ -399,7 +399,7 @@ The shared builder files are:
 From P3, install the build dependencies and update the MCP client to match the completed app:
 
 ```bash
-pnpm add --save-exact @modelcontextprotocol/client@2.3.0 @modelcontextprotocol/express@2.0.2 @modelcontextprotocol/server@2.3.0 hono@4.13.11
+pnpm add --save-exact @modelcontextprotocol/client@2.4.0 @modelcontextprotocol/express@2.0.2 @modelcontextprotocol/node@2.1.2 @modelcontextprotocol/server@2.4.0 hono@4.13.11
 pnpm add --save-dev --save-exact fflate@0.8.3 @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 node ../shared/policy-store.mjs
 ```
