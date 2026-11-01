@@ -26,7 +26,7 @@
     "@fastify/helmet": "13.2.0",
     "@fastify/static": "10.1.6",
     "@fastify/swagger": "9.9.2",
-    "@janssenproject/cedarling_wasm": "0.0.468",
+    "@janssenproject/cedarling_wasm": "2.5.0",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.6",
     "fflate": "0.8.3",
