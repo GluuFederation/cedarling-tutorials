@@ -50,6 +50,9 @@
     ],
     "ignoredBuiltDependencies": [
       "better-sqlite3"
-    ]
+    ],
+    "overrides": {
+      "@fastify/static>glob": "14.0.2"
+    }
   }
 }

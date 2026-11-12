@@ -49,6 +49,9 @@
     ],
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "@fastify/static>glob": "14.0.2"
+    }
   }
 }
