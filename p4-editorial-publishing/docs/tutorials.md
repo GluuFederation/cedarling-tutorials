@@ -6,7 +6,7 @@ order: 50
 socialImage: ./assets/social-card.webp
 socialImageAlt: Next.js Server Actions check current editorial facts with Cedarling before protected publishing effects.
 lastVerified: 2026-10-09T12:21:40Z
-lastUpdated: 2026-10-29T14:16:17Z
+lastUpdated: 2026-11-12T15:35:11Z
 ---
 
 # Authorize Next.js Publishing Workflows with Cedarling
@@ -384,7 +384,7 @@ From the P4 directory, let's install Cedarling and the tools that package and
 validate our policy store, along with the Next.js security update:
 
 ```bash
-pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 next@16.4.1
+pnpm add --save-exact @janssenproject/cedarling_wasm@2.5.0 fflate@0.8.3 next@16.4.1
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 
@@ -415,7 +415,7 @@ Keep the readable source directory in Git.
 
 We'll replace `src/server/authorization.ts` using the complete file in the next
 step. The server runtime calls `createEditorialAuthorization()` once to load
-[Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468).
+[Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/2.5.0).
 Its default `archivePath` resolves to `.local/policy-store.cjar` in the project
 directory:
 
@@ -832,6 +832,6 @@ instead of granting it to everyone who can open a page.
 
 [^1]: A digest is a reproducible fingerprint of the normalized revision content. P4 compares it with the approval's digest, while current reviewer authority and revision state remain separate requirements.
 
-[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468) accepts a JSON-string request. Converting to JSON does not verify the values; P4 loads them from its trusted server state.
+[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/2.5.0) accepts a JSON-string request. Converting to JSON does not verify the values; P4 loads them from its trusted server state.
 
 [^3]: P4 authenticates the user before calling `authorizeUnsigned()`. It builds the principal and current revision and authority facts from server records. The [policy-store format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/) also supports trusted-issuer mappings for applications that send tokens to Cedarling.

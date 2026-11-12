@@ -6,7 +6,7 @@ order: 60
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Hono API checks query plans with embedded Cedarling before releasing rows, aggregates, or CSV exports.
 lastVerified: 2026-10-07T19:56:00Z
-lastUpdated: 2026-10-29T14:16:17Z
+lastUpdated: 2026-11-12T15:35:11Z
 ---
 
 # Protect Data and Exports in a React App with Cedarling
@@ -366,7 +366,7 @@ flowchart TD
 From P5, install Cedarling and match the completed app's dependencies:
 
 ```bash
-pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3 hono@4.13.11
+pnpm add --save-exact @janssenproject/cedarling_wasm@2.5.0 fflate@0.8.3 hono@4.13.11
 pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
@@ -396,7 +396,7 @@ node ../shared/policy-store.mjs
 The command must finish without validation errors and create
 `.local/policy-store.cjar`. Keep the readable policy source in Git and the
 generated archive ignored. The complete `src/server/authorization.ts` in the
-next step initializes one [Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468)
+next step initializes one [Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/2.5.0)
 instance in `createDataAuthorization()`. Its `archivePath` defaults to the
 `.local/policy-store.cjar` we just built in the project directory:
 
@@ -967,4 +967,4 @@ see [GraphQL's authorization guidance](https://graphql.org/learn/authorization/)
 
 [^1]: Small groups and repeated aggregate queries can reveal sensitive facts without returning individual rows. P5 checks aggregate release separately from row access; its minimum group size is not a complete privacy guarantee.
 
-[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468) accepts a JSON-string request. Converting to JSON does not validate the query plan; the server must do that before calling Cedarling.
+[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/2.5.0) accepts a JSON-string request. Converting to JSON does not validate the query plan; the server must do that before calling Cedarling.

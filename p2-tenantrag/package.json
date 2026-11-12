@@ -23,7 +23,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@janssenproject/cedarling_wasm": "0.0.468",
+    "@janssenproject/cedarling_wasm": "2.5.0",
     "@orama/orama": "3.1.18",
     "fastify": "5.12.6",
     "fflate": "0.8.3",
