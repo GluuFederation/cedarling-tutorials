@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@fastify/helmet": "13.2.0",
-    "@fastify/static": "10.1.6",
+    "@fastify/static": "10.1.8",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.6",
     "jose": "6.2.2",
@@ -49,6 +49,9 @@
     ],
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "@fastify/static>glob": "14.0.2"
+    }
   }
 }

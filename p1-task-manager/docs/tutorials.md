@@ -6,7 +6,7 @@ order: 20
 socialImage: ./assets/social-card.webp
 socialImageAlt: Browser guidance and Fastify server enforcement with embedded Cedarling for task actions.
 lastVerified: 2026-10-22T17:09:42Z
-lastUpdated: 2026-10-29T14:16:17Z
+lastUpdated: 2026-11-12T15:35:11Z
 ---
 
 # Secure a React App and Node.js API with Cedarling
@@ -369,8 +369,8 @@ the operation.
 From `p1-task-manager/`, install the integration's dependencies:
 
 ```bash
-pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
-pnpm add --save-exact @fastify/cookie@11.1.3 @fastify/helmet@13.2.0 @fastify/static@10.1.6 @fastify/swagger@9.9.2
+pnpm add --save-exact @janssenproject/cedarling_wasm@2.5.0 fflate@0.8.3
+pnpm add --save-exact @fastify/cookie@11.1.5 @fastify/helmet@13.2.0 @fastify/static@10.1.8 @fastify/swagger@9.9.2
 pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
@@ -1012,7 +1012,7 @@ The complete source is available in the
 
 [^4]: [Default entities](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#default-entities) are shared across requests. P1 loads its changing users and tasks from the database for each decision.
 
-[^5]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468) accepts a JSON-string request for token-based and unsigned authorization. Converting to JSON does not make browser-supplied facts trustworthy.
+[^5]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/2.5.0) accepts a JSON-string request for token-based and unsigned authorization. Converting to JSON does not make browser-supplied facts trustworthy.
 
 [^6]: Cedar returns an empty list of determining policies when no policy permits or forbids the request. A matched `forbid` would instead appear as a determining policy. See [How Cedar authorization works](https://docs.cedarpolicy.com/auth/authorization.html).
 

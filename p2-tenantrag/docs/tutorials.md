@@ -6,7 +6,7 @@ order: 30
 socialImage: ./assets/social-card.webp
 socialImageAlt: A Fastify RAG service checks corpus and documents with Cedarling before sending retrieved evidence to the answer model.
 lastVerified: 2026-10-09T10:23:54Z
-lastUpdated: 2026-10-22T17:09:42Z
+lastUpdated: 2026-11-12T15:35:11Z
 ---
 
 # Prevent Cross-Tenant RAG Leaks with Cedarling
@@ -408,7 +408,7 @@ flowchart TD
 Install the pinned dependencies from the project directory:
 
 ```bash
-pnpm add --save-exact @janssenproject/cedarling_wasm@0.0.468 fflate@0.8.3
+pnpm add --save-exact @janssenproject/cedarling_wasm@2.5.0 fflate@0.8.3
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 
@@ -438,7 +438,7 @@ The command must finish without validation errors and create `.local/policy-stor
 Docker builds an archive from the same source files.
 
 The complete `src/authorization.ts` in the next step initializes one
-[Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468)
+[Cedarling](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/2.5.0)
 instance in `createRetrievalAuthorization()`. Startup passes the configured
 `policyStorePath` to this function:
 
@@ -924,7 +924,7 @@ operations that let an assistant read information and change incident state.
 
 [^1]: P2's confidential-reader rule uses the current document's `confidential_reader_subjects` set. Ada's subject is listed; Leo's is not. The application supplies this relationship for each authorization request.
 
-[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/0.0.468) accepts a JSON-string request. `JSON.stringify()` converts the request to JSON.
+[^2]: The pinned [`cedarling_wasm` JavaScript API](https://www.npmjs.com/package/@janssenproject/cedarling_wasm/v/2.5.0) accepts a JSON-string request. `JSON.stringify()` converts the request to JSON.
 
 [^3]: Cedar reports determining policies, not a list of conditions that failed. With these permit-only rules, a denied request has no determining policy. A matched `forbid` would instead be reported. See [How Cedar authorization works](https://docs.cedarpolicy.com/auth/authorization.html).
 

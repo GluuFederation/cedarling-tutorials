@@ -23,13 +23,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@janssenproject/cedarling_wasm": "0.0.468",
+    "@janssenproject/cedarling_wasm": "2.5.0",
     "better-sqlite3": "13.0.3",
     "fflate": "0.8.3",
     "next": "16.4.1",
     "openid-client": "6.8.8",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "zod": "4.6.6"
   },
   "devDependencies": {
