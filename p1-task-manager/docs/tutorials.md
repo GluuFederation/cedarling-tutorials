@@ -63,6 +63,16 @@ This application is for learning and is not intended for production use.
 You'll need Git, Node.js 24.21+ within 24.x, and pnpm 10.17.1. We assume basic
 TypeScript and familiarity with HTTP requests, sessions, and access tokens.
 
+Before starting, verify that the required tools are installed:
+
+```bash
+git --version
+node --version
+pnpm --version
+```
+
+#### Get the tutorial source
+
 Use a separate checkout for P1 so its shared files and exercise data stay
 separate from other tutorials:
 
@@ -77,10 +87,16 @@ git restore --source=850e38fd5dc4758848e3fcb05af40f3a9c68760c --worktree -- ../s
 node ../shared/tools/step/run.mjs p1 init --source 850e38fd5dc4758848e3fcb05af40f3a9c68760c
 ```
 
+#### Start the application locally
+
 Run the remaining commands from `p1-task-manager/`. Paths under `shared/` are
 relative to the repository root.
 
-Start the app and IdP in two terminals.[^7] In the first:
+Start the app and IdP in two terminals.[^7]
+
+**Terminal 1 — Start the Identity Provider**
+
+Install and build the bundled identity provider, install the task manager dependencies, prepare the sample data, and start the IdP:
 
 ```bash
 pnpm --dir ../shared/identity-provider install --frozen-lockfile
@@ -90,11 +106,23 @@ pnpm run setup
 node --env-file=.local/idp/.env ../shared/identity-provider/dist/main.js
 ```
 
-In a second terminal, from the same project directory:
+The IdP should start at `http://localhost:18001`.
+
+You can verify that its OpenID Connect discovery endpoint is accessible by opening:
+
+`http://localhost:18001/.well-known/openid-configuration`
+
+Leave this terminal running.
+
+**Terminal 2 — Start the Task Manager**
+
+Open a second terminal in the same `p1-task-manager/` directory and run:
 
 ```bash
 pnpm dev
 ```
+
+The task manager should start at `http://localhost:17001`.
 
 <details>
 <summary>Optional: Run the starting app with Docker</summary>
@@ -112,15 +140,19 @@ use the same ports but separate data, so run only one stack at a time.
 
 </details>
 
-Open `http://localhost:17001`; the IdP runs at `http://localhost:18001`.
-Sign in as **Alex**. The development IdP
-usually prefills `alex`; enter it if the field is empty. Use any non-empty
-password, such as `cedarling-is-awesome`, then approve access.
+#### Sign in to the Task Manager
+
+Open `http://localhost:17001` and sign in as Alex. The development IdP usually
+prefills `alex`; enter it if the field is empty.
+
+Use any non-empty password, such as `cedarling-is-awesome`, then approve access.
+
+After approval, the browser should return to the task manager with Alex signed in.
 
 ### Create a task as Alex
 
-With Alex signed in, open developer tools on the task manager page and run this
-in the console:
+With Alex signed in, open Developer Tools on the task manager page and select
+**Console**. Run this request now; we'll repeat it after adding Cedarling:
 
 ```js
 const session = await fetch("/api/session").then((r) => r.json());
@@ -138,9 +170,23 @@ const response = await fetch("/api/tasks", {
 console.log(response.status, await response.json());
 ```
 
+**Note:** If your browser prevents you from pasting code into the developer console, follow the on-screen instructions to enable pasting. Some browsers may require typing `allow pasting` and pressing Enter. Only paste code you trust.
+
 The application returns **201** and saves the task. Reload to see it.
 Authentication and CSRF checks passed for Alex's session, but nothing checked
 whether he may create a task.
+
+<details>
+<summary>Optional: Create another task in the interface</summary>
+
+You can also try the app's creation form:
+
+1. Click <kbd>**New task**</kbd>.
+2. Enter a task title and description.
+3. Click <kbd>**Create task**</kbd>.
+4. Confirm that the task was created successfully and appears in the task list.
+
+</details>
 
 Keep the response and saved task for comparison. Stop the app in the second
 terminal before editing; keep the IdP running.
@@ -148,7 +194,7 @@ terminal before editing; keep the IdP running.
 <details>
 <summary>If using Docker: Switch to native development</summary>
 
-Stop the stack with `Ctrl+C`, then run `docker compose down` to keep its data
+Stop the stack with <kbd>Ctrl+C</kbd> , then run `docker compose down` to keep its data
 volume. Run the helper setup commands if you skipped them, then install
 dependencies and start the native IdP using the first-terminal commands above.
 Sign in again when the native app starts. Tasks created in Docker remain in
@@ -203,13 +249,16 @@ For existing tasks, "related" means the user owns the task or is its assignee.
 
 An action's full identifier looks like `Task::Action::"Create"`. Creation
 targets the existing `Task::Tenant` because the new task does not yet exist.[^2]
-These rules combine roles, attributes, and relationships.[^3] The owner role
-belongs to a tenant; a task owner is the user in that task's `ownerId`.
+These rules combine roles, attributes, and relationships.[^3]
+
+The **owner role** belongs to a tenant. A **task owner** is the user in that
+task's `ownerId`.
 
 ### Create the policy-store files
 
-Let's create a `policy-store/` directory at the project root using Cedarling's
-[directory-based format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
+We'll create a `policy-store/` directory inside `p1-task-manager/` using Cedarling's [directory-based format](https://docs.jans.io/stable/cedarling/reference/cedarling-policy-store/#2-new-directory-based-format):
+
+The policy store contains the Cedar schema, authorization policies, trusted issuer configuration, and metadata used by Cedarling.
 
 ```text
 policy-store/
@@ -225,11 +274,15 @@ policy-store/
 <details>
 <summary>Required step: Create the five policy-store files</summary>
 
-Add the policy-store files:
+Run:
 
 ```bash
 node ../shared/tools/step/run.mjs p1 policy-store
 ```
+
+The helper displays the files it will create or update and may ask for confirmation. Review the proposed changes and enter <kbd>y</kbd> to apply them.
+
+The command creates the following files:
 
 - [`metadata.json`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/metadata.json) identifies the store, Cedar version, and policy version `1.0.0`.
 - [`schema.cedarschema`](https://github.com/GluuFederation/cedarling-tutorials/blob/main/p1-task-manager/policy-store/schema.cedarschema) defines actions, entities, and request context.
@@ -239,11 +292,17 @@ node ../shared/tools/step/run.mjs p1 policy-store
 
 </details>
 
-We'll supply current user and task facts with each request.[^4] In Cedar,
-`principal` is who acts, `action` is the operation, `resource` is its target,
-and `context` holds additional facts. `schema.cedarschema` defines their types;
-the [Cedar schema reference](https://docs.cedarpolicy.com/schema/human-readable-schema.html)
-explains the syntax.
+We'll supply current user and task facts with each request.[^4]
+
+Cedar's schema defines the types those requests may contain:
+
+- `principal` - who is performing the action.
+- `action` - the operation being requested.
+- `resource` - the target of the operation.
+- `context` - additional facts needed to evaluate the policies.
+
+See the [Cedar schema syntax reference](https://docs.cedarpolicy.com/schema/human-readable-schema.html)
+when reading `schema.cedarschema`.
 
 For `Create`, the resource is the user's tenant. The trusted-issuer file points
 Cedarling to the local IdP so it can validate the access token intended for
@@ -375,8 +434,12 @@ pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
 
-`cedar-wasm` checks policy and schema syntax; `cedarling_wasm` evaluates
-application requests. We'll use a shared builder to package the policy store.
+The two WASM packages serve different purposes:
+
+- `cedar-wasm` validates Cedar policy and schema syntax during archive generation.
+- `cedarling_wasm` initializes Cedarling and evaluates application authorization requests.
+
+We'll use a shared builder to package the policy store.
 
 <details>
 <summary>Required step: Create the shared archive builder</summary>
@@ -392,15 +455,21 @@ validates and packages the files; `shared/policy-store.d.mts` supplies its types
 
 </details>
 
-Build `.local/policy-store.cjar`, the ZIP-format archive Cedarling will load:
+**Build the policy archive**
 
 ```bash
 node ../shared/policy-store.mjs
 ```
 
-Expect `.local/policy-store.cjar` and the message
-`Built policy store 1.0.0 | sha256 ...` without validation errors.
-Keep `policy-store/` in Git. Rebuild and restart after policy edits.
+The builder validates the policy-store files and creates `.local/policy-store.cjar`, a ZIP-format archive that Cedarling loads at runtime.
+A successful build displays a message similar to:
+
+```text
+Built policy store 1.0.0 | sha256 15dd5f...
+```
+
+Keep the source `policy-store/` directory in Git. After modifying the schema, policies, metadata, or trusted issuer configuration,
+rebuild the archive and restart the application so Cedarling loads the updated version.
 
 ### Create one Cedarling instance for the server
 
@@ -593,14 +662,33 @@ pnpm exec tsc -p tsconfig.server.json
 pnpm start
 ```
 
-Expect the policy version and SHA-256 in the terminal and
-`{ "status": "ok" }` from `/health`. Sign in as Alex, reload the page, and
-repeat the original request: expect **403** and no new task. As Mina, expect
-**201**.
+Expect the policy version and SHA-256 in the application terminal.
+
+Open `http://localhost:17001/health` and confirm that it returns:
+
+```json
+{ "status": "ok" }
+```
+
+#### Test as Alex - Create denied
+
+Sign in as Alex, reload the task manager, and repeat the console request from
+**Create a task as Alex**.
+
+**Expected result:** HTTP `403 Forbidden`. No new task should be created.
+
+#### Test as Mina - Create allowed
+
+Select **Change account** and sign in as Mina.
+
+Repeat the same console request as Mina; it retrieves her session's CSRF token.
+
+**Expected result:** HTTP `201 Created`.
+
+Reload the task list and confirm that Mina's new task appears.
 
 Use **Change account** between users or separate browser profiles; ordinary
-tabs share a session. Rerun the console snippet to get the signed-in user's
-CSRF token. The baseline-created task may still exist.
+tabs share a session.
 
 Switch back to Alex, open **Prepare launch brief**, change its description,
 and save. His assigned-task edit should still succeed.
@@ -668,7 +756,8 @@ async function loadPolicy(
 }
 ```
 
-JWT checks are disabled in this browser instance because it receives no JWTs.
+The browser instance disables JWT signature and status validation
+because it uses unsigned authorization requests and does not receive JWTs.
 
 </details>
 
@@ -702,7 +791,8 @@ versions clear the controls and trigger a refresh. If browser evaluation
 fails while the envelope is current, the UI uses the server ceiling and logs
 a warning. Every attempted operation still gets a fresh server check.
 
-Stop only the API, then run:
+Stop the API process (`pnpm start`) with `Ctrl+C`. Keep the IdP running in its
+terminal, then run:
 
 ```bash
 pnpm exec tsc --noEmit -p tsconfig.web.json
@@ -716,7 +806,7 @@ brief. Mina can create, and browser logs show unsigned Cedarling decisions.
 
 ### Update startup and Docker builds
 
-We'll now have startup build the policy archive automatically.
+We'll now update the startup process so the policy archive is built automatically.
 
 <details>
 <summary>Required step: Update setup, development startup, and Docker packaging</summary>
@@ -857,7 +947,7 @@ await taskRequest("GET", "/api/tasks/task-b-notes");
 
 Alex sees only the brief, Mina sees both A tasks, and Sam sees only his B task.
 Allowed reads return **200**; the other reads return **404**. Repeat the original
-`Create` request for each account: Mina gets **201**, Alex and Sam get **403**.
+console `Create` request for each account: Mina gets **201**, Alex and Sam get **403**.
 
 For an allowed read, take the current `task.version` before every write. For
 example, Alex can edit his brief with:
