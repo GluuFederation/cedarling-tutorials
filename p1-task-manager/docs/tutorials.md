@@ -112,8 +112,7 @@ You can verify that its OpenID Connect discovery endpoint is accessible by openi
 
 `http://localhost:18001/.well-known/openid-configuration`
 
-Keep this terminal running while using the task manager.
-
+Leave this terminal running.
 
 **Terminal 2 — Start the Task Manager**
 
@@ -124,8 +123,6 @@ pnpm dev
 ```
 
 The task manager should start at `http://localhost:17001`.
-
-Keep both terminals running while testing the baseline application.
 
 <details>
 <summary>Optional: Run the starting app with Docker</summary>
@@ -145,34 +142,17 @@ use the same ports but separate data, so run only one stack at a time.
 
 #### Sign in to the Task Manager
 
-Open `http://localhost:17001`; the IdP runs at `http://localhost:18001`.
-
-Sign in as Alex. The development IdP usually prefills `alex`; enter it if the field is empty.
+Open `http://localhost:17001` and sign in as Alex. The development IdP usually
+prefills `alex`; enter it if the field is empty.
 
 Use any non-empty password, such as `cedarling-is-awesome`, then approve access.
 
 After approval, the browser should return to the task manager with Alex signed in.
 
-You are now ready to test task creation before adding Cedarling authorization.
-
 ### Create a task as Alex
 
-Before adding Cedarling, let's verify that the baseline application allows Alex to create a task, even though his contributor role should not have that permission.
-
-With Alex signed in at `http://localhost:17001`, use **either of the following methods** to create a task.
-
-#### Option 1: Create a task using the UI
-
-1. Click <kbd>**New task**</kbd>.
-2. Enter a task title and description.
-3. Click <kbd>**Create task**</kbd>.
-4. Confirm that the task was created successfully and appears in the task list.
-
-#### Option 2: Create a task using the browser console
-
-You can also call the API directly using your browser's developer tools.
-
-Open Developer Tools, select the **Console** tab, and run:
+With Alex signed in, open Developer Tools on the task manager page and select
+**Console**. Run this request now; we'll repeat it after adding Cedarling:
 
 ```js
 const session = await fetch("/api/session").then((r) => r.json());
@@ -195,6 +175,18 @@ console.log(response.status, await response.json());
 The application returns **201** and saves the task. Reload to see it.
 Authentication and CSRF checks passed for Alex's session, but nothing checked
 whether he may create a task.
+
+<details>
+<summary>Optional: Create another task in the interface</summary>
+
+You can also try the app's creation form:
+
+1. Click <kbd>**New task**</kbd>.
+2. Enter a task title and description.
+3. Click <kbd>**Create task**</kbd>.
+4. Confirm that the task was created successfully and appears in the task list.
+
+</details>
 
 Keep the response and saved task for comparison. Stop the app in the second
 terminal before editing; keep the IdP running.
@@ -257,17 +249,10 @@ For existing tasks, "related" means the user owns the task or is its assignee.
 
 An action's full identifier looks like `Task::Action::"Create"`. Creation
 targets the existing `Task::Tenant` because the new task does not yet exist.[^2]
-These rules combine roles, attributes, and relationships.[^3] 
+These rules combine roles, attributes, and relationships.[^3]
 
-The **owner role** belongs to a tenant; a **task owner** is the user in that task's `ownerId`. These are different concepts.
-
-For example:
-
-- **Alex:** Can view and edit tasks he owns or is assigned to, but cannot create, assign, complete, or delete tasks under these rules.
-- **Mina:** Can create tasks in Tenant A and perform other operations when the required task relationship and conditions are satisfied.
-- **Sam:** Can access related tasks in Tenant B but cannot access Tenant A tasks, even if he knows their IDs.
-
-These permissions will be defined in Cedar policies and enforced by the API before protected task data is returned or modified.
+The **owner role** belongs to a tenant. A **task owner** is the user in that
+task's `ownerId`.
 
 ### Create the policy-store files
 
@@ -289,7 +274,7 @@ policy-store/
 <details>
 <summary>Required step: Create the five policy-store files</summary>
 
-From `p1-task-manager/`, run:
+Run:
 
 ```bash
 node ../shared/tools/step/run.mjs p1 policy-store
@@ -307,7 +292,7 @@ The command creates the following files:
 
 </details>
 
-We'll supply current user and task facts with each request.[^4] 
+We'll supply current user and task facts with each request.[^4]
 
 Cedar's schema defines the types those requests may contain:
 
@@ -448,10 +433,12 @@ pnpm add --save-exact @fastify/cookie@11.1.5 @fastify/helmet@13.2.0 @fastify/sta
 pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 pnpm add --save-dev --save-exact @cedar-policy/cedar-wasm@4.12.0 @types/node@24.19.0 vitest@4.1.12
 ```
+
 The two WASM packages serve different purposes:
 
 - `cedar-wasm` validates Cedar policy and schema syntax during archive generation.
-- `cedarling_wasm` initializes Cedarling and evaluates application authorization requests. 
+- `cedarling_wasm` initializes Cedarling and evaluates application authorization requests.
+
 We'll use a shared builder to package the policy store.
 
 <details>
@@ -470,8 +457,6 @@ validates and packages the files; `shared/policy-store.d.mts` supplies its types
 
 **Build the policy archive**
 
-From `p1-task-manager/`, run:
-
 ```bash
 node ../shared/policy-store.mjs
 ```
@@ -483,7 +468,7 @@ A successful build displays a message similar to:
 Built policy store 1.0.0 | sha256 15dd5f...
 ```
 
-Keep the source `policy-store/` directory in Git. After modifying the schema, policies, metadata, or trusted issuer configuration, 
+Keep the source `policy-store/` directory in Git. After modifying the schema, policies, metadata, or trusted issuer configuration,
 rebuild the archive and restart the application so Cedarling loads the updated version.
 
 ### Create one Cedarling instance for the server
@@ -669,8 +654,6 @@ in the list.
 
 ### Test task creation as Alex and Mina
 
-Now let's verify that the API enforces the Cedarling `Create` policy.
-
 Keep the native IdP running. In the application terminal, run:
 
 ```bash
@@ -679,7 +662,7 @@ pnpm exec tsc -p tsconfig.server.json
 pnpm start
 ```
 
-The application should start successfully and display the policy version and SHA-256 in the terminal.
+Expect the policy version and SHA-256 in the application terminal.
 
 Open `http://localhost:17001/health` and confirm that it returns:
 
@@ -689,21 +672,20 @@ Open `http://localhost:17001/health` and confirm that it returns:
 
 #### Test as Alex - Create denied
 
-Sign in as Alex, reload the task manager, and repeat the API request from **Create a task as Alex**.
+Sign in as Alex, reload the task manager, and repeat the console request from
+**Create a task as Alex**.
 
 **Expected result:** HTTP `403 Forbidden`. No new task should be created.
-
 
 #### Test as Mina - Create allowed
 
 Select **Change account** and sign in as Mina.
 
-Run the same request again. The snippet retrieves the CSRF token for the currently signed-in user.
+Repeat the same console request as Mina; it retrieves her session's CSRF token.
 
 **Expected result:** HTTP `201 Created`.
 
 Reload the task list and confirm that Mina's new task appears.
-
 
 Use **Change account** between users or separate browser profiles; ordinary
 tabs share a session.
@@ -774,7 +756,7 @@ async function loadPolicy(
 }
 ```
 
-The browser instance disables JWT signature and status validation 
+The browser instance disables JWT signature and status validation
 because it uses unsigned authorization requests and does not receive JWTs.
 
 </details>
@@ -809,9 +791,8 @@ versions clear the controls and trigger a refresh. If browser evaluation
 fails while the envelope is current, the UI uses the server ceiling and logs
 a warning. Every attempted operation still gets a fresh server check.
 
-Stop the running API process (`pnpm start`) using `Ctrl+C`, but **keep the native IdP running** in its separate terminal.
-
-From `p1-task-manager/`, run:
+Stop the API process (`pnpm start`) with `Ctrl+C`. Keep the IdP running in its
+terminal, then run:
 
 ```bash
 pnpm exec tsc --noEmit -p tsconfig.web.json
@@ -830,7 +811,7 @@ We'll now update the startup process so the policy archive is built automaticall
 <details>
 <summary>Required step: Update setup, development startup, and Docker packaging</summary>
 
-From `p1-task-manager/`, run:
+Run:
 
 ```bash
 node ../shared/tools/step/run.mjs p1 startup
@@ -966,7 +947,7 @@ await taskRequest("GET", "/api/tasks/task-b-notes");
 
 Alex sees only the brief, Mina sees both A tasks, and Sam sees only his B task.
 Allowed reads return **200**; the other reads return **404**. Repeat the original
-`Create` request for each account: Mina gets **201**, Alex and Sam get **403**.
+console `Create` request for each account: Mina gets **201**, Alex and Sam get **403**.
 
 For an allowed read, take the current `task.version` before every write. For
 example, Alex can edit his brief with:
